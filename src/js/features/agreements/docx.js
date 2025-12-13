@@ -46,12 +46,13 @@ async function loadTauriApis() {
         if (!tauriGlobal) return null;
 
         // Prefer globals if they are already injected to avoid module resolution issues
-        const writeBinaryFile =
-            tauriGlobal.fs?.writeBinaryFile || tauriGlobal.core?.fs?.writeBinaryFile;
-        const BaseDirectory = tauriGlobal.fs?.BaseDirectory || tauriGlobal.core?.fs?.BaseDirectory;
-        const downloadDir = tauriGlobal.path?.downloadDir;
-        const join = tauriGlobal.path?.join;
-        const convertFileSrc = tauriGlobal.tauri?.convertFileSrc;
+        const fsNamespace = tauriGlobal.fs || tauriGlobal.core?.fs || tauriGlobal.plugin?.fs;
+        const writeBinaryFile = fsNamespace?.writeBinaryFile || fsNamespace?.writeFile;
+        const BaseDirectory = fsNamespace?.BaseDirectory;
+        const pathNamespace = tauriGlobal.path || tauriGlobal.core?.path || tauriGlobal.plugin?.path;
+        const downloadDir = pathNamespace?.downloadDir;
+        const join = pathNamespace?.join;
+        const convertFileSrc = tauriGlobal.tauri?.convertFileSrc || tauriGlobal.core?.tauri?.convertFileSrc;
         const open =
             tauriGlobal.opener?.open ||
             tauriGlobal.plugin?.opener?.open ||
