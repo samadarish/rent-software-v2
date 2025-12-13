@@ -58,10 +58,15 @@ async function saveDocxToDownloads(blob, fileName) {
     if (!window.__TAURI__) return "";
 
     try {
-        const [{ writeBinaryFile }, path] = await Promise.all([
-            import("@tauri-apps/api/fs"),
-            import("@tauri-apps/api/path"),
-        ]);
+        const { fs, path: tauriPath } = window.__TAURI__;
+
+        const writeBinaryFile = fs?.writeBinaryFile
+            ? fs.writeBinaryFile
+            : (await import("@tauri-apps/api/fs")).writeBinaryFile;
+
+        const path = tauriPath?.downloadDir
+            ? tauriPath
+            : await import("@tauri-apps/api/path");
 
         const downloads = await path.downloadDir();
         if (!downloads) return "";
@@ -80,7 +85,12 @@ async function tryOpenDocxWithTauri(event) {
     if (!window.__TAURI__ || !lastDocxFilePath) return false;
 
     try {
-        const { open } = await import("@tauri-apps/plugin-opener");
+        const opener = window.__TAURI__.opener ||
+            (await import("@tauri-apps/plugin-opener"));
+        const open = opener.open || opener;
+        if (typeof open !== "function") {
+            throw new Error("Tauri opener plugin is unavailable");
+        }
         await open(lastDocxFilePath);
         if (event) event.preventDefault();
         return true;
