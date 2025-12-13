@@ -12,7 +12,7 @@
     "fs:scope-download-recursive",
     {
       "identifier": "fs:allow-write-file",
-      "allow": ["$DOWNLOAD/**", "$DOWNLOAD/*", "$DOWNLOAD/"]
+      "allow": ["**", "$DOWNLOAD/**", "$DOWNLOAD/*", "$DOWNLOAD/"]
     },
     "opener:allow-open-path",
     "opener:default"

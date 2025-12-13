@@ -91,27 +91,6 @@ async function saveDocxToDownloads(blob, fileName) {
     if (!writeBinaryFile) return null;
 
     const buffer = new Uint8Array(await blob.arrayBuffer());
-
-    if (BaseDirectory?.Download) {
-        const args =
-            writeBinaryFile.length > 1
-                ? [fileName, buffer, { dir: BaseDirectory.Download }]
-                : [{ path: fileName, contents: buffer, dir: BaseDirectory.Download }];
-        await writeBinaryFile(...args);
-
-        if (downloadDir && join) {
-            try {
-                const downloadsDir = await downloadDir();
-                return await join(downloadsDir, fileName);
-            } catch {
-                // If we cannot resolve the final path, still report success without path
-                return fileName;
-            }
-        }
-
-        return fileName;
-    }
-
     if (downloadDir && join) {
         const downloadsDir = await downloadDir();
         const targetPath = await join(downloadsDir, fileName);
@@ -121,6 +100,15 @@ async function saveDocxToDownloads(blob, fileName) {
                 : [{ path: targetPath, contents: buffer }];
         await writeBinaryFile(...args);
         return targetPath;
+    }
+
+    if (BaseDirectory?.Download) {
+        const args =
+            writeBinaryFile.length > 1
+                ? [fileName, buffer, { dir: BaseDirectory.Download }]
+                : [{ path: fileName, contents: buffer, dir: BaseDirectory.Download }];
+        await writeBinaryFile(...args);
+        return fileName;
     }
 
     return null;
