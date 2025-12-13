@@ -10,7 +10,49 @@ import { hideModal, showModal, showToast } from "../../utils/ui.js";
 let lastDocxDownloadUrl = "";
 let lastDocxFileName = "";
 let lastDocxBlob = null;
+let lastDocxFilePath = "";
 let docxModalWired = false;
+
+let tauriApiPromise = null;
+
+async function loadTauriApis() {
+    if (tauriApiPromise) return tauriApiPromise;
+
+    tauriApiPromise = (async () => {
+        // Only attempt to import when running inside Tauri
+        if (typeof window === "undefined" || !window.__TAURI__) return null;
+
+        try {
+            const [{ writeBinaryFile }, { downloadDir, join }, { open }] = await Promise.all([
+                import("@tauri-apps/api/fs"),
+                import("@tauri-apps/api/path"),
+                import("@tauri-apps/plugin-opener"),
+            ]);
+
+            return { writeBinaryFile, downloadDir, join, open };
+        } catch (error) {
+            console.warn("Tauri APIs unavailable; falling back to browser behavior", error);
+            return null;
+        }
+    })();
+
+    return tauriApiPromise;
+}
+
+async function saveDocxToDownloads(blob, fileName) {
+    const tauriApis = await loadTauriApis();
+    if (!tauriApis) return null;
+
+    const { writeBinaryFile, downloadDir, join } = tauriApis;
+    if (!writeBinaryFile || !downloadDir || !join) return null;
+
+    const downloadsDir = await downloadDir();
+    const targetPath = await join(downloadsDir, fileName);
+    const buffer = new Uint8Array(await blob.arrayBuffer());
+
+    await writeBinaryFile(targetPath, buffer);
+    return targetPath;
+}
 
 function revokeLastDocxUrl() {
     if (lastDocxDownloadUrl) {
@@ -19,7 +61,7 @@ function revokeLastDocxUrl() {
     }
 }
 
-function syncDocxExportModal(fileName, objectUrl) {
+function syncDocxExportModal(fileName, objectUrl, filePath) {
     const modal = document.getElementById("docxExportModal");
     const fileNameLabel = document.getElementById("docxExportFileName");
     const locationLabel = document.getElementById("docxExportLocation");
@@ -27,6 +69,7 @@ function syncDocxExportModal(fileName, objectUrl) {
 
     const safeFileName = fileName || "Agreement.docx";
     lastDocxFileName = safeFileName;
+    lastDocxFilePath = filePath || "";
 
     if (fileNameLabel) fileNameLabel.textContent = safeFileName;
 
@@ -36,10 +79,10 @@ function syncDocxExportModal(fileName, objectUrl) {
 
     if (openLink) {
         openLink.href = objectUrl || "#";
+        openLink.dataset.filePath = lastDocxFilePath;
         if (objectUrl) {
             openLink.removeAttribute("download");
             openLink.setAttribute("data-filename", safeFileName);
-            openLink.target = "_blank";
             openLink.rel = "noopener";
             openLink.dataset.openReady = "true";
         }
@@ -73,11 +116,29 @@ function wireDocxExportModal() {
     }
 
     if (openLink) {
-        openLink.addEventListener("click", (e) => {
+        openLink.addEventListener("click", async (e) => {
             if (!lastDocxDownloadUrl) {
                 e.preventDefault();
                 showToast("Export a DOCX first, then try opening it again.", "warning");
                 return;
+            }
+
+            if (lastDocxFilePath) {
+                try {
+                    const tauriApis = await loadTauriApis();
+                    if (tauriApis?.open) {
+                        e.preventDefault();
+                        await tauriApis.open(lastDocxFilePath);
+                        return;
+                    }
+                } catch (error) {
+                    console.error("DOCX open error:", error);
+                    showToast(
+                        "Could not open the DOCX directly. Please open it from your Downloads folder.",
+                        "error"
+                    );
+                    // fall through to browser download behavior
+                }
             }
 
             if (typeof navigator !== "undefined" && navigator.msSaveOrOpenBlob && lastDocxBlob) {
@@ -89,7 +150,7 @@ function wireDocxExportModal() {
             // Let the browser handle the navigation so it is treated as a
             // user-initiated action and isn't blocked by pop-up blockers.
             openLink.href = lastDocxDownloadUrl;
-            openLink.target = "_blank";
+            openLink.removeAttribute("target");
             openLink.rel = "noopener";
             openLink.download = lastDocxFileName || "Agreement.docx";
         });
@@ -164,7 +225,7 @@ export function exportDocxFromTemplate() {
             }
             return res.arrayBuffer();
         })
-        .then((arrayBuffer) => {
+        .then(async (arrayBuffer) => {
             try {
                 const uint8 = new Uint8Array(arrayBuffer);
                 const zip = new PizZip(uint8);
@@ -204,8 +265,15 @@ export function exportDocxFromTemplate() {
                 lastDocxBlob = out;
                 lastDocxDownloadUrl = URL.createObjectURL(out);
 
+                let savedFilePath = "";
+                try {
+                    savedFilePath = (await saveDocxToDownloads(out, fileName)) || "";
+                } catch (saveError) {
+                    console.warn("Could not persist DOCX via Tauri APIs", saveError);
+                }
+
                 saveAs(out, fileName);
-                syncDocxExportModal(fileName, lastDocxDownloadUrl);
+                syncDocxExportModal(fileName, lastDocxDownloadUrl, savedFilePath);
                 showToast(`DOCX downloaded as "${fileName}"`, "success");
             } catch (e) {
                 console.error("DOCX render error:", e);
