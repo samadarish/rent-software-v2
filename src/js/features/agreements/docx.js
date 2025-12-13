@@ -10,6 +10,7 @@ import { hideModal, showModal, showToast } from "../../utils/ui.js";
 let lastDocxDownloadUrl = "";
 let lastDocxFileName = "";
 let lastDocxBlob = null;
+let lastDocxFilePath = "";
 let docxModalWired = false;
 
 function revokeLastDocxUrl() {
@@ -17,6 +18,8 @@ function revokeLastDocxUrl() {
         URL.revokeObjectURL(lastDocxDownloadUrl);
         lastDocxDownloadUrl = "";
     }
+
+    lastDocxFilePath = "";
 }
 
 function syncDocxExportModal(fileName, objectUrl) {
@@ -31,7 +34,8 @@ function syncDocxExportModal(fileName, objectUrl) {
     if (fileNameLabel) fileNameLabel.textContent = safeFileName;
 
     if (locationLabel) {
-        locationLabel.textContent = `Saved to: Downloads/${safeFileName}`;
+        const location = lastDocxFilePath || `Downloads/${safeFileName}`;
+        locationLabel.textContent = `Saved to: ${location}`;
     }
 
     if (openLink) {
@@ -48,6 +52,43 @@ function syncDocxExportModal(fileName, objectUrl) {
     }
 
     if (modal) showModal(modal);
+}
+
+async function saveDocxToDownloads(blob, fileName) {
+    if (!window.__TAURI__) return "";
+
+    try {
+        const [{ writeBinaryFile }, path] = await Promise.all([
+            import("@tauri-apps/api/fs"),
+            import("@tauri-apps/api/path"),
+        ]);
+
+        const downloads = await path.downloadDir();
+        if (!downloads) return "";
+
+        const targetPath = await path.join(downloads, fileName);
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        await writeBinaryFile({ path: targetPath, contents: bytes });
+        return targetPath;
+    } catch (err) {
+        console.error("Unable to save DOCX to downloads via Tauri FS", err);
+        return "";
+    }
+}
+
+async function tryOpenDocxWithTauri(event) {
+    if (!window.__TAURI__ || !lastDocxFilePath) return false;
+
+    try {
+        const { open } = await import("@tauri-apps/plugin-opener");
+        await open(lastDocxFilePath);
+        if (event) event.preventDefault();
+        return true;
+    } catch (err) {
+        console.error("Unable to open DOCX with Tauri opener", err);
+        showToast("Couldn't open the saved DOCX automatically. Opening download instead.", "warning");
+        return false;
+    }
 }
 
 function wireDocxExportModal() {
@@ -73,7 +114,7 @@ function wireDocxExportModal() {
     }
 
     if (openLink) {
-        openLink.addEventListener("click", (e) => {
+        openLink.addEventListener("click", async (e) => {
             if (!lastDocxDownloadUrl) {
                 e.preventDefault();
                 showToast("Export a DOCX first, then try opening it again.", "warning");
@@ -86,12 +127,15 @@ function wireDocxExportModal() {
                 return;
             }
 
+            const openedWithTauri = await tryOpenDocxWithTauri(e);
+            if (openedWithTauri) return;
+
             // Let the browser handle the navigation so it is treated as a
             // user-initiated action and isn't blocked by pop-up blockers.
             openLink.href = lastDocxDownloadUrl;
             openLink.target = "_blank";
             openLink.rel = "noopener";
-            openLink.download = lastDocxFileName || "Agreement.docx";
+            openLink.removeAttribute("download");
         });
     }
 }
@@ -143,7 +187,7 @@ export function applyMarkdownBoldToDocxXml(xml) {
  * Exports the agreement form data as a DOCX file
  * Uses the tenant_template.docx file and fills it with form data
  */
-export function exportDocxFromTemplate() {
+export async function exportDocxFromTemplate() {
     wireDocxExportModal();
 
     const data = collectFormDataForTemplate();
@@ -157,65 +201,65 @@ export function exportDocxFromTemplate() {
 
     const templatePath = "tenant_template.docx";
 
-    fetch(templatePath)
-        .then((res) => {
-            if (!res.ok) {
-                throw new Error("Could not load template: HTTP " + res.status);
-            }
-            return res.arrayBuffer();
-        })
-        .then((arrayBuffer) => {
-            try {
-                const uint8 = new Uint8Array(arrayBuffer);
-                const zip = new PizZip(uint8);
-                const doc = new docxtemplater(zip, {
-                    paragraphLoop: true,
-                    linebreaks: true,
-                });
+    try {
+        const res = await fetch(templatePath);
+        if (!res.ok) {
+            throw new Error("Could not load template: HTTP " + res.status);
+        }
 
-                doc.setData(data);
-                doc.render();
-
-                const outZip = doc.getZip();
-                let xml = outZip.file("word/document.xml").asText();
-                xml = applyMarkdownBoldToDocxXml(xml);
-                outZip.file("word/document.xml", xml);
-
-                const out = outZip.generate({
-                    type: "blob",
-                    mimeType:
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                });
-
-                const sanitize = (value, fallback) => {
-                    const safeValue = (value || fallback || "")
-                        .trim()
-                        .replace(/\s+/g, "_")
-                        .replace(/[^\w.-]/g, "");
-                    return safeValue || fallback || "";
-                };
-
-                const tenantName = sanitize(data.Tenant_Full_Name, "Tenant");
-                const grnNumber = sanitize(data["GRN number"], "GRN");
-                const aadhaar = sanitize(data.tenant_Aadhar, "Aadhaar");
-                const fileName = `${tenantName}_${grnNumber}_${aadhaar}_Agreement.docx`;
-
-                revokeLastDocxUrl();
-                lastDocxBlob = out;
-                lastDocxDownloadUrl = URL.createObjectURL(out);
-
-                saveAs(out, fileName);
-                syncDocxExportModal(fileName, lastDocxDownloadUrl);
-                showToast(`DOCX downloaded as "${fileName}"`, "success");
-            } catch (e) {
-                console.error("DOCX render error:", e);
-                alert("Error while filling template. Check console for details.");
-            }
-        })
-        .catch((err) => {
-            console.error("Error loading template via fetch:", err);
-            alert(
-                "Could not load DOCX template. Make sure 'tenant_template.docx' is in the public/ folder."
-            );
+        const arrayBuffer = await res.arrayBuffer();
+        const uint8 = new Uint8Array(arrayBuffer);
+        const zip = new PizZip(uint8);
+        const doc = new docxtemplater(zip, {
+            paragraphLoop: true,
+            linebreaks: true,
         });
+
+        doc.setData(data);
+        doc.render();
+
+        const outZip = doc.getZip();
+        let xml = outZip.file("word/document.xml").asText();
+        xml = applyMarkdownBoldToDocxXml(xml);
+        outZip.file("word/document.xml", xml);
+
+        const out = outZip.generate({
+            type: "blob",
+            mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        });
+
+        const sanitize = (value, fallback) => {
+            const safeValue = (value || fallback || "")
+                .trim()
+                .replace(/\s+/g, "_")
+                .replace(/[^\w.-]/g, "");
+            return safeValue || fallback || "";
+        };
+
+        const tenantName = sanitize(data.Tenant_Full_Name, "Tenant");
+        const grnNumber = sanitize(data["GRN number"], "GRN");
+        const aadhaar = sanitize(data.tenant_Aadhar, "Aadhaar");
+        const fileName = `${tenantName}_${grnNumber}_${aadhaar}_Agreement.docx`;
+
+        revokeLastDocxUrl();
+        lastDocxBlob = out;
+        lastDocxDownloadUrl = URL.createObjectURL(out);
+
+        const savedPath = await saveDocxToDownloads(out, fileName);
+        lastDocxFilePath = savedPath;
+
+        if (!savedPath) {
+            saveAs(out, fileName);
+        }
+
+        syncDocxExportModal(fileName, lastDocxDownloadUrl);
+        const successMessage =
+            savedPath && window.__TAURI__
+                ? `DOCX saved to ${savedPath}`
+                : `DOCX downloaded as "${fileName}"`;
+        showToast(successMessage, "success");
+    } catch (err) {
+        console.error("Error exporting DOCX:", err);
+        alert("Could not export DOCX. Check console for details.");
+    }
 }
