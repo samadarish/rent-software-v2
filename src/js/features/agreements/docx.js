@@ -28,6 +28,7 @@ async function loadTauriApis() {
         // Prefer globals if they are already injected to avoid module resolution issues
         const writeBinaryFile =
             tauriGlobal.fs?.writeBinaryFile || tauriGlobal.core?.fs?.writeBinaryFile;
+        const BaseDirectory = tauriGlobal.fs?.BaseDirectory || tauriGlobal.core?.fs?.BaseDirectory;
         const downloadDir = tauriGlobal.path?.downloadDir;
         const join = tauriGlobal.path?.join;
         const open =
@@ -36,7 +37,7 @@ async function loadTauriApis() {
             tauriGlobal.plugins?.opener?.open ||
             tauriGlobal.shell?.open;
 
-        const hasSaveApis = Boolean(writeBinaryFile && downloadDir && join);
+        const hasSaveApis = Boolean(writeBinaryFile && (BaseDirectory || (downloadDir && join)));
         const hasAnyApis = hasSaveApis || Boolean(open);
 
         if (!hasAnyApis) return null;
@@ -49,6 +50,7 @@ async function loadTauriApis() {
 
         return {
             writeBinaryFile: hasSaveApis ? writeBinaryFile : null,
+            BaseDirectory: hasSaveApis ? BaseDirectory : null,
             downloadDir: hasSaveApis ? downloadDir : null,
             join: hasSaveApis ? join : null,
             open,
@@ -62,17 +64,43 @@ async function saveDocxToDownloads(blob, fileName) {
     const tauriApis = await loadTauriApis();
     if (!tauriApis) return null;
 
-    const { writeBinaryFile, downloadDir, join } = tauriApis;
-    if (!writeBinaryFile || !downloadDir || !join) return null;
+    const { writeBinaryFile, BaseDirectory, downloadDir, join } = tauriApis;
+    if (!writeBinaryFile) return null;
 
-    const downloadsDir = await downloadDir();
-    const targetPath = await join(downloadsDir, fileName);
     const buffer = new Uint8Array(await blob.arrayBuffer());
 
-    // Support both signatures: writeBinaryFile(path, contents) and writeBinaryFile({ path, contents })
-    const args = writeBinaryFile.length > 1 ? [targetPath, buffer] : [{ path: targetPath, contents: buffer }];
-    await writeBinaryFile(...args);
-    return targetPath;
+    if (BaseDirectory?.Download) {
+        const args =
+            writeBinaryFile.length > 1
+                ? [fileName, buffer, { dir: BaseDirectory.Download }]
+                : [{ path: fileName, contents: buffer, dir: BaseDirectory.Download }];
+        await writeBinaryFile(...args);
+
+        if (downloadDir && join) {
+            try {
+                const downloadsDir = await downloadDir();
+                return await join(downloadsDir, fileName);
+            } catch {
+                // If we cannot resolve the final path, still report success without path
+                return fileName;
+            }
+        }
+
+        return fileName;
+    }
+
+    if (downloadDir && join) {
+        const downloadsDir = await downloadDir();
+        const targetPath = await join(downloadsDir, fileName);
+        const args =
+            writeBinaryFile.length > 1
+                ? [targetPath, buffer]
+                : [{ path: targetPath, contents: buffer }];
+        await writeBinaryFile(...args);
+        return targetPath;
+    }
+
+    return null;
 }
 
 function revokeLastDocxUrl() {
@@ -138,6 +166,30 @@ function wireDocxExportModal() {
     }
 
     if (openLink) {
+        const openWithTauri = async (targetPath) => {
+            const tauriApis = await loadTauriApis();
+            if (!tauriApis?.open || !targetPath) return false;
+
+            const normalizedPath = targetPath.startsWith("file://")
+                ? targetPath
+                : `file://${targetPath}`;
+
+            try {
+                const openArgs = tauriApis.open.length > 1 ? [normalizedPath, { newInstance: true }] : [normalizedPath];
+                await tauriApis.open(...openArgs);
+                return true;
+            } catch (error) {
+                console.warn("Tauri open failed, retrying with raw path", error);
+                try {
+                    await tauriApis.open(targetPath);
+                    return true;
+                } catch (innerError) {
+                    console.error("DOCX open error:", innerError);
+                    return false;
+                }
+            }
+        };
+
         openLink.addEventListener("click", async (e) => {
             e.preventDefault();
 
@@ -147,29 +199,20 @@ function wireDocxExportModal() {
             }
 
             if (lastDocxFilePath) {
-                try {
-                    const tauriApis = await loadTauriApis();
-                    if (tauriApis?.open) {
-                        await tauriApis.open(lastDocxFilePath);
-                        return;
-                    }
-                } catch (error) {
-                    console.error("DOCX open error:", error);
-                    showToast(
-                        "Could not open the DOCX directly. Please open it from your Downloads folder.",
-                        "error"
-                    );
-                    return;
-                }
+                const opened = await openWithTauri(lastDocxFilePath);
+                if (opened) return;
 
                 showToast(
-                    "Open is only available when Tauri opener is ready. Please open the saved file from your Downloads folder.",
-                    "info"
+                    "Could not open the DOCX directly. Please open it from your Downloads folder.",
+                    "error"
                 );
                 return;
             }
 
             if (lastDocxDownloadUrl) {
+                const opened = await openWithTauri(lastDocxDownloadUrl);
+                if (opened) return;
+
                 window.open(lastDocxDownloadUrl, "_blank", "noopener,noreferrer");
                 return;
             }
