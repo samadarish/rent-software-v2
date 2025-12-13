@@ -1,0 +1,23 @@
+Payment proof upload debug steps
+================================
+
+1) Confirm scopes and deploy
+- Open your Apps Script project and check appsscript.json includes both drive.file and drive scopes.
+- Deploy a new version of the web app after authorizing the new scopes.
+- Access the deployed URL once while signed in as the deployer to accept the Drive permission prompt.
+
+2) Verify the "Payment Proofs" folder
+- In Google Drive, search for a folder named "Payment Proofs" created by the script.
+- Ensure the deployer owns the folder and that files can be created inside it.
+
+3) Capture a fresh attachment
+- In the UI, select a small image (<2 MB) when recording a payment.
+- Submit the payment and confirm a new file appears in the "Payment Proofs" folder with the expected timestamped name.
+
+4) Inspect script logs if nothing is saved
+- In Apps Script, open Executions -> View Logs for the savePayment call.
+- Look for "Attachment save failed" entries; if present, reauthorize the deployment and retry.
+
+5) Check payload format
+- Use browser dev tools Network tab to ensure the POST body contains attachmentDataUrl with a "data:image/...;base64," prefix.
+- If not present, reselect the image in the modal and try again.

@@ -1,0 +1,1242 @@
+/**
+ * Apps Script entry point implementing normalized Sheets schema.
+ *
+ * The schema follows a database-like layout:
+ * - Master data: TENANTS, UNITS, TENANCIES, FAMILY_MEMBERS, CLAUSES
+ * - Monthly inputs: WING_MONTHLY_CONFIG, TENANT_MONTHLY_READINGS
+ * - Outputs: BILL_LINES
+ * - Events: PAYMENTS, ATTACHMENTS (for payment proofs)
+ *
+ * Actions exposed via doGet/doPost mirror the previous API surface while
+ * internally writing to the normalized tables.
+ */
+
+/********* CONFIG *********/
+const TENANTS_SHEET = 'Tenants';
+const UNITS_SHEET = 'Units';
+const TENANCIES_SHEET = 'Tenancies';
+const FAMILY_SHEET = 'FamilyMembers';
+const WINGS_SHEET = 'Wings';
+const LANDLORDS_SHEET = 'Landlords';
+const CLAUSES_SHEET = 'Clauses';
+const WING_MONTHLY_SHEET = 'WingMonthlyConfig';
+const TENANT_READINGS_SHEET = 'TenantMonthlyReadings';
+const BILL_LINES_SHEET = 'BillLines';
+const PAYMENTS_SHEET = 'Payments';
+const PAYMENT_ALLOCATIONS_SHEET = 'PaymentAllocations';
+const ATTACHMENTS_SHEET = 'Attachments';
+const INDEX_SHEET = 'Index';
+
+/********* HEADERS *********/
+const TENANTS_HEADERS = [
+  'tenant_id',
+  'full_name',
+  'mobile',
+  'aadhaar',
+  'occupation',
+  'permanent_address',
+  'created_at',
+];
+
+const UNITS_HEADERS = [
+  'unit_id',
+  'wing',
+  'unit_number',
+  'floor',
+  'direction',
+  'meter_number',
+  'landlord_id',
+  'notes',
+  'is_occupied',
+  'current_tenancy_id',
+  'created_at',
+];
+
+const TENANCIES_HEADERS = [
+  'tenancy_id',
+  'tenant_id',
+  'grn_number',
+  'unit_id',
+  'landlord_id',
+  'agreement_date',
+  'commencement_date',
+  'end_date',
+  'status',
+  'vacate_reason',
+  'security_deposit',
+  'rent_base',
+  'rent_payable_day',
+  'tenant_notice_months',
+  'landlord_notice_months',
+  'pet_policy',
+  'late_rent_per_day',
+  'late_grace_days',
+  'rent_revision_unit',
+  'rent_revision_number',
+  'created_at',
+];
+
+const LANDLORD_HEADERS = [
+  'landlord_id',
+  'name',
+  'aadhaar',
+  'address',
+  'created_at',
+];
+
+const FAMILY_HEADERS = [
+  'member_id',
+  'tenant_id',
+  'name',
+  'relationship',
+  'occupation',
+  'aadhaar',
+  'address',
+  'created_at',
+];
+
+const CLAUSES_HEADERS = [
+  'Section',
+  'SortOrder',
+  'Enabled',
+  'ClauseHtml',
+];
+
+const WING_MONTHLY_HEADERS = [
+  'wing_month_id',
+  'month_key',
+  'wing',
+  'electricity_rate',
+  'sweeping_per_flat',
+  'motor_prev',
+  'motor_new',
+  'motor_units',
+  'created_at',
+];
+
+const TENANT_READING_HEADERS = [
+  'reading_id',
+  'month_key',
+  'tenancy_id',
+  'prev_reading',
+  'new_reading',
+  'included',
+  'override_rent',
+  'notes',
+  'created_at',
+];
+
+const BILL_LINE_HEADERS = [
+  'bill_line_id',
+  'month_key',
+  'tenancy_id',
+  'rent_amount',
+  'electricity_units',
+  'electricity_amount',
+  'motor_share_amount',
+  'sweep_amount',
+  'total_amount',
+  'payable_date',
+  'generated_at',
+];
+
+const PAYMENT_HEADERS = [
+  'payment_id',
+  'payment_date',
+  'bill_line_id',
+  'tenant_id',
+  'amount',
+  'mode',
+  'reference',
+  'notes',
+  'attachment_id',
+  'created_at',
+];
+
+const PAYMENT_ALLOCATION_HEADERS = [
+  'allocation_id',
+  'payment_id',
+  'bill_line_id',
+  'amount_applied',
+  'created_at',
+];
+
+const ATTACHMENT_HEADERS = [
+  'attachment_id',
+  'file_name',
+  'file_url',
+  'uploaded_at',
+];
+
+const LEGACY_CLAUSE_SHEETS = {
+  tenant: 'TenantClauses',
+  landlord: 'LandlordClauses',
+  penalties: 'PenaltyClauses',
+  misc: 'MiscClauses',
+};
+
+const driveShareCache = {};
+
+/********* COMMON HELPERS *********/
+function parseIsoDate_(iso) {
+  if (!iso) return '';
+  if (iso instanceof Date) return iso;
+  try {
+    return new Date(iso.toString());
+  } catch (err) {
+    return '';
+  }
+}
+
+function normalizeMonthKey_(value) {
+  if (!value) return '';
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone() || 'Asia/Kolkata', 'yyyy-MM');
+  }
+  const str = value.toString().trim();
+  const compact = str.match(/^(\d{4})(\d{2})$/);
+  if (compact) return `${compact[1]}-${compact[2]}`;
+  const dashed = str.match(/^(\d{4})[-/.](\d{1,2})/);
+  if (dashed) return `${dashed[1]}-${dashed[2].padStart(2, '0')}`;
+  return str;
+}
+
+function formatDateIso_(value) {
+  if (!value) return '';
+  const d = value instanceof Date ? value : parseIsoDate_(value);
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
+  return Utilities.formatDate(d, Session.getScriptTimeZone() || 'Asia/Kolkata', 'yyyy-MM-dd');
+}
+
+function formatMonthLabelForDisplay_(monthKey) {
+  const normalized = normalizeMonthKey_(monthKey || '');
+  const match = normalized.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return normalized;
+  const d = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+  return Utilities.formatDate(d, Session.getScriptTimeZone() || 'Asia/Kolkata', 'MMM yyyy');
+}
+
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function getMasterSpreadsheet_() {
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+function ensureHeaderRow_(sheet, headers) {
+  if (sheet.getLastRow() === 0) {
+    sheet.insertRowBefore(1);
+  }
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+}
+
+function getSheetWithHeaders_(name, headers) {
+  const ss = getMasterSpreadsheet_();
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) sheet = ss.insertSheet(name);
+  ensureHeaderRow_(sheet, headers);
+  return sheet;
+}
+
+function buildHeaderIndex_(headers) {
+  return headers.reduce((map, key, idx) => {
+    map[key] = idx;
+    return map;
+  }, {});
+}
+
+function updateUnitOccupancy_(unitId, tenancyId, occupied) {
+  if (!unitId) return;
+  const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
+  const match = units.find((u) => u.unit_id === unitId);
+  if (!match) return;
+  match.is_occupied = !!occupied;
+  match.current_tenancy_id = occupied ? tenancyId : '';
+  upsertUnique_(UNITS_SHEET, UNITS_HEADERS, ['unit_id'], match);
+}
+
+function normalizeBoolean_(val) {
+  if (val === true || val === false) return val;
+  if (typeof val === 'string') {
+    return val.toLowerCase() !== 'false' && val !== '';
+  }
+  return !!val;
+}
+
+function readTable_(sheetName, headers) {
+  const sheet = getSheetWithHeaders_(sheetName, headers);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  return values
+    .map((row) => {
+      const record = {};
+      headers.forEach((key, idx) => {
+        record[key] = row[idx];
+      });
+      return record;
+    })
+    .filter((r) => Object.values(r).some((v) => v !== ''));
+}
+
+function writeTableRows_(sheetName, headers, rows) {
+  const sheet = getSheetWithHeaders_(sheetName, headers);
+  const mapped = rows.map((record) => headers.map((key) => record[key] ?? ''));
+  const lastRow = sheet.getLastRow();
+  sheet.getRange(lastRow + 1, 1, mapped.length, headers.length).setValues(mapped);
+}
+
+function upsertUnique_(sheetName, headers, uniqueColumns, record) {
+  const sheet = getSheetWithHeaders_(sheetName, headers);
+  const lastRow = sheet.getLastRow();
+  const headerIndex = buildHeaderIndex_(headers);
+  const normalizeKeyValue = (col, value) => {
+    if (col === 'month_key') return normalizeMonthKey_(value);
+    if (col === 'wing') return (value || '').toString().trim().toLowerCase();
+    return value;
+  };
+  if (lastRow > 1) {
+    const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    for (let i = 0; i < values.length; i++) {
+      const row = values[i];
+      const matches = uniqueColumns.every(
+        (col) => normalizeKeyValue(col, row[headerIndex[col]]) == normalizeKeyValue(col, record[col])
+      );
+      if (matches) {
+        const targetRow = i + 2;
+        sheet.getRange(targetRow, 1, 1, headers.length).setValues([
+          headers.map((key) => record[key] ?? ''),
+        ]);
+        return record;
+      }
+    }
+  }
+  sheet.getRange(lastRow + 1, 1, 1, headers.length).setValues([
+    headers.map((key) => record[key] ?? ''),
+  ]);
+  return record;
+}
+
+function ensureDriveFileShareable_(url) {
+  const idMatch = url && url.match(/\/d\/([^/]+)/);
+  const id = idMatch && idMatch[1];
+  if (!id) return { originalUrl: url, viewUrl: url };
+  if (driveShareCache[id]) return { originalUrl: url, viewUrl: driveShareCache[id] };
+  try {
+    const file = DriveApp.getFileById(id);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    const viewUrl = file.getUrl();
+    driveShareCache[id] = viewUrl;
+    return { originalUrl: url, viewUrl };
+  } catch (err) {
+    Logger.log('Drive share failed: ' + err);
+    return { originalUrl: url, viewUrl: url };
+  }
+}
+
+/********* CLAUSES *********/
+function readUnifiedClauses_() {
+  const sheet = getSheetWithHeaders_(CLAUSES_SHEET, CLAUSES_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return { tenant: [], landlord: [], penalties: [], misc: [] };
+  const values = sheet.getRange(2, 1, lastRow - 1, CLAUSES_HEADERS.length).getValues();
+  const sections = { tenant: [], landlord: [], penalties: [], misc: [] };
+  values.forEach((row) => {
+    const section = (row[0] || '').toString().toLowerCase();
+    const entry = { sortOrder: Number(row[1]) || 0, enabled: normalizeBoolean_(row[2]), html: row[3] || '' };
+    if (sections[section]) sections[section].push(entry);
+  });
+  Object.keys(sections).forEach((key) => sections[key].sort((a, b) => a.sortOrder - b.sortOrder));
+  return sections;
+}
+
+function readLegacyClauses_() {
+  const result = { tenant: [], landlord: [], penalties: [], misc: [] };
+  Object.keys(LEGACY_CLAUSE_SHEETS).forEach((key) => {
+    const sheetName = LEGACY_CLAUSE_SHEETS[key];
+    const ss = getMasterSpreadsheet_();
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return;
+    ensureHeaderRow_(sheet, ['SortOrder', 'Enabled', 'ClauseHtml']);
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return;
+    const values = sheet.getRange(2, 1, lastRow - 1, CLAUSES_HEADERS.length - 1).getValues();
+    result[key] = values.map((row, idx) => ({
+      sortOrder: Number(row[0]) || idx + 1,
+      enabled: normalizeBoolean_(row[1]),
+      html: row[2] || '',
+    }));
+  });
+  return result;
+}
+
+function writeUnifiedClauses_(payload) {
+  const sheet = getSheetWithHeaders_(CLAUSES_SHEET, CLAUSES_HEADERS);
+  const rows = [];
+  ['tenant', 'landlord', 'penalties', 'misc'].forEach((sectionKey) => {
+    const items = Array.isArray(payload[sectionKey]) ? payload[sectionKey] : [];
+    items.forEach((item, idx) => {
+      rows.push([
+        sectionKey,
+        Number(item.sortOrder || idx + 1),
+        normalizeBoolean_(item.enabled),
+        item.html || item.text || '',
+      ]);
+    });
+  });
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, CLAUSES_HEADERS.length).clearContent();
+  if (rows.length) sheet.getRange(2, 1, rows.length, CLAUSES_HEADERS.length).setValues(rows);
+}
+
+/********* TENANTS + TENANCIES *********/
+function mapTenantPayload_(payload) {
+  const template = payload.templateData || {};
+  const updates = payload.updates || {};
+  const tenantId = payload.tenantId || template.tenant_id || Utilities.getUuid();
+  const unitId = payload.unitId || template.unit_id || Utilities.getUuid();
+  const tenancyId = payload.forceNewTenancyId || payload.tenancyId || template.tenancy_id || Utilities.getUuid();
+  const landlordId = payload.landlordId || updates.landlordId || template.landlord_id || '';
+  const now = new Date();
+
+  const tenant = {
+    tenant_id: tenantId,
+    full_name: updates.tenantFullName || template.Tenant_Full_Name || '',
+    mobile: updates.tenantMobile || template.tenant_mobile || '',
+    aadhaar: updates.tenantAadhaar || template.tenant_Aadhar || '',
+    occupation: payload.Tenant_occupation || updates.tenantOccupation || template.Tenant_occupation || '',
+    permanent_address: updates.tenantPermanentAddress || template.Tenant_Permanent_Address || '',
+    created_at: template.created_at || now,
+  };
+
+  const unit = {
+    unit_id: unitId,
+    wing: payload.wing || updates.wing || template.wing || '',
+    unit_number: updates.unitNumber || payload.unit_number || template.unit_number || payload.flatNumber || '',
+    floor: payload.floor_of_building || updates.floor || template.floor_of_building || '',
+    direction: updates.direction || template.direction_build || '',
+    meter_number: updates.meterNumber || template.meter_number || '',
+    landlord_id: landlordId || template.landlord_id || '',
+    notes: '',
+    is_occupied: true,
+    current_tenancy_id: tenancyId,
+    created_at: template.created_at || now,
+  };
+
+  const activeFlag = typeof updates.activeTenant !== 'undefined' ? updates.activeTenant : payload.activeTenant;
+  const tenancy = {
+    tenancy_id: tenancyId,
+    tenant_id: tenantId,
+    grn_number: updates.grnNumber || template['GRN number'] || payload.grn || '',
+    unit_id: unitId,
+    landlord_id: landlordId,
+    agreement_date: formatDateIso_(updates.agreementDateRaw || template.agreement_date_raw || template.agreement_date || ''),
+    commencement_date: formatDateIso_(updates.tenancyCommencementRaw || template.tenancy_comm_raw || template.tenancy_comm || ''),
+    end_date: formatDateIso_(updates.tenancyEndRaw || template.tenancy_end_raw || ''),
+    status: activeFlag === false || (typeof activeFlag === 'string' && activeFlag.toLowerCase() === 'no') ? 'ENDED' : 'ACTIVE',
+    vacate_reason: updates.vacateReason || template.vacateReason || '',
+    security_deposit: updates.securityDeposit || template.secu_depo || '',
+    rent_base: updates.rentAmount || template.rent_amount || '',
+    rent_payable_day: updates.payableDate || template.payable_date_raw || '',
+    tenant_notice_months: updates.tenantNoticeMonths || template.notice_num_t || '',
+    landlord_notice_months: updates.landlordNoticeMonths || template.notice_num_l || '',
+    pet_policy: updates.pet_policy || template.pet_text_area || '',
+    late_rent_per_day: updates.lateRentPerDay || template.late_rent || '',
+    late_grace_days: updates.lateGracePeriodDays || template.late_days || '',
+    rent_revision_unit: updates.rentRevisionUnit || template['rent_rev year_mon'] || '',
+    rent_revision_number: updates.rentRevisionNumber || template.rent_rev_number || '',
+    created_at: template.created_at || now,
+  };
+
+  const family = Array.isArray(payload.familyMembers)
+    ? payload.familyMembers.map((fm) => ({
+        member_id: Utilities.getUuid(),
+        tenant_id: tenantId,
+        name: fm.name || '',
+        relationship: fm.relationship || '',
+        occupation: fm.occupation || '',
+        aadhaar: fm.aadhaar || '',
+        address: fm.address || '',
+        created_at: now,
+      }))
+    : [];
+
+  return { tenant, unit, tenancy, family };
+}
+
+function handleSaveUnit_(payload) {
+  const now = new Date();
+  const unit = {
+    unit_id: payload.unitId || Utilities.getUuid(),
+    wing: payload.wing || '',
+    unit_number: payload.unitNumber || payload.flatNumber || '',
+    floor: payload.floor || '',
+    direction: payload.direction || '',
+    meter_number: payload.meterNumber || '',
+    landlord_id: payload.landlordId || '',
+    notes: payload.notes || '',
+    is_occupied: normalizeBoolean_(payload.isOccupied),
+    current_tenancy_id: payload.currentTenancyId || '',
+    created_at: payload.created_at || now,
+  };
+
+  upsertUnique_(UNITS_SHEET, UNITS_HEADERS, ['unit_id'], unit);
+  return jsonResponse({ ok: true, unit });
+}
+
+function handleSaveLandlord_(payload = {}) {
+  const landlord = {
+    landlord_id: payload.landlordId || Utilities.getUuid(),
+    name: payload.name || '',
+    aadhaar: payload.aadhaar || '',
+    address: payload.address || '',
+    created_at: new Date(),
+  };
+
+  upsertUnique_(LANDLORDS_SHEET, LANDLORD_HEADERS, ['landlord_id'], landlord);
+  return jsonResponse({ ok: true, landlord });
+}
+
+function handleDeleteLandlord_(payload = {}) {
+  const landlordId = payload.landlordId || '';
+  if (!landlordId) return jsonResponse({ ok: false, error: 'Landlord ID missing' });
+
+  const remaining = readTable_(LANDLORDS_SHEET, LANDLORD_HEADERS).filter((l) => l.landlord_id !== landlordId);
+  const sheet = getSheetWithHeaders_(LANDLORDS_SHEET, LANDLORD_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, LANDLORD_HEADERS.length).clearContent();
+  if (remaining.length) {
+    const rows = remaining.map((r) => LANDLORD_HEADERS.map((key) => r[key] ?? ''));
+    sheet.getRange(2, 1, rows.length, LANDLORD_HEADERS.length).setValues(rows);
+  }
+  return jsonResponse({ ok: true, landlordId });
+}
+
+function handleDeleteUnit_(payload) {
+  const unitId = payload.unitId || '';
+  if (!unitId) return jsonResponse({ ok: false, error: 'Unit ID missing' });
+  const remaining = readTable_(UNITS_SHEET, UNITS_HEADERS).filter((u) => u.unit_id !== unitId);
+  const sheet = getSheetWithHeaders_(UNITS_SHEET, UNITS_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, UNITS_HEADERS.length).clearContent();
+  if (remaining.length) {
+    const rows = remaining.map((r) => UNITS_HEADERS.map((key) => r[key] ?? ''));
+    sheet.getRange(2, 1, rows.length, UNITS_HEADERS.length).setValues(rows);
+  }
+  return jsonResponse({ ok: true, unitId });
+}
+
+function handleRemoveWing_(payload) {
+  const wing = (payload.wing || '').toString().trim();
+  if (!wing) return jsonResponse({ ok: false, error: 'Wing missing' });
+  const sheet = getSheetWithHeaders_(WINGS_SHEET, ['Wing']);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return jsonResponse({ ok: true, wing });
+  const values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  const retained = values.filter((r) => (r[0] || '').toString().trim().toLowerCase() !== wing.toLowerCase());
+  sheet.getRange(2, 1, lastRow - 1, 1).clearContent();
+  if (retained.length) sheet.getRange(2, 1, retained.length, 1).setValues(retained);
+  return jsonResponse({ ok: true, wing });
+}
+
+function handleSaveTenant_(payload) {
+  const mapped = mapTenantPayload_(payload || {});
+  upsertUnique_(TENANTS_SHEET, TENANTS_HEADERS, ['tenant_id'], mapped.tenant);
+  upsertUnique_(UNITS_SHEET, UNITS_HEADERS, ['unit_id'], mapped.unit);
+  upsertUnique_(TENANCIES_SHEET, TENANCIES_HEADERS, ['tenancy_id'], mapped.tenancy);
+
+  updateUnitOccupancy_(mapped.tenancy.unit_id, mapped.tenancy.tenancy_id, (mapped.tenancy.status || '').toUpperCase() === 'ACTIVE');
+
+  if (mapped.family && mapped.family.length) {
+    writeTableRows_(FAMILY_SHEET, FAMILY_HEADERS, mapped.family);
+  }
+
+  return jsonResponse({ ok: true, message: 'Tenant saved', tenantId: mapped.tenant.tenant_id, tenancyId: mapped.tenancy.tenancy_id });
+}
+
+function handleUpdateTenant_(payload) {
+  const createNewTenancy = normalizeBoolean_(payload && payload.createNewTenancy);
+  const previousTenancyId = payload.previousTenancyId || payload.tenancyId;
+  const keepPreviousActive = normalizeBoolean_(payload && payload.keepPreviousActive);
+  const forcedTenancyId = createNewTenancy ? (payload.forceNewTenancyId || Utilities.getUuid()) : payload.tenancyId;
+  const mapped = mapTenantPayload_({ ...(payload || {}), forceNewTenancyId: forcedTenancyId });
+  const existingTenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
+  const previousTenancy = existingTenancies.find((t) => t.tenancy_id === previousTenancyId);
+
+  upsertUnique_(TENANTS_SHEET, TENANTS_HEADERS, ['tenant_id'], mapped.tenant);
+  upsertUnique_(UNITS_SHEET, UNITS_HEADERS, ['unit_id'], mapped.unit);
+
+  if (createNewTenancy && previousTenancy && !keepPreviousActive) {
+    previousTenancy.status = 'ENDED';
+    previousTenancy.end_date = previousTenancy.end_date || formatDateIso_(payload.updates?.tenancyEndRaw || new Date());
+    upsertUnique_(TENANCIES_SHEET, TENANCIES_HEADERS, ['tenancy_id'], previousTenancy);
+  }
+
+  upsertUnique_(TENANCIES_SHEET, TENANCIES_HEADERS, ['tenancy_id'], mapped.tenancy);
+
+  if (previousTenancy && previousTenancy.unit_id && previousTenancy.unit_id !== mapped.tenancy.unit_id && !keepPreviousActive) {
+    updateUnitOccupancy_(previousTenancy.unit_id, '', false);
+  }
+  updateUnitOccupancy_(mapped.tenancy.unit_id, mapped.tenancy.tenancy_id, (mapped.tenancy.status || '').toUpperCase() === 'ACTIVE');
+
+  if (mapped.family) {
+    const sheet = getSheetWithHeaders_(FAMILY_SHEET, FAMILY_HEADERS);
+    const lastRow = sheet.getLastRow();
+    const existing = readTable_(FAMILY_SHEET, FAMILY_HEADERS).filter((row) => row.tenant_id !== mapped.tenant.tenant_id);
+    sheet.getRange(2, 1, Math.max(0, lastRow - 1), FAMILY_HEADERS.length).clearContent();
+    const retained = existing.concat(mapped.family);
+    if (retained.length) {
+      const rows = retained.map((r) => FAMILY_HEADERS.map((key) => r[key] ?? ''));
+      sheet.getRange(2, 1, rows.length, FAMILY_HEADERS.length).setValues(rows);
+    }
+  }
+
+  return jsonResponse({ ok: true, message: 'Tenant updated', tenantId: mapped.tenant.tenant_id, tenancyId: mapped.tenancy.tenancy_id, createdNewTenancy: createNewTenancy });
+}
+
+function buildTenantDirectory_() {
+  const tenants = readTable_(TENANTS_SHEET, TENANTS_HEADERS);
+  const tenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
+  const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
+  const families = readTable_(FAMILY_SHEET, FAMILY_HEADERS);
+  const landlords = readTable_(LANDLORDS_SHEET, LANDLORD_HEADERS);
+
+  const landlordById = landlords.reduce((m, l) => {
+    m[l.landlord_id] = l;
+    return m;
+  }, {});
+
+  const unitById = units.reduce((m, u) => {
+    m[u.unit_id] = u;
+    return m;
+  }, {});
+
+  const familyByTenant = families.reduce((m, f) => {
+    if (!m[f.tenant_id]) m[f.tenant_id] = [];
+    m[f.tenant_id].push({
+      name: f.name || '',
+      relationship: f.relationship || '',
+      occupation: f.occupation || '',
+      aadhaar: f.aadhaar || '',
+      address: f.address || '',
+    });
+    return m;
+  }, {});
+
+  const tenanciesByTenant = tenancies.reduce((m, t) => {
+    const list = m[t.tenant_id] || [];
+    list.push(t);
+    m[t.tenant_id] = list;
+    return m;
+  }, {});
+
+  return tenancies.map((tenancy) => {
+    const tenant = tenants.find((t) => t.tenant_id === tenancy.tenant_id) || {};
+    const unit = unitById[tenancy.unit_id] || {};
+    const landlord = landlordById[tenancy.landlord_id || unit.landlord_id] || {};
+    const templateData = tenancy.templateData || {};
+    const tenancyHistory = (tenanciesByTenant[tenancy.tenant_id] || [])
+      .slice()
+      .sort((a, b) => new Date(b.commencement_date || b.agreement_date || b.created_at || '').getTime() - new Date(a.commencement_date || a.agreement_date || a.created_at || '').getTime())
+      .map((t) => ({
+        tenancyId: t.tenancy_id,
+        unitLabel: buildUnitLabel_(unitById[t.unit_id] || {}),
+        startDate: t.commencement_date || t.agreement_date || '',
+        endDate: t.end_date || '',
+        status: t.status || '',
+        grnNumber: t.grn_number || tenant.grn_number || '',
+      }));
+    return {
+      tenantId: tenant.tenant_id,
+      tenancyId: tenancy.tenancy_id,
+      grnNumber: tenancy.grn_number || tenant.grn_number || '',
+      tenantFullName: tenant.full_name || '',
+      tenantOccupation: tenant.occupation || '',
+      tenantPermanentAddress: tenant.permanent_address || '',
+      tenantAadhaar: tenant.aadhaar || '',
+      tenantMobile: tenant.mobile || '',
+      wing: unit.wing || '',
+      unitId: unit.unit_id || '',
+      unitNumber: unit.unit_number || '',
+      floor: unit.floor || '',
+      direction: unit.direction || '',
+      meterNumber: unit.meter_number || '',
+      landlordId: landlord.landlord_id || '',
+      landlordName: landlord.name || '',
+      landlordAadhaar: landlord.aadhaar || '',
+      landlordAddress: landlord.address || '',
+      unitOccupied: normalizeBoolean_(unit.is_occupied),
+      rentAmount: tenancy.rent_base || '',
+      payableDate: tenancy.rent_payable_day || '',
+      securityDeposit: tenancy.security_deposit || '',
+      rentIncrease: tenancy.rent_revision_number || '',
+      rentRevisionNumber: tenancy.rent_revision_number || '',
+      rentRevisionUnit: tenancy.rent_revision_unit || '',
+      tenantNoticeMonths: tenancy.tenant_notice_months || '',
+      landlordNoticeMonths: tenancy.landlord_notice_months || '',
+      lateRentPerDay: tenancy.late_rent_per_day || '',
+      lateGracePeriodDays: tenancy.late_grace_days || '',
+      agreementDate: tenancy.agreement_date || '',
+      tenancyCommencement: tenancy.commencement_date || '',
+      tenancyEndDate: tenancy.end_date || '',
+      activeTenant: (tenancy.status || '').toString().toUpperCase() === 'ACTIVE',
+      vacateReason: tenancy.vacate_reason || '',
+      family: familyByTenant[tenant.tenant_id] || [],
+      tenancyHistory,
+      templateData: {
+        tenant_id: tenant.tenant_id,
+        tenancy_id: tenancy.tenancy_id,
+        unit_id: unit.unit_id,
+        'GRN number': tenancy.grn_number || tenant.grn_number || '',
+        Tenant_Full_Name: tenant.full_name || '',
+        Tenant_Permanent_Address: tenant.permanent_address || '',
+        tenant_Aadhar: tenant.aadhaar || '',
+        tenant_mobile: tenant.mobile || '',
+        tenant_occupation: tenant.occupation || '',
+        wing: unit.wing || '',
+        unit_number: unit.unit_number || '',
+        floor_of_building: unit.floor || '',
+        direction_build: unit.direction || '',
+        meter_number: unit.meter_number || '',
+        landlord_id: landlord.landlord_id || '',
+        Landlord_name: landlord.name || templateData.Landlord_name || '',
+        landlord_address: landlord.address || templateData.landlord_address || '',
+        landlord_aadhar: landlord.aadhaar || templateData.landlord_aadhar || '',
+        rent_amount: tenancy.rent_base || '',
+        payable_date_raw: tenancy.rent_payable_day || '',
+        secu_depo: tenancy.security_deposit || '',
+        rent_rev_number: tenancy.rent_revision_number || '',
+        'rent_rev year_mon': tenancy.rent_revision_unit || '',
+        notice_num_t: tenancy.tenant_notice_months || '',
+        notice_num_l: tenancy.landlord_notice_months || '',
+        pet_text_area: tenancy.pet_policy || '',
+        late_rent: tenancy.late_rent_per_day || '',
+        late_days: tenancy.late_grace_days || '',
+        agreement_date_raw: tenancy.agreement_date || '',
+        tenancy_comm_raw: tenancy.commencement_date || '',
+        tenancy_end_raw: tenancy.end_date || '',
+      },
+    };
+  });
+}
+
+function buildUnitLabel_(unit) {
+  if (!unit) return '';
+  const parts = [unit.wing, unit.unit_number].filter(Boolean);
+  return parts.join(' - ') || unit.unit_id || '';
+}
+
+/********* BILLING *********/
+function computeMotorShare_(config, includedCount) {
+  const motorUnits = Number(config.motor_new || 0) - Number(config.motor_prev || 0);
+  const rate = Number(config.electricity_rate || 0);
+  if (!includedCount || includedCount <= 0) return 0;
+  return Math.round(((motorUnits * rate) / includedCount) * 100) / 100;
+}
+
+function handleSaveBillingRecord_(payload) {
+  const monthKey = normalizeMonthKey_(payload.monthKey || '');
+  const wing = (payload.wing || '').toString().trim();
+  if (!monthKey || !wing) return jsonResponse({ ok: false, error: 'Missing month or wing' });
+
+  const meta = payload.meta || {};
+  const wingConfig = {
+    wing_month_id: Utilities.getUuid(),
+    month_key: monthKey,
+    wing,
+    electricity_rate: meta.electricityRate || '',
+    sweeping_per_flat: meta.sweepingPerFlat || '',
+    motor_prev: meta.motorPrev || '',
+    motor_new: meta.motorNew || '',
+    motor_units: (Number(meta.motorNew || 0) || 0) - (Number(meta.motorPrev || 0) || 0),
+    created_at: new Date(),
+  };
+  upsertUnique_(WING_MONTHLY_SHEET, WING_MONTHLY_HEADERS, ['month_key', 'wing'], wingConfig);
+
+  const tenants = Array.isArray(payload.tenants) ? payload.tenants : [];
+  const tenancyById = {};
+  const tenancyByTenant = {};
+  const tenancyByGrn = {};
+  readTable_(TENANCIES_SHEET, TENANCIES_HEADERS).forEach((t) => {
+    tenancyById[t.tenancy_id] = t;
+    if (!tenancyByTenant[t.tenant_id]) tenancyByTenant[t.tenant_id] = [];
+    tenancyByTenant[t.tenant_id].push(t);
+    const grnKey = (t.grn_number || '').toString().toLowerCase();
+    if (grnKey) {
+      if (!tenancyByGrn[grnKey]) tenancyByGrn[grnKey] = [];
+      tenancyByGrn[grnKey].push(t);
+    }
+  });
+
+  const readingRows = [];
+  const billRows = [];
+  const includedTenancies = [];
+
+  tenants.forEach((tenant) => {
+    const grnKey = (tenant.grn || tenant.tenantKey || tenant.tenantName || '').toString().toLowerCase();
+    const tenancyFromPayload = tenant.tenancyId && tenancyById[tenant.tenancyId];
+    const tenancyOptions = tenancyFromPayload
+      ? [tenancyFromPayload]
+      : tenant.tenantId && tenancyByTenant[tenant.tenantId]
+        ? tenancyByTenant[tenant.tenantId]
+      : tenancyByGrn[grnKey]
+        ? tenancyByGrn[grnKey]
+        : [];
+    const tenancy = tenancyOptions.find((t) => (t.status || '').toUpperCase() === 'ACTIVE') || tenancyOptions[0];
+    if (!tenancy) return;
+
+    const included = normalizeBoolean_(tenant.included);
+    const prev = Number(tenant.prevReading || 0) || 0;
+    const next = Number(tenant.newReading || 0) || 0;
+    const units = Math.max(next - prev, 0);
+    if (included) includedTenancies.push(tenancy.tenancy_id);
+
+    const reading = {
+      reading_id: Utilities.getUuid(),
+      month_key: monthKey,
+      tenancy_id: tenancy.tenancy_id,
+      prev_reading: tenant.prevReading || '',
+      new_reading: tenant.newReading || '',
+      included,
+      override_rent: tenant.override_rent || '',
+      notes: tenant.notes || '',
+      created_at: new Date(),
+    };
+    readingRows.push(reading);
+  });
+
+  const motorPerTenant = computeMotorShare_(wingConfig, includedTenancies.length);
+  const rate = Number(wingConfig.electricity_rate || 0);
+  const sweep = Number(wingConfig.sweeping_per_flat || 0);
+  const payableDate = (tenant) => tenant.rent_payable_day || '';
+
+  readingRows.forEach((reading) => {
+    const tenancy = tenancyById[reading.tenancy_id];
+    if (!tenancy) return;
+    const rent = reading.override_rent || tenancy.rent_base || 0;
+    const units = Math.max(Number(reading.new_reading || 0) - Number(reading.prev_reading || 0), 0);
+    const electricityAmount = Math.round(units * rate * 100) / 100;
+    const sweepAmount = normalizeBoolean_(reading.included) ? sweep : 0;
+    const motorShare = normalizeBoolean_(reading.included) ? motorPerTenant : 0;
+    const total = normalizeBoolean_(reading.included)
+      ? Math.round((Number(rent) + electricityAmount + sweepAmount + motorShare) * 100) / 100
+      : 0;
+
+    billRows.push({
+      bill_line_id: Utilities.getUuid(),
+      month_key: monthKey,
+      tenancy_id: reading.tenancy_id,
+      rent_amount: rent,
+      electricity_units: units,
+      electricity_amount: electricityAmount,
+      motor_share_amount: motorShare,
+      sweep_amount: sweepAmount,
+      total_amount: total,
+      payable_date: payableDate(tenancy),
+      generated_at: new Date(),
+    });
+  });
+
+  // Persist readings and bills (replace existing month+tenancy combos)
+  persistUniqueByKeys_(TENANT_READINGS_SHEET, TENANT_READING_HEADERS, ['month_key', 'tenancy_id'], readingRows);
+  persistUniqueByKeys_(BILL_LINES_SHEET, BILL_LINE_HEADERS, ['month_key', 'tenancy_id'], billRows);
+
+  const { bills, coverage } = handleFetchGeneratedBills_();
+  return jsonResponse({ ok: true, message: 'Billing saved', bills, coverage });
+}
+
+function handleGetBillingRecord_(monthKeyRaw, wingRaw) {
+  const monthKey = normalizeMonthKey_(monthKeyRaw || '');
+  const wing = (wingRaw || '').toString().trim();
+  const wingNormalized = wing.toLowerCase();
+  if (!monthKey || !wing) return jsonResponse({ ok: false, error: 'Missing month or wing' });
+
+  const wingConfigs = readTable_(WING_MONTHLY_SHEET, WING_MONTHLY_HEADERS);
+  const configRow = wingConfigs.find(
+    (c) => normalizeMonthKey_(c.month_key) === monthKey && (c.wing || '').toString().trim().toLowerCase() === wingNormalized
+  );
+  const hasConfig = !!configRow;
+  const config = configRow || {
+    month_key: monthKey,
+    wing,
+    electricity_rate: '',
+    sweeping_per_flat: '',
+    motor_prev: '',
+    motor_new: '',
+    motor_units: '',
+  };
+
+  const tenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
+  const tenants = readTable_(TENANTS_SHEET, TENANTS_HEADERS);
+  const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
+
+  const unitMap = units.reduce((m, u) => {
+    if ((u.wing || '').toString().trim().toLowerCase() === wingNormalized) m[u.unit_id] = u;
+    return m;
+  }, {});
+
+  const tenancyMap = tenancies.reduce((m, t) => {
+    if (unitMap[t.unit_id]) m[t.tenancy_id] = t;
+    return m;
+  }, {});
+
+  const readings = readTable_(TENANT_READINGS_SHEET, TENANT_READING_HEADERS).filter((r) => {
+    const matchesMonth = normalizeMonthKey_(r.month_key) === monthKey;
+    const matchesWing = !!tenancyMap[r.tenancy_id];
+    return matchesMonth && matchesWing;
+  });
+  const hasReadings = readings.length > 0;
+
+  const tenantMap = tenants.reduce((m, t) => {
+    m[t.tenant_id] = t;
+    return m;
+  }, {});
+  const tenantsPayload = readings.map((reading) => {
+    const tenancy = tenancyMap[reading.tenancy_id] || {};
+    const tenant = tenantMap[tenancy.tenant_id] || {};
+    const unit = unitMap[tenancy.unit_id] || {};
+    return {
+      tenancyId: reading.tenancy_id,
+      tenantKey: tenancy.grn_number || tenant.full_name || '',
+      tenantName: tenant.full_name || '',
+      wing: unit.wing || '',
+      unitNumber: unit.unit_number || '',
+      prevReading: reading.prev_reading || '',
+      newReading: reading.new_reading || '',
+      included: normalizeBoolean_(reading.included),
+      override_rent: reading.override_rent || '',
+      rentAmount: tenancy.rent_base || '',
+      payableDate: tenancy.rent_payable_day || '',
+      direction: unit.direction || '',
+      floor: unit.floor || '',
+      meterNumber: unit.meter_number || '',
+    };
+  });
+
+  return jsonResponse({
+    ok: true,
+    monthKey,
+    monthLabel: formatMonthLabelForDisplay_(monthKey),
+    wing: config.wing || wing,
+    hasConfig,
+    hasReadings,
+    meta: {
+      month_key: config.month_key,
+      wing: config.wing,
+      electricityRate: config.electricity_rate || '',
+      sweepingPerFlat: config.sweeping_per_flat || '',
+      motorPrev: config.motor_prev || '',
+      motorNew: config.motor_new || '',
+      motor_units: config.motor_units || '',
+    },
+    tenants: tenantsPayload,
+  });
+}
+
+function persistUniqueByKeys_(sheetName, headers, keys, records) {
+  const sheet = getSheetWithHeaders_(sheetName, headers);
+  const headerIndex = buildHeaderIndex_(headers);
+  const existing = readTable_(sheetName, headers);
+  const normalizeKeyValue = (key, value) => {
+    if (key === 'month_key') return normalizeMonthKey_(value);
+    return value;
+  };
+
+  const filtered = existing.filter((row) => {
+    return !records.some((incoming) =>
+      keys.every((k) => normalizeKeyValue(k, incoming[k]) == normalizeKeyValue(k, row[k]))
+    );
+  });
+  const merged = filtered.concat(records);
+  const rows = merged.map((r) => headers.map((key) => r[key] ?? ''));
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
+  if (rows.length) sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+}
+
+function handleFetchGeneratedBills_() {
+  const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
+  const tenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
+  const tenants = readTable_(TENANTS_SHEET, TENANTS_HEADERS);
+  const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
+  const readings = readTable_(TENANT_READINGS_SHEET, TENANT_READING_HEADERS);
+  const config = readTable_(WING_MONTHLY_SHEET, WING_MONTHLY_HEADERS);
+
+  const tenancyMap = tenancies.reduce((m, t) => {
+    m[t.tenancy_id] = t;
+    return m;
+  }, {});
+  const tenantMap = tenants.reduce((m, t) => {
+    m[t.tenant_id] = t;
+    return m;
+  }, {});
+  const unitMap = units.reduce((m, u) => {
+    m[u.unit_id] = u;
+    return m;
+  }, {});
+  const readingMap = readings.reduce((m, r) => {
+    m[`${r.month_key}__${r.tenancy_id}`] = r;
+    return m;
+  }, {});
+  const configMap = config.reduce((m, c) => {
+    m[`${c.month_key}__${c.wing}`] = c;
+    return m;
+  }, {});
+
+  const coverage = config
+    .map((c) => ({
+      monthKey: normalizeMonthKey_(c.month_key),
+      wing: (c.wing || '').toString().trim(),
+    }))
+    .filter((c) => c.monthKey && c.wing);
+
+  const billPayload = bills.map((bill) => {
+    const tenancy = tenancyMap[bill.tenancy_id] || {};
+    const tenant = tenantMap[tenancy.tenant_id] || {};
+    const unit = unitMap[tenancy.unit_id] || {};
+    const reading = readingMap[`${bill.month_key}__${bill.tenancy_id}`] || {};
+    const cfg = configMap[`${bill.month_key}__${unit.wing || ''}`] || {};
+    const monthLabel = formatMonthLabelForDisplay_(bill.month_key);
+    return {
+      monthKey: bill.month_key,
+      monthLabel,
+      wing: unit.wing || '',
+      tenantKey: tenancy.grn_number || tenant.full_name || '',
+      tenantName: tenant.full_name || '',
+      rentAmount: Number(bill.rent_amount) || 0,
+      electricityAmount: Number(bill.electricity_amount) || 0,
+      motorShare: Number(bill.motor_share_amount) || 0,
+      sweepAmount: Number(bill.sweep_amount) || 0,
+      totalAmount: Number(bill.total_amount) || 0,
+      included: normalizeBoolean_(reading.included),
+      payableDate: bill.payable_date || '',
+      prevReading: reading.prev_reading || '',
+      newReading: reading.new_reading || '',
+      electricityRate: cfg.electricity_rate || '',
+      sweepingPerFlat: cfg.sweeping_per_flat || '',
+      motorPrev: cfg.motor_prev || '',
+      motorNew: cfg.motor_new || '',
+      billLineId: bill.bill_line_id,
+      tenancyId: bill.tenancy_id,
+    };
+  });
+
+  return { bills: billPayload, coverage };
+}
+
+/********* PAYMENTS *********/
+function savePaymentAttachment_(dataUrl, paymentId, originalName) {
+  if (!dataUrl) return { attachment_id: '', attachmentName: '', attachmentUrl: '' };
+  const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+  if (!match) return { attachment_id: '', attachmentName: '', attachmentUrl: '' };
+  const mimeType = match[1] || 'application/octet-stream';
+  const cleanBase64 = match[2].replace(/\s/g, '');
+  const bytes = Utilities.base64Decode(cleanBase64);
+  const blobName = `${paymentId || 'payment'}-${Date.now()}${originalName ? originalName.substring(originalName.lastIndexOf('.')) : ''}`;
+  const blob = Utilities.newBlob(bytes, mimeType).setName(blobName);
+  const folder = getOrCreateFolder_('Payment Proofs');
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  const ensured = ensureDriveFileShareable_(file.getUrl());
+  const attachment = {
+    attachment_id: Utilities.getUuid(),
+    file_name: file.getName(),
+    file_url: ensured.viewUrl,
+    uploaded_at: new Date(),
+  };
+  upsertUnique_(ATTACHMENTS_SHEET, ATTACHMENT_HEADERS, ['attachment_id'], attachment);
+  return { attachment_id: attachment.attachment_id, attachmentName: attachment.file_name, attachmentUrl: attachment.file_url };
+}
+
+function getOrCreateFolder_(name) {
+  const existing = DriveApp.getFoldersByName(name);
+  if (existing.hasNext()) return existing.next();
+  return DriveApp.createFolder(name);
+}
+
+function handleSavePayment_(payload = {}) {
+  const paymentId = payload.id || Utilities.getUuid();
+  const paymentDate = parseIsoDate_(payload.date) || new Date();
+  const billLineId = payload.billLineId || '';
+  const tenantId = payload.tenantId || '';
+  const attachment = payload.attachmentDataUrl
+    ? savePaymentAttachment_(payload.attachmentDataUrl, paymentId, payload.attachmentName || '')
+    : { attachment_id: payload.attachmentId || '', attachmentName: payload.attachmentName || '', attachmentUrl: payload.attachmentUrl || '' };
+
+  const record = {
+    payment_id: paymentId,
+    payment_date: paymentDate,
+    bill_line_id: billLineId,
+    tenant_id: tenantId,
+    amount: Number(payload.amount) || 0,
+    mode: payload.mode || '',
+    reference: payload.reference || '',
+    notes: payload.notes || '',
+    attachment_id: attachment.attachment_id || '',
+    created_at: new Date(),
+  };
+
+  upsertUnique_(PAYMENTS_SHEET, PAYMENT_HEADERS, ['payment_id'], record);
+  const allocations = Array.isArray(payload.allocations) && payload.allocations.length
+    ? payload.allocations
+    : [
+        {
+          allocation_id: Utilities.getUuid(),
+          payment_id: paymentId,
+          bill_line_id: billLineId,
+          amount_applied: Number(record.amount) || 0,
+          created_at: new Date(),
+        },
+      ];
+
+  allocations.forEach((alloc) => {
+    const allocation = {
+      allocation_id: alloc.allocation_id || Utilities.getUuid(),
+      payment_id: paymentId,
+      bill_line_id: alloc.bill_line_id || billLineId,
+      amount_applied: Number(alloc.amount_applied || alloc.amount || record.amount) || 0,
+      created_at: alloc.created_at || new Date(),
+    };
+    upsertUnique_(PAYMENT_ALLOCATIONS_SHEET, PAYMENT_ALLOCATION_HEADERS, ['allocation_id'], allocation);
+  });
+
+  return { ok: true, payment: mapPaymentRow_(record) };
+}
+
+function mapPaymentRow_(record) {
+  const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
+  const tenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
+  const tenants = readTable_(TENANTS_SHEET, TENANTS_HEADERS);
+  const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
+  const attachmentLookup = readTable_(ATTACHMENTS_SHEET, ATTACHMENT_HEADERS).reduce((m, a) => {
+    m[a.attachment_id] = a;
+    return m;
+  }, {});
+
+  const bill = bills.find((b) => b.bill_line_id == record.bill_line_id) || {};
+  const tenancy = tenancies.find((t) => t.tenancy_id == bill.tenancy_id) || {};
+  const tenant = tenants.find((t) => t.tenant_id == (record.tenant_id || tenancy.tenant_id)) || {};
+  const unit = units.find((u) => u.unit_id == tenancy.unit_id) || {};
+  const attachment = attachmentLookup[record.attachment_id] || {};
+
+  return {
+    id: record.payment_id,
+    date: formatDateIso_(record.payment_date),
+    amount: Number(record.amount) || 0,
+    mode: record.mode || '',
+    reference: record.reference || '',
+    notes: record.notes || '',
+    tenantKey: tenancy.grn_number || tenant.full_name || '',
+    tenantName: tenant.full_name || '',
+    wing: unit.wing || '',
+    attachmentName: attachment.file_name || '',
+    attachmentUrl: attachment.file_url || '',
+    monthKey: bill.month_key || '',
+    monthLabel: formatMonthLabelForDisplay_(bill.month_key || ''),
+    billTotal: Number(bill.total_amount) || 0,
+    rentAmount: Number(bill.rent_amount) || 0,
+    electricityAmount: Number(bill.electricity_amount) || 0,
+    motorShare: Number(bill.motor_share_amount) || 0,
+    sweepAmount: Number(bill.sweep_amount) || 0,
+    prevReading: '',
+    newReading: '',
+    payableDate: bill.payable_date || '',
+  };
+}
+
+function handleFetchPayments_() {
+  const payments = readTable_(PAYMENTS_SHEET, PAYMENT_HEADERS);
+  return payments.map((p) => mapPaymentRow_(p)).sort((a, b) => {
+    const aTime = a.date ? new Date(a.date).getTime() : 0;
+    const bTime = b.date ? new Date(b.date).getTime() : 0;
+    return bTime - aTime;
+  });
+}
+
+/********* HTTP ENTRY POINTS *********/
+function doGet(e) {
+  try {
+    const action = (e.parameter && e.parameter.action || '').toLowerCase();
+    if (action === 'wings') {
+      const ss = getMasterSpreadsheet_();
+      let sheet = ss.getSheetByName(WINGS_SHEET);
+      if (!sheet) return jsonResponse({ wings: [] });
+      const lastRow = sheet.getLastRow();
+      if (lastRow === 0) return jsonResponse({ wings: [] });
+      const values = sheet.getRange(1, 1, lastRow, 1).getValues();
+      const wings = values
+        .map((r) => (r[0] || '').toString().trim())
+        .filter((v, idx) => v && !(idx === 0 && v.toLowerCase() === 'wing'));
+      return jsonResponse({ wings });
+    }
+
+    if (action === 'clauses') {
+      const unified = readUnifiedClauses_();
+      const sections = unified || readLegacyClauses_();
+      return jsonResponse({ ok: true, tenant: sections.tenant || [], landlord: sections.landlord || [], penalties: sections.penalties || [], misc: sections.misc || [] });
+    }
+
+    if (action === 'tenants') {
+      return jsonResponse({ ok: true, tenants: buildTenantDirectory_() });
+    }
+
+    if (action === 'units') {
+      const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
+      return jsonResponse({ ok: true, units });
+    }
+
+    if (action === 'landlords') {
+      const landlords = readTable_(LANDLORDS_SHEET, LANDLORD_HEADERS);
+      return jsonResponse({ ok: true, landlords });
+    }
+
+    if (action === 'generatedbills') {
+      const { bills, coverage } = handleFetchGeneratedBills_();
+      return jsonResponse({ ok: true, bills, coverage });
+    }
+
+    if (action === 'getbillingrecord') {
+      return handleGetBillingRecord_(e.parameter.month, e.parameter.wing);
+    }
+
+    if (action === 'payments') {
+      const payments = handleFetchPayments_();
+      return jsonResponse({ ok: true, payments });
+    }
+
+    return jsonResponse({ ok: true, message: 'GET OK' });
+  } catch (err) {
+    return jsonResponse({ ok: false, error: String(err) });
+  }
+}
+
+function doPost(e) {
+  try {
+    if (!e.postData || !e.postData.contents) return jsonResponse({ ok: false, error: 'No postData.contents' });
+    const body = JSON.parse(e.postData.contents);
+    const action = body.action;
+    if (action === 'saveTenant') return handleSaveTenant_(body.payload);
+    if (action === 'updateTenant') return handleUpdateTenant_(body.payload);
+    if (action === 'saveUnit') return handleSaveUnit_(body.payload || {});
+    if (action === 'deleteUnit') return handleDeleteUnit_(body.payload || {});
+    if (action === 'saveLandlord') return handleSaveLandlord_(body.payload || {});
+    if (action === 'deleteLandlord') return handleDeleteLandlord_(body.payload || {});
+    if (action === 'saveBillingRecord') return handleSaveBillingRecord_(body.payload);
+    if (action === 'savePayment') return jsonResponse(handleSavePayment_(body.payload || {}));
+    if (action === 'saveClauses') {
+      writeUnifiedClauses_(body.payload || {});
+      return jsonResponse({ ok: true, message: 'Clauses saved to Google Sheets' });
+    }
+    if (action === 'addWing') {
+      const wing = (body.payload && body.payload.wing || '').toString().trim();
+      if (!wing) return jsonResponse({ ok: false, error: 'Wing missing' });
+      upsertUnique_(WINGS_SHEET, ['Wing'], ['Wing'], { Wing: wing });
+      return jsonResponse({ ok: true, message: 'Wing added' });
+    }
+    if (action === 'removeWing') return handleRemoveWing_(body.payload || {});
+    return jsonResponse({ ok: false, error: 'Unknown action: ' + action });
+  } catch (err) {
+    return jsonResponse({ ok: false, error: String(err) });
+  }
+}

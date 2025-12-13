@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Khurshid Tenant Software</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Local styles -->
+  <link rel="stylesheet" href="./styles.css" />
+
+
+  <!-- Local libs -->
+  <script src="./libs/pizzip.min.js"></script>
+  <script src="./libs/docxtemplater.js"></script>
+  <script src="./libs/FileSaver.min.js"></script>
+
+  <!-- Your app logic (the stripped-down main.js I gave you) -->
+  <script src="./main.js" type="module"></script>
+</head>
+
+<body class="bg-slate-100 text-slate-900">
+  <!-- Toasts -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none"></div>
+
+  <div class="min-h-screen flex flex-col">
+    <!-- HEADER -->
+    <header class="bg-slate-900 text-white px-3 md:px-6 py-2.5 flex items-center justify-between">
+      <div>
+        <h1 class="text-base md:text-lg font-bold tracking-tight">
+          Khurshid Tenant Management
+        </h1>
+        <p class="text-[11px] text-slate-300">
+          Google Sheets DataBase | Made by Arish
+        </p>
+      </div>
+      <div>
+        <div id="connectionIndicator"
+          class="flex items-center gap-2 text-[11px] px-3 py-1 rounded-full border bg-slate-700">
+          <span class="status-dot w-2 h-2 rounded-full bg-slate-500"></span>
+          <span class="status-label">Checking...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 overflow-y-auto p-2 md:p-4">
+      <!-- 3-column app layout: nav (left), main view (middle), sidebar (right) -->
+      <div id="appLayout" class="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)] gap-3">
+
+        <!-- LEFT: NAVIGATION COLUMN -->
+        <aside
+          class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3 flex flex-col gap-1 h-fit">
+          <div class="mb-1.5">
+            <p class="text-[10px] font-semibold text-slate-700 tracking-wide uppercase">
+              Navigation
+            </p>
+          </div>
+
+          <!-- Dashboard -->
+          <button id="navDashboardBtn"
+            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700">
+            <span>Dashboard</span>
+            <span class="text-[9px] text-slate-400">Coming soon</span>
+          </button>
+
+          <!-- Generate Bill -->
+          <button id="navGenerateBillBtn"
+            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700">
+            <span>Generate Bill</span>
+            <span class="text-[9px] text-slate-400">Billing</span>
+          </button>
+
+          <!-- Payments -->
+          <button id="navPaymentsBtn"
+            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700">
+            <span>Payments</span>
+            <span class="text-[9px] text-slate-400">Record &amp; proofs</span>
+          </button>
+
+          <!-- View Tenants -->
+          <button id="navViewTenantsBtn"
+            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700">
+            <span>View Tenants</span>
+            <span class="text-[9px] text-slate-400">Directory</span>
+          </button>
+
+          <!-- Create Tenant -->
+          <button id="navCreateTenantBtn"
+            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700">
+            <span> + Create Tenant</span>
+            <span class="text-[9px] text-slate-400">New / Past</span>
+          </button>
+
+          <!-- Create Agreement (current) -->
+          <button id="navCreateAgreementBtn"
+            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg bg-slate-900 text-white shadow-sm">
+            <span>Create Agreement</span>
+            <span class="text-[9px] text-slate-200">Current</span>
+          </button>
+
+          <!-- Configuration -->
+          <button id="navConfigBtn"
+            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700 mt-2 border-t border-dashed border-slate-200 pt-2">
+            <span>Configuration</span>
+            <span class="text-[9px] text-slate-400">App Script URL</span>
+          </button>
+
+          <button id="navLandlordConfigBtn"
+            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700">
+            <span>Landlord configuration</span>
+            <span class="text-[9px] text-slate-400">Defaults</span>
+          </button>
+
+          <button id="clearDraftsBtn"
+            class="w-full mt-2 text-[11px] px-3 py-1.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50">Clear
+            all drafts</button>
+        </aside>
+
+        <!-- MIDDLE VIEW: DASHBOARD PLACEHOLDER -->
+        <section id="dashboardSection"
+          class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-3 fade-section is-visible">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm md:text-base font-semibold">Dashboard</h2>
+            <span class="text-[10px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 border">Coming soon</span>
+          </div>
+          <div class="grid md:grid-cols-2 gap-3">
+            <div class="border rounded-lg p-3 bg-slate-50">
+              <p class="text-[11px] font-semibold text-slate-700">Quick view</p>
+              <p class="text-[11px] text-slate-500">Insights and charts will appear here.</p>
+            </div>
+            <div class="border rounded-lg p-3 bg-slate-50">
+              <p class="text-[11px] font-semibold text-slate-700">Shortcuts</p>
+              <p class="text-[11px] text-slate-500">Use the left navigation to jump into billing, payments, or
+                agreements.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- MIDDLE VIEW: MAIN FORM (Agreement / Create Tenant) -->
+        <section id="formSection"
+          class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-3 hidden fade-section min-w-0">
+          <h2 id="mainFormTitle" class="text-sm md:text-base font-semibold border-b pb-1.5">
+            Agreement Form
+          </h2>
+
+          <!-- TOP ACTION BAR -->
+          <div id="topActionBar" class="flex flex-wrap gap-2 mt-2 mb-2">
+            <div class="flex items-center gap-2">
+              <button
+                class="btn-save-draft px-3 py-1.5 rounded bg-amber-500 text-white text-[11px] font-semibold hover:bg-amber-400">
+                Save draft
+              </button>
+              <select
+                class="draft-picker min-w-[160px] px-3 py-1.5 rounded border border-slate-200 bg-white text-[11px] font-semibold text-slate-700">
+                <option>Load draft</option>
+              </select>
+            </div>
+            <!-- Agreement Mode Buttons -->
+            <button
+              class="btn-save-agreement hidden px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">
+              Create Tenant on DB
+            </button>
+            <button
+              class="btn-export-docx hidden px-3 py-1.5 rounded bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">
+              Export DOCX
+            </button>
+
+            <!-- Tenant Mode Buttons -->
+            <button
+              class="btn-create-new hidden px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">
+              Create new tenant
+            </button>
+            <button
+              class="btn-save-past hidden px-3 py-1.5 rounded bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">
+              Save past tenant
+            </button>
+          </div>
+
+          <!-- AGREEMENT META -->
+          <div class="border rounded-lg p-2.5 space-y-2.5">
+            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+              Agreement Meta
+            </h3>
+            <div class="grid md:grid-cols-4 gap-2">
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Agreement Date</label>
+                <input type="date" id="agreement_date" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">GRN Number</label>
+                <div class="flex items-center gap-2">
+                  <input type="text" id="grn_number" class="w-full border rounded px-2 py-1.5 text-xs"
+                    placeholder="e.g. GRN-2025-001" />
+                  <button id="grnNoBtn" type="button"
+                    class="px-2 py-1 text-[10px] border border-slate-300 rounded bg-slate-50 hover:bg-slate-100">No
+                    GRN?</button>
+                </div>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Tenancy Commencement</label>
+                <input type="date" id="tenancy_comm" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+              <!-- Tenancy End Date – visible only for "Add past tenant" mode -->
+              <div id="tenancyEndGroup" class="hidden">
+                <label class="text-[11px] font-semibold block mb-1">Tenancy End Date</label>
+                <input type="date" id="tenancy_end" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+            </div>
+          </div>
+
+          <!-- LANDLORD -->
+          <div class="border rounded-lg p-2.5 space-y-2.5">
+            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+              Landlord Details
+            </h3>
+            <div class="grid md:grid-cols-2 gap-2">
+              <div class="md:col-span-2">
+                <label class="text-[11px] font-semibold block mb-1">Select landlord</label>
+                <select id="landlord_selector" class="w-full border rounded px-2 py-1.5 text-xs bg-white">
+                  <option value="">Choose a saved landlord</option>
+                </select>
+              </div>
+              <div class="md:col-span-2">
+                <label class="text-[11px] font-semibold block mb-1">Landlord Name</label>
+                <input type="text" id="Landlord_name"
+                  class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50 text-slate-700" readonly />
+              </div>
+              <div class="md:col-span-2">
+                <label class="text-[11px] font-semibold block mb-1">Landlord Address</label>
+                <textarea id="landlord_address" rows="2"
+                  class="w-full border rounded px-2 py-1.5 text-xs resize-y bg-slate-50 text-slate-700" readonly></textarea>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Landlord Aadhaar</label>
+                <input type="number" id="landlord_aadhar"
+                  class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50 text-slate-700" readonly />
+              </div>
+            </div>
+          </div>
+
+          <!-- TENANT -->
+          <div class="border rounded-lg p-2.5 space-y-2.5">
+            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+              Tenant Details
+            </h3>
+            <div class="grid md:grid-cols-2 gap-2">
+              <div class="md:col-span-2">
+                <label class="text-[11px] font-semibold block mb-1">Tenant Full Name</label>
+                <input type="text" id="Tenant_Full_Name" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Tenant Occupation</label>
+                <input type="text" id="Tenant_occupation" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Tenant Aadhaar</label>
+                <input type="number" id="tenant_Aadhar" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Mobile No.</label>
+                <input type="number" id="tenant_mobile" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+              <div class="md:col-span-2">
+                <label class="text-[11px] font-semibold block mb-1">Tenant Permanent Address</label>
+                <textarea id="Tenant_Permanent_Address" rows="2"
+                  class="w-full border rounded px-2 py-1.5 text-xs resize-y"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- FAMILY MEMBERS -->
+          <div class="border rounded-lg p-2.5 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+                Family Members
+              </h3>
+              <button id="addFamilyRowBtn"
+                class="text-[11px] px-3 py-1 rounded bg-slate-900 text-white hover:bg-slate-800">
+                + Add Row
+              </button>
+            </div>
+            <p class="text-[10px] text-slate-500">
+              Tenant is automatically added as the first row (Self). You can add / delete more family members.
+            </p>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-[11px] border border-slate-200" id="familyTable">
+                <thead class="bg-slate-50">
+                  <tr>
+                    <th class="border px-2 py-1 text-left">Name</th>
+                    <th class="border px-2 py-1 text-left">Relationship</th>
+                    <th class="border px-2 py-1 text-left">Occupation</th>
+                    <th class="border px-2 py-1 text-left">Aadhaar</th>
+                    <th class="border px-2 py-1 text-left">Permanent Address</th>
+                    <th class="border px-2 py-1 text-center">Remove</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Filled by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- PREMISES -->
+          <div class="border rounded-lg p-2.5 space-y-2.5">
+            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+              Premises Details
+            </h3>
+            <div class="grid md:grid-cols-3 gap-2">
+              <div class="md:col-span-3">
+                <label class="text-[11px] font-semibold block mb-1">Configured Unit</label>
+                <select id="unit_selector" class="w-full border rounded px-2 py-1.5 text-xs bg-white">
+                  <option value="">Select a unit to auto-fill details</option>
+                </select>
+                <p class="text-[10px] text-slate-500 mt-1">
+                  Active tenant form hides occupied units; agreements and past tenants show all units.
+                </p>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Wing</label>
+                <select id="wing" class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50 text-slate-700" disabled>
+                  <option value="">Loading from Google Sheet…</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Flat / Unit</label>
+                <input type="text" id="unit_number_display"
+                  class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50 text-slate-700" readonly />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Floor of Building</label>
+                <input id="floor_of_building" type="text"
+                  class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50 text-slate-700" readonly />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Direction</label>
+                <input id="direction_build" type="text"
+                  class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50 text-slate-700" readonly />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Meter Number</label>
+                <input type="text" id="meter_number"
+                  class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50 text-slate-700" readonly />
+              </div>
+              <div class="md:col-span-3">
+                <label class="text-[11px] font-semibold block mb-1">Pet Policy</label>
+                <textarea id="pet_text_area" rows="2"
+                  class="w-full border rounded px-2 py-1.5 text-xs resize-y">No pets allowed</textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- RENT & DEPOSIT -->
+          <div class="border rounded-lg p-2.5 space-y-2.5">
+            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+              Rent & Deposit
+            </h3>
+            <div class="grid md:grid-cols-3 gap-2">
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Monthly Rent (₹)</label>
+                <input type="number" id="rent_amount" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+              <div class="md:col-span-2">
+                <label class="text-[11px] font-semibold block mb-1">Rent (in words)</label>
+                <input type="text" id="rent_amount_words" class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50"
+                  readonly />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Rent Payable Date</label>
+                <select id="payable_date" class="w-full border rounded px-2 py-1.5 text-xs bg-white"></select>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Security Deposit (₹)</label>
+                <input type="number" id="secu_depo" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Deposit (in words)</label>
+                <input type="text" id="secu_amount_words" class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50"
+                  readonly />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Rent Increase (₹)</label>
+                <input type="number" id="rent_inc" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Increase Amount (in words)</label>
+                <input type="text" id="increase_amount_word"
+                  class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50" readonly />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Increase Every</label>
+                <select id="rent_rev_number" class="w-full border rounded px-2 py-1.5 text-xs bg-white"></select>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Unit</label>
+                <select id="rent_rev_year_mon" class="w-full border rounded px-2 py-1.5 text-xs bg-white">
+                  <option>year(s)</option>
+                  <option>month(s)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- NOTICE & PENALTIES -->
+          <div class="border rounded-lg p-2.5 space-y-2.5">
+            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+              Notice & Penalties
+            </h3>
+            <div class="grid md:grid-cols-4 gap-2">
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Tenant Notice (months)</label>
+                <select id="notice_num_t" class="w-full border rounded px-2 py-1.5 text-xs bg-white"></select>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Landlord Notice (months)</label>
+                <select id="notice_num_l" class="w-full border rounded px-2 py-1.5 text-xs bg-white"></select>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Late Rent Fee / day (₹)</label>
+                <input type="number" id="late_rent" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Grace Period (days)</label>
+                <input type="number" id="late_days" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+            </div>
+          </div>
+
+          <!-- BOTTOM ACTION BAR -->
+          <div id="bottomActionBar" class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-200">
+            <div class="flex items-center gap-2">
+              <button
+                class="btn-save-draft px-3 py-1.5 rounded bg-amber-500 text-white text-[11px] font-semibold hover:bg-amber-400">
+                Save draft
+              </button>
+              <select
+                class="draft-picker min-w-[160px] px-3 py-1.5 rounded border border-slate-200 bg-white text-[11px] font-semibold text-slate-700">
+                <option>Load draft</option>
+              </select>
+            </div>
+            <!-- Agreement Mode Buttons -->
+            <button
+              class="btn-save-agreement hidden px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">
+              Create Tenant on DB
+            </button>
+            <button
+              class="btn-export-docx hidden px-3 py-1.5 rounded bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">
+              Export DOCX
+            </button>
+
+            <!-- Tenant Mode Buttons -->
+            <button
+              class="btn-create-new hidden px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">
+              Create new tenant
+            </button>
+            <button
+              class="btn-save-past hidden px-3 py-1.5 rounded bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">
+              Save past tenant
+            </button>
+          </div>
+        </section>
+
+        <!-- MIDDLE VIEW: TENANT DIRECTORY -->
+        <section id="tenantListSection"
+          class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-3 hidden fade-section">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <h2 class="text-sm md:text-base font-semibold">Tenant Directory</h2>
+              <p class="text-[11px] text-slate-500">Browse, filter, and edit tenants stored in Sheets.</p>
+            </div>
+            <div id="tenantListCount" class="text-[11px] text-slate-600 bg-slate-100 px-3 py-1 rounded-full w-fit">0
+              shown</div>
+          </div>
+
+          <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
+            <div class="flex items-center gap-2">
+              <button data-tenant-status-filter="all"
+                class="px-3 py-1.5 rounded-lg text-[11px] border border-slate-200 bg-white text-slate-700">All</button>
+              <button data-tenant-status-filter="active"
+                class="px-3 py-1.5 rounded-lg text-[11px] border border-slate-200 bg-white text-slate-700">Active</button>
+              <button data-tenant-status-filter="inactive"
+                class="px-3 py-1.5 rounded-lg text-[11px] border border-slate-200 bg-white text-slate-700">Inactive</button>
+            </div>
+
+            <div class="flex-1">
+              <input id="tenantSearchInput" type="text" placeholder="Search by name, wing, floor, or GRN"
+                class="w-full border rounded-lg px-3 py-2 text-[11px]" />
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button id="refreshTenantListBtn"
+                class="px-3 py-2 rounded-lg bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">Refresh</button>
+            </div>
+          </div>
+
+          <div class="border rounded-lg">
+            <div id="tenantListLoader" class="p-4 text-center text-[12px] text-slate-600 hidden">Loading tenants...
+            </div>
+            <div id="tenantListEmpty" class="p-4 text-center text-[12px] text-slate-500 hidden">No tenants found for
+              this filter.</div>
+            <div class="overflow-auto">
+              <table class="w-full text-left">
+                <thead class="bg-slate-50 text-[11px] uppercase text-slate-600">
+                  <tr>
+                    <th class="px-2 py-2">Name</th>
+                    <th class="px-2 py-2">Wing / Floor</th>
+                    <th class="px-2 py-2">Rent (₹)</th>
+                    <th class="px-2 py-2">Status</th>
+                    <th class="px-2 py-2">Action</th>
+                    <th class="px-2 py-2">Vacate</th>
+                  </tr>
+                </thead>
+                <tbody id="tenantTableBody" class="text-[11px]"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- MIDDLE VIEW: BILLING CALENDAR -->
+        <section id="generateBillSection"
+          class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-4 hidden fade-section">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <h2 class="text-sm md:text-base font-semibold">Generate Bills</h2>
+              <p class="text-[11px] text-slate-500">Pick a past month (oldest to newest) and choose a wing to start bill
+                creation.</p>
+            </div>
+            <div class="text-[11px] text-slate-600 bg-slate-100 px-3 py-1 rounded-full w-fit">Last 12 months</div>
+          </div>
+
+          <div
+            class="bg-gradient-to-r from-indigo-50 via-white to-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <p class="text-xs font-semibold text-slate-800">Billing calendar</p>
+                <p class="text-[10px] text-slate-500">Months are ordered from oldest to newest, excluding the current
+                  month.</p>
+              </div>
+              <div
+                class="flex items-center gap-2 text-[10px] text-slate-600 bg-white border border-slate-200 rounded-full px-3 py-1">
+                <span class="w-2 h-2 bg-indigo-500 rounded-full"></span>
+                <span>Click a month to select wing</span>
+              </div>
+            </div>
+
+            <div id="billingMonthsGrid" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+          </div>
+        </section>
+
+        <!-- MIDDLE VIEW: PAYMENTS -->
+        <section id="paymentsSection"
+          class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-3 hidden fade-section">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div class="space-y-1">
+              <h2 class="text-sm md:text-base font-semibold">Payments</h2>
+              <p class="text-[11px] text-slate-500">Pick a generated bill and log a quick receipt.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="paymentsRefreshBtn"
+                class="px-3 py-2 rounded-lg border border-slate-200 text-[11px] font-semibold bg-white hover:bg-slate-50">Refresh</button>
+            </div>
+          </div>
+
+          <div class="border border-slate-200 rounded-xl overflow-hidden">
+            <div class="flex items-center bg-slate-50 text-[11px] font-semibold text-slate-600">
+              <button id="billsPendingTab" class="px-3 py-2 border-r border-slate-200 bg-white text-slate-800">Pending
+                bills</button>
+              <button id="billsPaidTab" class="px-3 py-2">Paid bills</button>
+            </div>
+            <div class="p-3 space-y-3">
+              <div class="text-[10px] uppercase text-slate-500 font-semibold">Generated bills</div>
+              <div id="generatedBillsLoader" class="text-[12px] text-slate-600">Loading bills...</div>
+              <div id="generatedBillsEmpty" class="text-[12px] text-slate-500 hidden">Generate a bill to start recording
+                payments.</div>
+
+              <div class="overflow-auto rounded border border-slate-200">
+                <table class="w-full text-left">
+                  <thead class="bg-slate-50 text-[11px] uppercase text-slate-600">
+                    <tr>
+                      <th class="px-3 py-2">Tenant</th>
+                      <th class="px-3 py-2">Wing</th>
+                      <th class="px-3 py-2">Month</th>
+                      <th class="px-3 py-2 text-right">Amount</th>
+                      <th class="px-3 py-2 text-right">Status</th>
+                      <th class="px-3 py-2 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pendingBillsBody" class="text-[11px]"></tbody>
+                  <tbody id="paidBillsBody" class="text-[11px] hidden"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- RIGHT COLUMN: FORM SIDEBAR (clauses + actions) -->
+        <section id="formRightSection" class="space-y-3 min-w-0">
+          <!-- CLAUSES CARD -->
+          <div id="clausesCard" class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-2.5">
+
+            <!-- AGREEMENT MODE CONTENT -->
+            <div id="clausesAgreementContent">
+              <div class="flex items-center justify-between">
+                <h3 class="text-xs font-semibold">Clauses (for Preview / Reference)</h3>
+                <div class="flex items-center gap-2">
+                  <span id="clausesDirtyMessage" class="text-[10px] text-amber-700 hidden">
+                    You have modified the clauses. Sync to DB.
+                  </span>
+                  <button id="reloadClausesBtn"
+                    class="text-[11px] px-3 py-1 rounded border border-slate-400 hover:bg-slate-100">
+                    Reload Clauses
+                  </button>
+                  <button id="saveClausesBtn"
+                    class="hidden text-[11px] px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-500">
+                    Sync Clauses to DB
+                  </button>
+                </div>
+              </div>
+
+              <p class="text-[10px] text-slate-500 mb-1">
+                Clauses are loaded from and saved back to Google Sheets (one sheet per section).
+                Use the <strong>↑ / ↓</strong> arrows to change the order, toggle them on/off,
+                and use <strong>B</strong> to bold words. Click
+                <strong>Sync Clauses to DB</strong> after editing.
+              </p>
+
+              <div id="clausesContainer" class="space-y-2">
+                <!-- Filled by JS -->
+              </div>
+            </div>
+
+            <!-- NON-AGREEMENT PLACEHOLDER (Create Tenant / Past Tenant) -->
+            <div id="clausesPlaceholderContent" class="hidden">
+              <h3 class="text-xs font-semibold mb-1.5">Sidebar</h3>
+              <p class="text-[10px] text-slate-500">
+                Recent payments coming soon.
+              </p>
+            </div>
+
+            <!-- GENERAL UTILITIES (Dashboard / Billing / Payments) -->
+            <div id="utilitySidebarContent" class="hidden space-y-2">
+              <h3 class="text-xs font-semibold mb-1.5">Quick utilities</h3>
+              <p class="text-[10px] text-slate-500">
+                Columns stay fixed; content updates as you move across dashboard, billing, and payments.
+              </p>
+              <ul class="text-[11px] text-slate-700 space-y-1">
+                <li>• Track connection status from the header chip.</li>
+                <li>• Use navigation to jump between billing, payments, and tenants.</li>
+                <li>• Sidebar remains available for helpful context.</li>
+              </ul>
+            </div>
+
+            <!-- DIRECTORY MODE SNAPSHOT -->
+            <div id="directorySidebarContent" class="hidden space-y-3">
+              <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <p class="text-[10px] uppercase text-slate-500 font-semibold">Tenant Snapshot</p>
+                    <h4 id="sidebarTenantName" class="text-sm font-semibold">Select a tenant</h4>
+                    <p id="sidebarTenantGRN" class="text-[10px] text-slate-500">GRN: -</p>
+                  </div>
+                  <div id="sidebarStatusPill"
+                    class="text-[10px] px-2 py-1 rounded-full border bg-slate-50 text-slate-600">
+                    Status
+                  </div>
+                </div>
+
+                <div id="sidebarSnapshotEmpty" class="text-[11px] text-slate-500">Pick any tenant row to see quick
+                  facts.</div>
+                <div id="sidebarSnapshotDetails" class="hidden space-y-2">
+                  <div class="grid grid-cols-2 gap-2 text-[11px]">
+                    <div class="bg-slate-50 rounded p-2">
+                      <p class="text-[10px] text-slate-500">Wing / Floor</p>
+                      <p id="sidebarTenantWingFloor" class="font-semibold">-</p>
+                    </div>
+                    <div class="bg-slate-50 rounded p-2">
+                      <p class="text-[10px] text-slate-500">Rent (₹)</p>
+                      <p id="sidebarTenantRent" class="font-semibold">-</p>
+                    </div>
+                    <div class="bg-slate-50 rounded p-2">
+                      <p class="text-[10px] text-slate-500">Mobile</p>
+                      <p id="sidebarTenantMobile" class="font-semibold">-</p>
+                    </div>
+                    <div class="bg-slate-50 rounded p-2">
+                      <p class="text-[10px] text-slate-500">Meter #</p>
+                      <p id="sidebarTenantMeter" class="font-semibold">-</p>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-between gap-2">
+                    <div>
+                      <p class="text-[10px] text-slate-500">Tenancy End</p>
+                      <p id="sidebarTenantEnd" class="text-[11px] font-semibold">-</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <button id="sidebarNewTenancyBtn"
+                        class="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">New
+                        tenancy</button>
+                      <button id="tenantInsightsBtn"
+                        class="px-3 py-1.5 rounded bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">View
+                        insights</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h4 class="text-xs font-semibold">Family snapshot</h4>
+                    <p class="text-[10px] text-slate-500">Recent occupants linked to the tenant.</p>
+                  </div>
+                  <span class="text-[10px] text-slate-500" id="sidebarFamilyCount">0 members</span>
+                </div>
+                <ul id="sidebarFamilyList" class="space-y-1 text-[11px] text-slate-700">
+                  <li class="text-[10px] text-slate-500">No tenant selected.</li>
+                </ul>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h4 class="text-xs font-semibold">Unit history</h4>
+                    <p class="text-[10px] text-slate-500">Latest moves for this tenancy.</p>
+                  </div>
+                </div>
+                <ul id="sidebarTenantMoves" class="text-[11px] text-slate-700 space-y-1">
+                  <li class="text-[10px] text-slate-500">No tenant selected.</li>
+                </ul>
+              </div>
+            </div>
+
+          <!-- ACTION BUTTONS REMOVED FROM SIDEBAR -->
+          <div id="actionsCard" class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-2">
+            <h3 class="text-xs font-semibold mb-1.5">Info</h3>
+            <p class="text-[10px] text-slate-500">
+              Drafts are saved locally per view. Switch between Agreement, Active, and Past tenants to work on separate
+              drafts.
+            </p>
+          </div>
+        </section>
+      </div>
+    </main>
+
+
+    <!-- Draft name modal -->
+    <div id="draftNameModal"
+      class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
+      <div class="bg-white rounded-lg shadow-lg w-[320px] p-4 space-y-3 modal-panel">
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="text-sm font-semibold text-slate-800">Name this draft</p>
+            <p class="text-[11px] text-slate-500">We’ll use the tenant name automatically when it’s filled. Otherwise, give this draft a short name.</p>
+          </div>
+          <button id="draftNameCancelBtn" class="text-slate-500 hover:text-slate-800">✕</button>
+        </div>
+        <input id="draftNameInput" type="text" class="w-full border rounded px-3 py-2 text-sm" placeholder="Draft name" />
+        <div class="flex justify-end gap-2">
+          <button id="draftNameSaveBtn"
+            class="px-3 py-1.5 rounded bg-amber-500 text-white text-[12px] font-semibold hover:bg-amber-400">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Unsaved draft warning modal -->
+    <div id="unsavedDraftModal"
+      class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
+      <div class="bg-white rounded-lg shadow-lg w-[340px] p-4 space-y-3 modal-panel">
+        <div>
+          <p class="text-sm font-semibold text-slate-800">Save draft before leaving?</p>
+          <p class="text-[11px] text-slate-500">You have unsaved changes in this view. Save them to keep working seamlessly.</p>
+        </div>
+        <div class="flex flex-wrap justify-end gap-2 text-[12px]">
+          <button id="unsavedDraftStayBtn" class="px-3 py-1.5 rounded border border-slate-200 text-slate-700">Stay</button>
+          <button id="unsavedDraftSaveBtn" class="px-3 py-1.5 rounded bg-amber-500 text-white font-semibold hover:bg-amber-400">Save draft &amp; continue</button>
+          <button id="unsavedDraftLeaveBtn"
+            class="px-3 py-1.5 rounded bg-slate-900 text-white font-semibold hover:bg-slate-800">Leave without saving</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- TENANT DETAIL MODAL -->
+    <div id="tenantDetailModal"
+      class="hidden fixed inset-0 bg-black/30 flex items-center justify-center z-40 p-4 overflow-y-auto fade-overlay">
+      <div
+        class="bg-white rounded-lg shadow-lg w-full max-w-5xl p-4 md:p-5 space-y-3 max-h-[90vh] overflow-y-auto border border-slate-200 modal-panel">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-[10px] uppercase text-slate-500 font-semibold">Tenant</p>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 id="tenantModalTitle" class="text-base font-semibold">Tenant</h3>
+              <span id="tenantModalStatusPill"
+                class="text-[10px] px-2 py-1 rounded-full border bg-slate-50 text-slate-600">Status</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="tenant-modal-edit-toggle px-3 py-1.5 rounded border border-slate-400 text-[11px]">Edit
+              details</button>
+            <button class="tenant-modal-close text-slate-500 hover:text-slate-800">✕</button>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">GRN Number</label>
+            <input id="tenantModalGRN" type="text" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Tenant Full Name</label>
+            <input id="tenantModalFullName" type="text" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-2.5">
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Tenant Occupation</label>
+            <input id="tenantModalOccupation" type="text" class="w-full border rounded px-2 py-2 text-[12px]"
+              disabled />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Tenant Aadhaar</label>
+            <input id="tenantModalAadhaar" type="text" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Tenant Mobile</label>
+            <input id="tenantModalMobile" type="text" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
+          </div>
+          <div class="md:col-span-3">
+            <label class="text-[11px] font-semibold block mb-1">Tenant Permanent Address</label>
+            <textarea id="tenantModalAddress" rows="2" class="w-full border rounded px-2 py-2 text-[12px] resize-y"
+              disabled></textarea>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-4 gap-2.5">
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Configured Unit</label>
+            <select id="tenantModalUnit" class="w-full border rounded px-2 py-2 text-[12px] bg-white" disabled>
+              <option value="">Select unit</option>
+            </select>
+            <p class="text-[10px] text-slate-500 mt-1">Selecting a unit auto-fills wing, floor, direction, and meter.</p>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Wing</label>
+            <input id="tenantModalWing" type="text" class="w-full border rounded px-2 py-2 text-[12px] bg-slate-50 text-slate-700"
+              readonly />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Flat / Unit</label>
+            <input id="tenantModalUnitNumber" type="text" class="w-full border rounded px-2 py-2 text-[12px] bg-slate-50 text-slate-700"
+              readonly />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Floor</label>
+            <input id="tenantModalFloor" type="text" class="w-full border rounded px-2 py-2 text-[12px] bg-slate-50 text-slate-700"
+              readonly />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Direction</label>
+            <input id="tenantModalDirection" type="text"
+              class="w-full border rounded px-2 py-2 text-[12px] bg-slate-50 text-slate-700" readonly />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Meter #</label>
+            <input id="tenantModalMeter" type="text" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Payable Date</label>
+            <select id="tenantModalPayable" class="w-full border rounded px-2 py-2 text-[12px] bg-white"
+              disabled></select>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Rent (₹)</label>
+            <input id="tenantModalRent" type="number" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Security Deposit (₹)</label>
+            <input id="tenantModalDeposit" type="number" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-2.5">
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Agreement Date</label>
+            <input id="tenantModalAgreementDate" type="date" class="w-full border rounded px-2 py-2 text-[12px]"
+              disabled />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Tenancy Commencement</label>
+            <input id="tenantModalCommencement" type="date" class="w-full border rounded px-2 py-2 text-[12px]"
+              disabled />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Rent Increase (₹)</label>
+            <input id="tenantModalRentIncrease" type="number" class="w-full border rounded px-2 py-2 text-[12px]"
+              disabled />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Rent Revision Number</label>
+            <select id="tenantModalRentRevNumber" class="w-full border rounded px-2 py-2 text-[12px] bg-white"
+              disabled></select>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Rent Revision Unit</label>
+            <select id="tenantModalRentRevUnit" class="w-full border rounded px-2 py-2 text-[12px] bg-white" disabled>
+              <option value="year(s)">year(s)</option>
+              <option value="month(s)">month(s)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Tenant Notice (months)</label>
+            <select id="tenantModalTenantNotice" class="w-full border rounded px-2 py-2 text-[12px] bg-white"
+              disabled></select>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Landlord Notice (months)</label>
+            <select id="tenantModalLandlordNotice" class="w-full border rounded px-2 py-2 text-[12px] bg-white"
+              disabled></select>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Late Rent per day (₹)</label>
+            <input id="tenantModalLateRent" type="number" class="w-full border rounded px-2 py-2 text-[12px]"
+              disabled />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Grace Period (days)</label>
+            <input id="tenantModalGracePeriod" type="number" class="w-full border rounded px-2 py-2 text-[12px]"
+              disabled />
+          </div>
+          <div class="md:col-span-3 grid md:grid-cols-3 gap-2">
+            <div>
+              <label class="text-[11px] font-semibold block mb-1">Landlord</label>
+              <select id="tenantModalLandlord" class="w-full border rounded px-2 py-2 text-[12px] bg-white" disabled>
+                <option value="">Select landlord</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold block mb-1">Aadhaar</label>
+              <input id="tenantModalLandlordAadhaar" type="text" class="w-full border rounded px-2 py-2 text-[12px]"
+                disabled />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold block mb-1">Address</label>
+              <input id="tenantModalLandlordAddress" type="text" class="w-full border rounded px-2 py-2 text-[12px]"
+                disabled />
+            </div>
+          </div>
+          <div class="md:col-span-3">
+            <label class="text-[11px] font-semibold block mb-1">Vacate Reason</label>
+            <input id="tenantModalVacateReason" type="text" class="w-full border rounded px-2 py-2 text-[12px]"
+              disabled />
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-[12px] font-semibold">Family</h4>
+              <p class="text-[10px] text-slate-500">Update member info or add new occupants linked to this tenant.</p>
+            </div>
+            <button id="tenantModalAddFamilyBtn" class="text-[11px] px-3 py-1.5 rounded bg-slate-900 text-white"
+              disabled>+ Add member</button>
+          </div>
+          <div class="border rounded-lg overflow-auto">
+            <table class="w-full text-left">
+              <thead class="bg-slate-50 text-[11px] uppercase text-slate-600">
+                <tr>
+                  <th class="px-2 py-2">Name</th>
+                  <th class="px-2 py-2">Relationship</th>
+                  <th class="px-2 py-2">Occupation</th>
+                  <th class="px-2 py-2">Aadhaar</th>
+                  <th class="px-2 py-2">Address</th>
+                  <th class="px-2 py-2"></th>
+                </tr>
+              </thead>
+              <tbody id="tenantFamilyTableBody" class="text-[11px]"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <div class="flex items-center gap-2 flex-wrap">
+            <button class="tenant-modal-edit-toggle px-3 py-2 rounded border border-slate-400 text-[11px]">Edit
+              details</button>
+            <button class="tenant-modal-close px-3 py-2 rounded border border-slate-400 text-[11px]">Cancel</button>
+            <button id="tenantModalSaveBtn"
+              class="px-3 py-2 rounded bg-emerald-600 text-white text-[11px] font-semibold" disabled>Save
+              changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- TENANT INSIGHTS MODAL -->
+    <div id="tenantInsightsModal"
+      class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-4xl p-4 md:p-6 space-y-4 modal-panel">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-[10px] uppercase text-slate-500 font-semibold">Insights</p>
+            <h3 id="tenantInsightsTitle" class="text-base font-semibold">Tenant Insights</h3>
+            <p class="text-[10px] text-slate-500">Performance, collection health, and occupancy signals.</p>
+          </div>
+          <button class="tenant-insights-close text-slate-500 hover:text-slate-800">✕</button>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-3">
+          <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-3 space-y-1">
+            <p class="text-[10px] uppercase text-indigo-700 font-semibold">Monthly rent</p>
+            <p id="insightRent" class="text-xl font-bold text-indigo-900">₹0</p>
+            <p id="insightStatus" class="text-[10px] text-indigo-700">Status: -</p>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-100 rounded-lg p-3 space-y-1">
+            <p class="text-[10px] uppercase text-emerald-700 font-semibold">Est. collected</p>
+            <p id="insightCollected" class="text-xl font-bold text-emerald-900">₹0</p>
+            <div class="w-full bg-emerald-100 rounded-full h-2">
+              <div id="insightCollectedBar" class="bg-emerald-500 h-2 rounded-full" style="width: 30%"></div>
+            </div>
+          </div>
+          <div class="bg-amber-50 border border-amber-100 rounded-lg p-3 space-y-1">
+            <p class="text-[10px] uppercase text-amber-700 font-semibold">Occupancy</p>
+            <p id="insightOccupancy" class="text-xl font-bold text-amber-900">-</p>
+            <p id="insightTenure" class="text-[10px] text-amber-700">Tenure signal</p>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-3">
+          <div class="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
+            <div class="flex items-center justify-between">
+              <h4 class="text-sm font-semibold">Collection trend</h4>
+              <span class="text-[10px] text-slate-500">Projected</span>
+            </div>
+            <div class="space-y-1 text-[11px] text-slate-600">
+              <div class="flex items-center justify-between">
+                <span>This quarter</span>
+                <span id="insightQuarter" class="font-semibold">₹0</span>
+              </div>
+              <div class="w-full bg-slate-100 rounded-full h-2">
+                <div id="insightQuarterBar" class="bg-slate-500 h-2 rounded-full" style="width: 45%"></div>
+              </div>
+              <div class="flex items-center justify-between">
+                <span>Next quarter (projected)</span>
+                <span id="insightNextQuarter" class="font-semibold">₹0</span>
+              </div>
+              <div class="w-full bg-slate-100 rounded-full h-2">
+                <div id="insightNextQuarterBar" class="bg-indigo-500 h-2 rounded-full" style="width: 55%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
+            <div class="flex items-center justify-between">
+              <h4 class="text-sm font-semibold">Highlights</h4>
+              <span class="text-[10px] text-slate-500">Auto-generated</span>
+            </div>
+            <ul id="insightHighlights" class="list-disc list-inside text-[11px] text-slate-700 space-y-1">
+              <li>Rent collection highlights will appear here.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VACATE MODAL -->
+    <div id="vacateModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-lg p-4 md:p-5 space-y-4 modal-panel">
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="text-[10px] uppercase text-slate-500 font-semibold">Vacate tenant</p>
+            <h3 id="vacateModalTitle" class="text-base font-semibold">Confirm vacate</h3>
+          </div>
+          <button class="vacate-modal-close text-slate-500 hover:text-slate-800">✕</button>
+        </div>
+
+        <div class="space-y-3">
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Vacate reason</label>
+            <input id="vacateReasonInput" type="text" class="w-full border rounded px-3 py-2 text-[12px]"
+              placeholder="Moved to new location, non-payment, etc." />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Tenancy end date</label>
+            <input id="vacateEndDateInput" type="date" class="w-full border rounded px-3 py-2 text-[12px]" />
+          </div>
+          <p class="text-[10px] text-slate-500">Saving will mark the tenant as inactive and store the vacate reason.</p>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button class="vacate-modal-close px-3 py-2 rounded border border-slate-400 text-[11px]">Cancel</button>
+          <button id="vacateSaveBtn" class="px-3 py-2 rounded bg-rose-600 text-white text-[11px] font-semibold">Save
+            &amp; mark inactive</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- BILLING WING MODAL -->
+    <div id="billingWingModal"
+      class="hidden fixed inset-0 bg-black/40 flex items-start justify-center z-40 p-3 md:p-5 overflow-y-auto fade-overlay">
+      <div
+        class="bg-white rounded-xl shadow-lg w-full max-w-4xl p-3 md:p-4 space-y-3 border border-slate-200 mt-8 mb-10 max-h-[90vh] overflow-y-auto modal-panel">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-[10px] uppercase text-slate-500 font-semibold">Generate Bill</p>
+            <h3 id="billingModalMonthLabel" class="text-base font-semibold">Select month</h3>
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="text-right">
+              <p class="text-[10px] uppercase text-slate-500 font-semibold">Month</p>
+              <p id="billingSelectedMonth" class="text-sm font-semibold">Select month</p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] uppercase text-slate-500 font-semibold">Wing</p>
+              <p id="billingSelectedWing" class="text-sm font-semibold">Pick wing</p>
+            </div>
+            <button class="billing-modal-close text-slate-500 hover:text-slate-800">✕</button>
+          </div>
+        </div>
+
+        <!-- STEP 1: WING SELECTION -->
+        <div id="billingStepSelectWing" class="space-y-3">
+          <div class="rounded-lg border border-slate-200 p-3 bg-slate-50">
+            <p class="text-[11px] text-slate-700 font-semibold mb-1">Choose wing</p>
+            <select id="billingWingSelect" class="w-full border rounded px-3 py-2 text-[12px] bg-white"></select>
+            <p class="text-[10px] text-slate-500 mt-1">Use the same wing list as your tenant form.</p>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button class="billing-modal-close px-3 py-2 rounded border border-slate-300 text-[11px]">Cancel</button>
+            <button id="billingNextBtn"
+              class="px-3 py-2 rounded bg-slate-900 text-white text-[11px] font-semibold">Next</button>
+          </div>
+        </div>
+
+        <!-- STEP 2: BILLING DETAILS -->
+        <div id="billingStepDetails" class="hidden space-y-4">
+          <div class="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            <div>
+              <p class="text-[11px] font-semibold text-slate-800">Bill inputs</p>
+              <p class="text-[10px] text-slate-500">Enter shared costs first, then per-tenant meter readings.</p>
+            </div>
+            <div class="text-[10px] text-slate-600">Values auto-save to Google Sheets per month &amp; wing.</div>
+          </div>
+
+          <div id="billingDetailsLoader"
+            class="hidden text-center text-[12px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            Loading billing details...
+          </div>
+
+          <div id="billingDetailsForm" class="space-y-3">
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Electricity rate (per unit)</label>
+                <input id="billingElectricityRate" type="number" step="0.01" inputmode="decimal"
+                  class="w-full border rounded px-3 py-2 text-[12px] input-no-spinner" placeholder="e.g., 7.25" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Sweeping per flat</label>
+                <input id="billingSweepRate" type="number" step="0.01" inputmode="decimal"
+                  class="w-full border rounded px-3 py-2 text-[12px] input-no-spinner" placeholder="e.g., 150" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Motor previous reading</label>
+                <input id="billingMotorPrev" type="number" inputmode="numeric"
+                  class="w-full border rounded px-3 py-2 text-[12px] input-no-spinner" placeholder="Prev reading" />
+                <p class="text-[10px] text-slate-500">Auto-fills from last month when available.</p>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Motor new reading</label>
+                <input id="billingMotorNew" type="number" inputmode="numeric"
+                  class="w-full border rounded px-3 py-2 text-[12px] input-no-spinner" placeholder="Current reading" />
+                <p class="text-[10px] text-slate-500">Motor units × electricity rate ÷ active tenants.</p>
+              </div>
+            </div>
+
+            <div
+              class="flex items-center gap-3 text-[11px] text-slate-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
+              <div>
+                <p class="font-semibold text-indigo-800">Motor usage</p>
+                <p id="motorUnitsSummary">0 units (₹0.00)</p>
+              </div>
+              <div class="h-8 w-px bg-indigo-200"></div>
+              <div>
+                <p class="font-semibold text-indigo-800">Share</p>
+                <p id="motorShareSummary">₹0.00 per tenant</p>
+              </div>
+            </div>
+
+            <div class="border rounded-lg overflow-hidden">
+              <div class="bg-slate-50 px-3 py-2 flex items-center justify-between">
+                <div>
+                  <p class="text-[11px] font-semibold text-slate-800">Active tenants for this wing</p>
+                  <p class="text-[10px] text-slate-500">Auto-calculates electricity, motor share, sweeping and totals.
+                  </p>
+                </div>
+              </div>
+              <div class="overflow-auto max-h-[50vh]">
+                <table class="w-full text-left text-[11px]">
+                  <thead class="bg-slate-50 text-[10px] uppercase text-slate-600">
+                    <tr>
+                      <th class="px-2 py-2 w-8 text-center">Bill</th>
+                      <th class="px-2 py-2">Name</th>
+                      <th class="px-2 py-2">Rent</th>
+                      <th class="px-2 py-2">Prev meter</th>
+                      <th class="px-2 py-2">New meter</th>
+                      <th class="px-2 py-2">Electricity</th>
+                      <th class="px-2 py-2">Motor</th>
+                      <th class="px-2 py-2">Sweeping</th>
+                      <th class="px-2 py-2">Total</th>
+                      <th class="px-2 py-2 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="billingTenantTableBody"></tbody>
+                </table>
+                <div id="billingTenantEmpty" class="p-3 text-center text-[11px] text-slate-500 hidden">No active tenants
+                  found for
+                  this wing.</div>
+              </div>
+            </div>
+
+            <div class="flex justify-end">
+              <button id="billingGenerateBtn"
+                class="px-4 py-2 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">Generate
+                bills</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BILLING SEND PROMPT -->
+    <div id="billingSendPrompt"
+      class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 fade-overlay">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-sm p-4 md:p-5 space-y-3 border border-slate-200 modal-panel">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-[10px] uppercase text-slate-500 font-semibold">Send bills</p>
+            <h4 class="text-base font-semibold text-slate-900">Send generated bills to tenants?</h4>
+          </div>
+          <button id="billingSendPromptClose" class="text-slate-500 hover:text-slate-800">✕</button>
+        </div>
+        <p class="text-[12px] text-slate-600">We saved the bills. Choose whether to send them now via WhatsApp.</p>
+        <div class="flex justify-end gap-2">
+          <button id="billingSendPromptNo"
+            class="px-3 py-2 rounded border border-slate-300 text-[11px] font-semibold text-slate-700">Not now</button>
+          <button id="billingSendPromptYes"
+            class="px-3 py-2 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">Yes, send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- BILLING SEND LIST -->
+    <div id="billingSendListModal"
+      class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 md:p-5 overflow-y-auto fade-overlay">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-3xl p-4 md:p-5 space-y-3 border border-slate-200 modal-panel">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-[10px] uppercase text-slate-500 font-semibold">Send via WhatsApp</p>
+            <h3 class="text-base font-semibold text-slate-900">Bills for <span id="billingSendMonthLabel">Selected month</span></h3>
+          </div>
+          <button class="billingSendListClose text-slate-500 hover:text-slate-800">✕</button>
+        </div>
+        <div class="border rounded-lg overflow-hidden">
+          <table class="w-full text-left text-[11px]">
+            <thead class="bg-slate-50 text-[10px] uppercase text-slate-600">
+              <tr>
+                <th class="px-3 py-2">Name</th>
+                <th class="px-3 py-2">Total</th>
+                <th class="px-3 py-2 text-right">Send</th>
+              </tr>
+            </thead>
+            <tbody id="billingSendTableBody"></tbody>
+          </table>
+          <div id="billingSendEmpty" class="p-3 text-center text-[11px] text-slate-500 hidden">No bills ready to send.</div>
+        </div>
+        <div class="text-right">
+          <button class="billingSendListClose px-3 py-2 rounded border border-slate-300 text-[11px] font-semibold text-slate-700">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CREATE TENANT MODE MODAL -->
+    <div id="tenantModeModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-sm p-4 md:p-5 modal-panel">
+        <h3 class="text-xs font-semibold mb-3">Create Tenant</h3>
+        <p class="text-[10px] text-slate-500 mb-3">
+          Choose whether you are adding a current active tenant or a past tenant.
+        </p>
+        <div class="space-y-2">
+          <button id="tenantModeNewBtn"
+            class="w-full px-3 py-2 text-[11px] rounded bg-slate-900 text-white hover:bg-slate-800">
+            Create new (Active tenant)
+          </button>
+          <button id="tenantModePastBtn"
+            class="w-full px-3 py-2 text-[11px] rounded border border-slate-400 hover:bg-slate-100">
+            Add past tenant
+          </button>
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t mt-4">
+          <button id="tenantModeCancelBtn"
+            class="px-3 py-1.5 text-[11px] rounded border border-slate-400 hover:bg-slate-100">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LANDLORD DEFAULTS MODAL -->
+    <div id="landlordConfigModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-5xl p-4 md:p-6 space-y-4 modal-panel">
+        <div class="flex items-start justify-between">
+          <div>
+            <h3 class="text-xs font-semibold">Landlord configuration</h3>
+            <p class="text-[10px] text-slate-500">Defaults will auto-fill across Agreement, New, and Past tenant flows.
+            </p>
+          </div>
+          <button id="landlordDefaultsCancelBtn" class="text-slate-500 hover:text-slate-800">✕</button>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="space-y-3 border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+            <div class="flex flex-col md:flex-row gap-2 items-start">
+              <select id="landlordExistingSelect" class="border rounded px-2 py-1.5 text-xs flex-1 w-full">
+                <option value="">Select saved landlord</option>
+              </select>
+              <div class="flex gap-2">
+                <button id="landlordLoadBtn"
+                  class="px-3 py-1.5 rounded bg-slate-200 text-[11px] font-semibold border">Load</button>
+                <button id="landlordDeleteBtn"
+                  class="px-3 py-1.5 rounded bg-rose-600 text-white text-[11px] font-semibold">Delete</button>
+              </div>
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold block mb-1">Landlord Name</label>
+              <input id="landlordDefaultName" type="text" class="w-full border rounded px-2 py-1.5 text-xs" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold block mb-1">Landlord Aadhaar</label>
+              <input id="landlordDefaultAadhaar" type="text" class="w-full border rounded px-2 py-1.5 text-xs" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold block mb-1">Landlord Address</label>
+              <textarea id="landlordDefaultAddress" rows="2"
+                class="w-full border rounded px-2 py-1.5 text-xs resize-y"></textarea>
+            </div>
+            <div class="flex justify-end gap-2">
+              <button id="landlordDefaultsSaveBtn"
+                class="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold">
+                Save landlord
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
+              <div class="flex items-center justify-between">
+                <p class="text-[11px] font-semibold">Manage wings</p>
+                <div class="flex gap-2 items-center">
+                  <input id="landlordDefaultWing" type="text" class="border rounded px-2 py-1.5 text-xs"
+                    placeholder="e.g. Wing A" />
+                  <button id="landlordDefaultWingBtn"
+                    class="px-3 py-1.5 rounded bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">Save
+                    wing</button>
+                  <button id="landlordDefaultWingRemoveBtn"
+                    class="px-3 py-1.5 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-500">Remove</button>
+                </div>
+              </div>
+              <div id="wingList" class="flex flex-wrap gap-2 text-[11px]"></div>
+            </div>
+
+            <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
+              <div class="flex items-center justify-between">
+                <p class="text-[11px] font-semibold">Add unit configuration</p>
+                <div class="flex gap-2">
+                  <button id="unitConfigLoadBtn"
+                    class="px-3 py-1.5 rounded bg-slate-200 text-[11px] font-semibold border">Load</button>
+                  <button id="unitConfigDeleteBtn"
+                    class="px-3 py-1.5 rounded bg-rose-600 text-white text-[11px] font-semibold">Delete</button>
+                </div>
+              </div>
+              <div class="flex flex-col md:flex-row gap-2">
+                <select id="unitConfigExisting" class="border rounded px-2 py-1.5 text-xs flex-1">
+                  <option value="">Select existing unit</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <select id="unitConfigWing" class="border rounded px-2 py-1.5 text-xs bg-white">
+                  <option value="">Select wing</option>
+                </select>
+                <input id="unitConfigNumber" type="text" class="border rounded px-2 py-1.5 text-xs"
+                  placeholder="Flat / Unit #" />
+                <select id="unitConfigFloor" class="border rounded px-2 py-1.5 text-xs bg-white">
+                  <option value="">Select floor</option>
+                  <option>Ground Floor</option>
+                  <option>1st Floor</option>
+                  <option>2nd Floor</option>
+                  <option>3rd Floor</option>
+                  <option>4th Floor</option>
+                  <option>5th Floor</option>
+                  <option>6th Floor</option>
+                  <option>7th Floor</option>
+                  <option>8th Floor</option>
+                  <option>9th Floor</option>
+                  <option>10th Floor</option>
+                </select>
+                <select id="unitConfigDirection" class="border rounded px-2 py-1.5 text-xs bg-white">
+                  <option value="">Select direction</option>
+                  <option>North</option>
+                  <option>South</option>
+                  <option>East</option>
+                  <option>West</option>
+                  <option>North East</option>
+                  <option>South East</option>
+                  <option>South West</option>
+                  <option>North West</option>
+                </select>
+                <input id="unitConfigMeter" type="text" class="border rounded px-2 py-1.5 text-xs"
+                  placeholder="Meter number" />
+                <input id="unitConfigNotes" type="text" class="border rounded px-2 py-1.5 text-xs" placeholder="Notes" />
+              </div>
+              <div class="flex justify-between items-center">
+                <div class="text-[10px] text-slate-600">Saved units</div>
+                <button id="unitConfigSaveBtn"
+                  class="px-3 py-1.5 rounded bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">Save
+                  unit</button>
+              </div>
+              <div id="unitConfigList" class="space-y-1 max-h-40 overflow-y-auto text-[11px]"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAYMENT MODAL -->
+    <div id="paymentModal"
+      class="hidden fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto fade-overlay">
+      <div
+        class="bg-white rounded-xl shadow-xl w-full max-w-md p-4 space-y-4 border border-slate-200 mt-10 mb-6 max-h-[90vh] overflow-y-auto modal-panel">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 id="paymentModalTitle" class="text-base font-semibold">New receipt</h3>
+            <p id="paymentBillStatus" class="text-[11px] text-slate-500">Select a bill to link this receipt.</p>
+          </div>
+          <button id="paymentModalClose" class="text-slate-500 hover:text-slate-800">✕</button>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 p-3 space-y-3 bg-slate-50">
+          <div class="flex items-center justify-between">
+            <div class="space-y-1">
+              <p class="text-[10px] uppercase font-semibold text-slate-600">Bill</p>
+              <h4 id="paymentBillTitle" class="text-sm font-semibold text-slate-900">Select a bill to record</h4>
+              <div class="flex items-center gap-2 text-[10px] text-slate-500">
+                <span class="px-2 py-0.5 rounded-full bg-white text-slate-700 border" id="paymentTenantWing">Wing •
+                  -</span>
+                <span class="px-2 py-0.5 rounded-full bg-white text-slate-700 border" id="paymentBillMonth">Month •
+                  -</span>
+              </div>
+            </div>
+            <div class="text-right space-y-1">
+              <p class="text-[10px] uppercase text-slate-500 font-semibold">Amount due</p>
+              <p id="paymentBillAmount" class="text-lg font-semibold text-slate-900">₹0</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-2">
+          <div class="space-y-1">
+            <label class="text-[11px] font-semibold block">Payment mode</label>
+            <select id="paymentModeSelect"
+              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-[12px] bg-white">
+              <option value="UPI">UPI</option>
+              <option value="Cash">Cash</option>
+              <option value="Bank Transfer">Bank transfer</option>
+              <option value="Cheque">Cheque</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label class="text-[11px] font-semibold block">Payment date</label>
+            <input id="paymentDateInput" type="date"
+              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-[12px] bg-white" />
+          </div>
+        </div>
+
+        <div id="paymentBreakdown" class="rounded-lg border border-slate-200 p-3 bg-white space-y-2">
+          <div class="flex items-center justify-between text-[11px] font-semibold text-slate-700">
+            <span>Rent breakup</span>
+            <span id="paymentBreakdownTotal" class="text-slate-900">₹0</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-700">
+            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
+              <span>Rent</span>
+              <span id="paymentBreakdownRent">₹0</span>
+            </div>
+            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
+              <span>Electricity</span>
+              <span id="paymentBreakdownElectricity">₹0</span>
+            </div>
+            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
+              <span>Motor</span>
+              <span id="paymentBreakdownMotor">₹0</span>
+            </div>
+            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
+              <span>Sweeping</span>
+              <span id="paymentBreakdownSweep">₹0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-[11px] font-semibold block">Notes (optional)</label>
+          <textarea id="paymentNotesInput" rows="2"
+            class="w-full border border-slate-200 rounded-lg px-3 py-2 text-[12px] bg-white resize-none"
+            placeholder="Short note for this receipt"></textarea>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-[11px] font-semibold">Receipt image</label>
+            <span class="text-[10px] text-slate-500">PNG/JPG up to 2 MB</span>
+          </div>
+          <div id="paymentAttachmentArea"
+            class="border border-dashed border-slate-300 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center gap-3 bg-slate-50">
+            <div class="flex-1 space-y-1">
+              <p class="text-[11px] text-slate-700">Upload proof of payment or paste a screenshot.</p>
+              <p id="paymentAttachmentName" class="text-[10px] text-slate-500">No file selected</p>
+              <div id="paymentAttachmentPreview" class="hidden">
+                <img src="" alt="Payment attachment preview" class="w-24 h-24 object-cover rounded border" />
+              </div>
+              <div id="paymentAttachmentLink" class="hidden text-[11px]">
+                <a href="#" class="text-indigo-600 hover:text-indigo-800 underline">Open full proof</a>
+              </div>
+              <div id="paymentAttachmentPasteZone" contenteditable="true" role="textbox" tabindex="0"
+                aria-label="Paste payment screenshot here"
+                class="mt-2 border border-dashed border-slate-300 rounded-lg bg-white px-3 py-2 text-left space-y-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+                <p class="text-[11px] font-semibold text-slate-700">Paste an image here</p>
+                <p id="paymentAttachmentPasteHint" class="text-[10px] text-slate-500">Press Ctrl+V (or Cmd+V) to drop a screenshot. Typing is disabled.</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <label for="paymentAttachmentInput"
+                class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500 cursor-pointer">Upload</label>
+              <button id="paymentAttachmentClear"
+                class="px-3 py-2 rounded-lg border border-slate-200 text-[11px] font-semibold bg-white hover:bg-slate-50">Clear</button>
+              <input id="paymentAttachmentInput" type="file" accept="image/*" class="hidden" />
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t">
+          <button id="paymentModalCancel"
+            class="px-3 py-1.5 text-[11px] rounded border border-slate-300 hover:bg-slate-100">Cancel</button>
+          <button id="paymentSaveBtn"
+            class="px-3 py-1.5 text-[11px] rounded bg-emerald-600 text-white font-semibold hover:bg-emerald-500">Save
+            payment</button>
+        </div>
+
+        <input type="hidden" id="paymentRecordId" />
+      </div>
+    </div>
+
+    <!-- ATTACHMENT VIEWER -->
+    <div id="attachmentViewerModal"
+      class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4 fade-overlay">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden modal-panel">
+        <div class="flex items-center justify-between px-4 py-3 border-b">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold leading-tight">Receipt preview</p>
+            <p id="attachmentViewerTitle" class="text-[11px] text-slate-500 truncate">Receipt</p>
+          </div>
+          <button id="attachmentViewerClose"
+            class="px-3 py-1.5 rounded border border-slate-300 text-[11px] font-semibold hover:bg-slate-100">Close</button>
+        </div>
+        <div class="flex-1 bg-slate-50 flex items-center justify-center p-3">
+          <iframe id="attachmentViewerFrame" class="w-full h-[70vh] rounded-lg shadow-inner hidden bg-white"
+            title="Receipt viewer"></iframe>
+          <img id="attachmentViewerImage" src="" alt="Receipt preview"
+            class="max-h-[70vh] max-w-full rounded-lg shadow hidden" />
+          <p id="attachmentViewerFallback" class="text-[11px] text-slate-600 hidden">No preview available for this file.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- DOCX EXPORT CONFIRMATION -->
+    <div id="docxExportModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 fade-overlay">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-4 md:p-5 space-y-3 modal-panel">
+        <div class="flex items-start justify-between gap-3">
+          <div class="space-y-1">
+            <p class="text-xs font-semibold leading-tight">Document saved</p>
+            <p id="docxExportLocation" class="text-[11px] text-slate-600">
+              Saved to: Downloads/Agreement.docx
+            </p>
+          </div>
+          <button id="docxExportClose"
+            class="px-3 py-1.5 rounded border border-slate-300 text-[11px] font-semibold hover:bg-slate-100">Close</button>
+        </div>
+
+        <div class="border border-slate-200 rounded-lg bg-slate-50 p-3 space-y-1">
+          <p class="text-[11px] font-semibold text-slate-700">File name</p>
+          <p id="docxExportFileName" class="text-[11px] text-slate-800 break-words">Agreement.docx</p>
+          <p class="text-[10px] text-slate-500">You can open the downloaded file directly from here.</p>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <a id="docxExportOpen" href="#" target="_blank" rel="noopener"
+            class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">Open file</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- APPSCRIPT URL MODAL -->
+    <div id="appscriptModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-4 md:p-5 modal-panel">
+        <h3 class="text-xs font-semibold mb-3">Google Apps Script URL</h3>
+        <p class="text-[10px] text-slate-500 mb-2">
+          Paste the Web App URL of your Apps Script (ending with <code>/exec</code>). This will be used to save
+          tenants, fetch wing options, and sync clauses.
+        </p>
+
+        <input type="text" id="appscript_url" class="w-full border rounded px-2 py-1.5 text-xs"
+          placeholder="https://script.google.com/macros/s/XXXX/exec" />
+
+        <div class="flex justify-end gap-2 pt-3 border-t mt-4">
+          <button id="appscriptCancelBtn"
+            class="px-3 py-1.5 text-[11px] rounded border border-slate-400 hover:bg-slate-100">
+            Cancel
+          </button>
+          <button id="appscriptSaveBtn"
+            class="px-3 py-1.5 text-[11px] rounded bg-amber-500 text-slate-900 hover:bg-amber-400 font-semibold">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+</body>
+
+</html>

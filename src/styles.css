@@ -1,0 +1,311 @@
+/* Make everything slightly smaller overall */
+html {
+  font-size: 13px !important;
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: 14px !important;
+  }
+}
+
+body {
+  line-height: 1.4 !important;
+}
+
+/* Toast text small */
+#toastContainer>div {
+  font-size: 0.7rem;
+}
+
+/* Family table text slightly smaller */
+#familyTable,
+#familyTable thead,
+#familyTable tbody {
+  font-size: 0.75rem;
+}
+
+/* Clauses text */
+#clausesContainer {
+  font-size: 0.75rem;
+}
+
+#clausesContainer li {
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+}
+
+#clausesDirtyMessage {
+  font-size: 0.7rem;
+}
+
+/* ===== Clause move animations for ↑ / ↓ ===== */
+.clause-anim-up {
+  animation: clauseUp 140ms ease-out;
+}
+
+.clause-anim-down {
+  animation: clauseDown 140ms ease-out;
+}
+
+@keyframes clauseUp {
+  0% {
+    transform: translateY(4px);
+    background-color: rgba(37, 99, 235, 0.08);
+  }
+
+  100% {
+    transform: translateY(0);
+    background-color: transparent;
+  }
+}
+
+/* ===== Smooth UI Motion ===== */
+
+.fade-overlay {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.fade-overlay.is-visible {
+  opacity: 1;
+}
+
+.fade-overlay.is-hiding {
+  opacity: 0;
+}
+
+.modal-panel {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.fade-overlay.is-visible .modal-panel {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.fade-overlay.is-hiding .modal-panel {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+}
+
+.fade-section {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 200ms ease, transform 200ms ease;
+  will-change: opacity, transform;
+}
+
+.fade-section.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.fade-section.is-hiding {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+button,
+.btn,
+input,
+select,
+textarea {
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease,
+    box-shadow 200ms ease, transform 120ms ease;
+}
+
+button:active,
+.btn:active {
+  transform: translateY(1px);
+}
+
+@keyframes clauseDown {
+  0% {
+    transform: translateY(-4px);
+    background-color: rgba(37, 99, 235, 0.08);
+  }
+
+  100% {
+    transform: translateY(0);
+    background-color: transparent;
+  }
+}
+
+
+
+
+
+
+@media (min-width: 1024px) {
+
+  /* Keep the three-column frame steady and ease width changes per mode */
+  #appLayout {
+    grid-template-columns: 220px minmax(0, 1.35fr) minmax(280px, 0.65fr);
+    min-height: calc(100vh - 160px);
+    transition: grid-template-columns 220ms ease, gap 200ms ease;
+    align-items: stretch;
+  }
+
+  #appLayout > * {
+    min-height: 100%;
+  }
+
+  /* Use the same stable grid for all layouts to prevent width jumps */
+  #appLayout.layout-directory {
+    grid-template-columns: 220px minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  }
+
+  #appLayout.layout-agreement {
+    grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+
+
+
+
+/* ========== GLOBAL RESET / BASE ========== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Make everything a bit smaller overall */
+html {
+  font-size: 14px;
+  /* base ~14px */
+}
+
+@media (min-width: 1280px) {
+  html {
+    font-size: 13px;
+    /* slightly smaller on large screens */
+  }
+}
+
+b
+
+/* Inputs / textareas default look a bit smaller */
+input,
+select,
+textarea {
+  font-size: 0.75rem;
+  /* 12px-ish */
+}
+
+/* Hide number input spinners for cleaner billing fields */
+.input-no-spinner::-webkit-outer-spin-button,
+.input-no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.input-no-spinner[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* ========== CLAUSE ANIMATIONS ========== */
+
+
+
+/* ========== LAYOUT TWEAKS ========== */
+
+/* Make the main grid a little tighter on spacing */
+main {
+  font-size: 0.8rem;
+  /* default body text scale in main */
+}
+
+/* Navigation column buttons a bit more compact on desktop */
+@media (min-width: 1024px) {
+  aside button {
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
+  }
+}
+
+/* ========== TABLES ========== */
+
+/* Family & clauses tables text slightly smaller */
+#familyTable,
+#familyTable thead,
+#familyTable tbody {
+  font-size: 0.75rem;
+}
+
+/* ========== PREVIEW MODAL CONTENT ========== */
+
+#previewContent {
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+/* ========== TOASTS ========== */
+
+#toastContainer>div {
+  font-size: 0.7rem;
+}
+
+/* ========== FORM LABELS & HELP TEXT ========== */
+
+label {
+  font-size: 0.75rem;
+}
+
+.small-help-text,
+.text-small,
+.text-tiny {
+  font-size: 0.7rem;
+}
+
+/* ========== CLAUSE UI EXTRA POLISH ========== */
+
+/* Slightly smaller text inside clauses */
+#clausesContainer {
+  font-size: 0.75rem;
+}
+
+/* Clause list items: tighten spacing */
+#clausesContainer li {
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+}
+
+/* Bold button in clauses */
+#clausesContainer button {
+  font-size: 0.7rem;
+}
+
+/* Dirty message text */
+#clausesDirtyMessage {
+  font-size: 0.7rem;
+}
+
+/* ========== MODALS ========== */
+
+#settingsModal .text-xs,
+#appscriptModal .text-xs,
+#previewModal .text-xs {
+  font-size: 0.75rem;
+}
+
+/* ========== FOOTER BUTTONS ========== */
+
+footer button {
+  font-size: 0.75rem;
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
