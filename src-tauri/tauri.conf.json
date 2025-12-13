@@ -19,6 +19,11 @@
       "csp": null
     }
   },
+  "allowlist": {
+    "shell": {
+      "open": true
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

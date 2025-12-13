@@ -4,6 +4,8 @@
  * Handles exporting agreements as DOCX files using a template.
  */
 
+import { invoke } from "@tauri-apps/api/tauri";
+import { downloadDir, join } from "@tauri-apps/api/path";
 import { collectFormDataForTemplate } from "../tenants/form.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
@@ -65,6 +67,25 @@ function syncDocxExportModal(fileName, objectUrl) {
 
 async function openDocxWithSystemApp(targetPath) {
     try {
+        if (invoke && targetPath) {
+            await invoke("open_file", { path: targetPath });
+            return true;
+        }
+    } catch (err) {
+        console.error("Tauri invoke failed to open file", err);
+    }
+
+    try {
+        const tauriInvoke = window.__TAURI__?.tauri?.invoke;
+        if (tauriInvoke && targetPath) {
+            await tauriInvoke("open_file", { path: targetPath });
+            return true;
+        }
+    } catch (err) {
+        console.error("Tauri global invoke failed to open file", err);
+    }
+
+    try {
         const opener = window.__TAURI__?.opener;
         if (opener?.openPath && targetPath) {
             await opener.openPath(targetPath);
@@ -79,15 +100,28 @@ async function openDocxWithSystemApp(targetPath) {
 
 async function saveDocxToDownloads(blob, fileName) {
     const fs = window.__TAURI__?.fs;
-    const path = window.__TAURI__?.path;
-
-    if (!fs?.writeFile || !path?.downloadDir || !path?.join) return null;
+    if (!fs?.writeFile) return null;
 
     try {
-        const downloadsDir = await path.downloadDir();
+        let downloadsDir = null;
+        try {
+            downloadsDir = await downloadDir();
+        } catch (err) {
+            console.error("Unable to access tauri path downloadDir", err);
+        }
+
+        if (!downloadsDir && window.__TAURI__?.path?.downloadDir) {
+            downloadsDir = await window.__TAURI__.path.downloadDir();
+        }
         if (!downloadsDir) return null;
 
-        const targetPath = await path.join(downloadsDir, fileName);
+        let targetPath = null;
+        if (typeof join === "function") {
+            targetPath = await join(downloadsDir, fileName);
+        } else if (window.__TAURI__?.path?.join) {
+            targetPath = await window.__TAURI__.path.join(downloadsDir, fileName);
+        }
+        if (!targetPath) return null;
         const contents = new Uint8Array(await blob.arrayBuffer());
 
         await fs.writeFile({
