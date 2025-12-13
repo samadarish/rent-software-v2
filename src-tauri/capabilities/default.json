@@ -6,7 +6,6 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "fs:default",
-    "path:default"
+    "core:path:default"
   ]
 }
