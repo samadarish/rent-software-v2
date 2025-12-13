@@ -9,7 +9,9 @@
     "core:path:allow-join",
     "fs:default",
     "fs:scope-download",
+    "fs:scope-download-recursive",
     "fs:allow-download-write",
+    "fs:allow-write-file",
     "opener:allow-open-path",
     "opener:default"
   ]
