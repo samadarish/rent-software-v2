@@ -20,7 +20,23 @@ async function loadTauriApis() {
 
     tauriApiPromise = (async () => {
         // Only attempt to import when running inside Tauri
-        if (typeof window === "undefined" || !window.__TAURI__) return null;
+        if (typeof window === "undefined") return null;
+
+        const tauriGlobal = window.__TAURI__ || window.__TAURI_INTERNALS__;
+        if (!tauriGlobal) return null;
+
+        // Prefer globals if they are already injected to avoid module resolution issues
+        const writeBinaryFile = tauriGlobal.fs?.writeBinaryFile;
+        const downloadDir = tauriGlobal.path?.downloadDir;
+        const join = tauriGlobal.path?.join;
+        const open =
+            tauriGlobal.opener?.open ||
+            tauriGlobal.plugin?.opener?.open ||
+            tauriGlobal.plugins?.opener?.open;
+
+        if (writeBinaryFile && downloadDir && join) {
+            return { writeBinaryFile, downloadDir, join, open };
+        }
 
         try {
             const [{ writeBinaryFile }, { downloadDir, join }, { open }] = await Promise.all([
