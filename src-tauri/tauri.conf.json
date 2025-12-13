@@ -19,6 +19,11 @@
       "csp": null
     }
   },
+  "plugins": {
+    "opener": {
+      "scope": ["file://*", "http://*", "https://*"]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
