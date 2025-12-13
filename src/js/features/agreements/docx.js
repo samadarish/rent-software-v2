@@ -4,7 +4,6 @@
  * Handles exporting agreements as DOCX files using a template.
  */
 
-import { downloadDir, join } from "@tauri-apps/api/path";
 import { collectFormDataForTemplate } from "../tenants/form.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
@@ -66,9 +65,11 @@ function syncDocxExportModal(fileName, objectUrl) {
 
 async function openDocxWithSystemApp(targetPath) {
     try {
-        const opener = window.__TAURI__?.opener;
-        if (opener?.openPath && targetPath) {
-            await opener.openPath(targetPath);
+        const opener = window.__TAURI__?.opener || window.__TAURI__?.plugin?.opener;
+        const openPathFn = opener?.openPath || opener?.open_path;
+
+        if (openPathFn && targetPath) {
+            await openPathFn(targetPath);
             return true;
         }
     } catch (err) {
@@ -80,27 +81,14 @@ async function openDocxWithSystemApp(targetPath) {
 
 async function saveDocxToDownloads(blob, fileName) {
     const fs = window.__TAURI__?.fs;
-    if (!fs?.writeFile) return null;
+    const path = window.__TAURI__?.path;
+    if (!fs?.writeFile || !path) return null;
 
     try {
-        let downloadsDir = null;
-        try {
-            downloadsDir = await downloadDir();
-        } catch (err) {
-            console.error("Unable to access tauri path downloadDir", err);
-        }
-
-        if (!downloadsDir && window.__TAURI__?.path?.downloadDir) {
-            downloadsDir = await window.__TAURI__.path.downloadDir();
-        }
+        const downloadsDir = await path.downloadDir();
         if (!downloadsDir) return null;
 
-        let targetPath = null;
-        if (typeof join === "function") {
-            targetPath = await join(downloadsDir, fileName);
-        } else if (window.__TAURI__?.path?.join) {
-            targetPath = await window.__TAURI__.path.join(downloadsDir, fileName);
-        }
+        const targetPath = await path.join(downloadsDir, fileName);
         if (!targetPath) return null;
         const contents = new Uint8Array(await blob.arrayBuffer());
 
