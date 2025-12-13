@@ -69,7 +69,9 @@ async function saveDocxToDownloads(blob, fileName) {
     const targetPath = await join(downloadsDir, fileName);
     const buffer = new Uint8Array(await blob.arrayBuffer());
 
-    await writeBinaryFile(targetPath, buffer);
+    // Support both signatures: writeBinaryFile(path, contents) and writeBinaryFile({ path, contents })
+    const args = writeBinaryFile.length > 1 ? [targetPath, buffer] : [{ path: targetPath, contents: buffer }];
+    await writeBinaryFile(...args);
     return targetPath;
 }
 
@@ -103,10 +105,11 @@ function syncDocxExportModal(fileName, objectUrl, filePath) {
         openLink.dataset.filePath = lastDocxFilePath;
         openLink.dataset.objectUrl = objectUrl || "";
         openLink.dataset.filename = safeFileName;
-        openLink.dataset.openReady = objectUrl ? "true" : "false";
+        openLink.dataset.openReady = lastDocxFilePath || objectUrl ? "true" : "false";
         openLink.rel = "noopener";
-        openLink.classList.toggle("pointer-events-none", !objectUrl);
-        openLink.classList.toggle("opacity-50", !objectUrl);
+        const canAttemptOpen = Boolean(lastDocxFilePath || objectUrl);
+        openLink.classList.toggle("pointer-events-none", !canAttemptOpen);
+        openLink.classList.toggle("opacity-50", !canAttemptOpen);
     }
 
     if (modal) showModal(modal);
@@ -138,7 +141,7 @@ function wireDocxExportModal() {
         openLink.addEventListener("click", async (e) => {
             e.preventDefault();
 
-            if (!lastDocxDownloadUrl) {
+            if (!lastDocxDownloadUrl && !lastDocxFilePath) {
                 showToast("Export a DOCX first, then try opening it again.", "warning");
                 return;
             }
@@ -163,6 +166,11 @@ function wireDocxExportModal() {
                     "Open is only available when Tauri opener is ready. Please open the saved file from your Downloads folder.",
                     "info"
                 );
+                return;
+            }
+
+            if (lastDocxDownloadUrl) {
+                window.open(lastDocxDownloadUrl, "_blank", "noopener,noreferrer");
                 return;
             }
 
