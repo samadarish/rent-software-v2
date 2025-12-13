@@ -4,7 +4,6 @@
  * Handles exporting agreements as DOCX files using a template.
  */
 
-import { invoke } from "@tauri-apps/api/tauri";
 import { downloadDir, join } from "@tauri-apps/api/path";
 import { collectFormDataForTemplate } from "../tenants/form.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
@@ -66,25 +65,6 @@ function syncDocxExportModal(fileName, objectUrl) {
 }
 
 async function openDocxWithSystemApp(targetPath) {
-    try {
-        if (invoke && targetPath) {
-            await invoke("open_file", { path: targetPath });
-            return true;
-        }
-    } catch (err) {
-        console.error("Tauri invoke failed to open file", err);
-    }
-
-    try {
-        const tauriInvoke = window.__TAURI__?.tauri?.invoke;
-        if (tauriInvoke && targetPath) {
-            await tauriInvoke("open_file", { path: targetPath });
-            return true;
-        }
-    } catch (err) {
-        console.error("Tauri global invoke failed to open file", err);
-    }
-
     try {
         const opener = window.__TAURI__?.opener;
         if (opener?.openPath && targetPath) {
