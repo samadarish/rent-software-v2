@@ -67,48 +67,12 @@ async function loadTauriFsHelpers() {
         return { writeBinaryFile, downloadDir, join };
     }
 
-    let fsApi = null;
-    let pathApi = null;
-
-    const fsImports = [
-        () => import("tauri://@tauri-apps/api/fs"),
-        () => import("@tauri-apps/api/fs"),
-    ];
-
-    const pathImports = [
-        () => import("tauri://@tauri-apps/api/path"),
-        () => import("@tauri-apps/api/path"),
-    ];
-
-    for (const loadFs of fsImports) {
-        try {
-            fsApi = await loadFs();
-            break;
-        } catch (err) {
-            console.warn("Unable to load Tauri fs API via import", err);
-        }
-    }
-
-    for (const loadPath of pathImports) {
-        try {
-            pathApi = await loadPath();
-            break;
-        } catch (err) {
-            console.warn("Unable to load Tauri path API via import", err);
-        }
-    }
-
-    const importedWriteBinaryFile = fsApi?.writeBinaryFile;
-    const importedDownloadDir = pathApi?.downloadDir;
-    const importedJoin = pathApi?.join;
-
-    if (importedWriteBinaryFile && importedDownloadDir && importedJoin) {
-        return {
-            writeBinaryFile: importedWriteBinaryFile,
-            downloadDir: importedDownloadDir,
-            join: importedJoin,
-        };
-    }
+    // If Tauri isn't exposing the fs/path globals (likely because permissions
+    // are denied or we're running in a pure browser context), bail early so we
+    // don't attempt asset-protocol imports that are blocked by CORS.
+    console.warn(
+        "Tauri fs/path helpers not available on window.__TAURI__; using browser download instead."
+    );
 
     return null;
 }
