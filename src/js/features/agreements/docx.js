@@ -36,14 +36,23 @@ async function loadTauriApis() {
             tauriGlobal.plugins?.opener?.open ||
             tauriGlobal.shell?.open;
 
-        if (writeBinaryFile && downloadDir && join) {
-            return { writeBinaryFile, downloadDir, join, open };
+        const hasSaveApis = Boolean(writeBinaryFile && downloadDir && join);
+        const hasAnyApis = hasSaveApis || Boolean(open);
+
+        if (!hasAnyApis) return null;
+
+        if (!hasSaveApis) {
+            console.warn(
+                "Tauri APIs detected but required methods are missing for saving; opener support only"
+            );
         }
 
-        // When globals exist but needed APIs are missing, avoid attempting module imports
-        // because bare-specifier imports fail in plain browsers/static builds.
-        console.warn("Tauri APIs detected but required methods are missing; skipping Tauri save");
-        return null;
+        return {
+            writeBinaryFile: hasSaveApis ? writeBinaryFile : null,
+            downloadDir: hasSaveApis ? downloadDir : null,
+            join: hasSaveApis ? join : null,
+            open,
+        };
     })();
 
     return tauriApiPromise;
@@ -84,18 +93,18 @@ function syncDocxExportModal(fileName, objectUrl, filePath) {
     if (fileNameLabel) fileNameLabel.textContent = safeFileName;
 
     if (locationLabel) {
-        locationLabel.textContent = `Saved to: Downloads/${safeFileName}`;
+        locationLabel.textContent = lastDocxFilePath
+            ? `Saved to: ${lastDocxFilePath}`
+            : `Downloaded: ${safeFileName}`;
     }
 
     if (openLink) {
-        openLink.href = objectUrl || "#";
+        openLink.href = "#";
         openLink.dataset.filePath = lastDocxFilePath;
-        if (objectUrl) {
-            openLink.removeAttribute("download");
-            openLink.setAttribute("data-filename", safeFileName);
-            openLink.rel = "noopener";
-            openLink.dataset.openReady = "true";
-        }
+        openLink.dataset.objectUrl = objectUrl || "";
+        openLink.dataset.filename = safeFileName;
+        openLink.dataset.openReady = objectUrl ? "true" : "false";
+        openLink.rel = "noopener";
         openLink.classList.toggle("pointer-events-none", !objectUrl);
         openLink.classList.toggle("opacity-50", !objectUrl);
     }
@@ -127,8 +136,9 @@ function wireDocxExportModal() {
 
     if (openLink) {
         openLink.addEventListener("click", async (e) => {
+            e.preventDefault();
+
             if (!lastDocxDownloadUrl) {
-                e.preventDefault();
                 showToast("Export a DOCX first, then try opening it again.", "warning");
                 return;
             }
@@ -137,7 +147,6 @@ function wireDocxExportModal() {
                 try {
                     const tauriApis = await loadTauriApis();
                     if (tauriApis?.open) {
-                        e.preventDefault();
                         await tauriApis.open(lastDocxFilePath);
                         return;
                     }
@@ -147,22 +156,25 @@ function wireDocxExportModal() {
                         "Could not open the DOCX directly. Please open it from your Downloads folder.",
                         "error"
                     );
-                    // fall through to browser download behavior
+                    return;
                 }
+
+                showToast(
+                    "Open is only available when Tauri opener is ready. Please open the saved file from your Downloads folder.",
+                    "info"
+                );
+                return;
             }
 
             if (typeof navigator !== "undefined" && navigator.msSaveOrOpenBlob && lastDocxBlob) {
-                e.preventDefault();
                 navigator.msSaveOrOpenBlob(lastDocxBlob, lastDocxFileName || "Agreement.docx");
                 return;
             }
 
-            // Let the browser handle the navigation so it is treated as a
-            // user-initiated action and isn't blocked by pop-up blockers.
-            openLink.href = lastDocxDownloadUrl;
-            openLink.removeAttribute("target");
-            openLink.rel = "noopener";
-            openLink.download = lastDocxFileName || "Agreement.docx";
+            showToast(
+                "The file has already been downloaded. Please open it manually from your Downloads folder.",
+                "info"
+            );
         });
     }
 }
