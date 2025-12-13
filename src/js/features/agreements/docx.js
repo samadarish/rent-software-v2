@@ -9,6 +9,7 @@ import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
 let lastDocxDownloadUrl = "";
 let lastDocxFileName = "";
+let lastDocxFilePath = ""; // For Tauri native path
 let lastDocxBlob = null;
 let docxModalWired = false;
 
@@ -19,7 +20,7 @@ function revokeLastDocxUrl() {
     }
 }
 
-function syncDocxExportModal(fileName, objectUrl) {
+function syncDocxExportModal(fileName, objectUrlOrPath) {
     const modal = document.getElementById("docxExportModal");
     const fileNameLabel = document.getElementById("docxExportFileName");
     const locationLabel = document.getElementById("docxExportLocation");
@@ -35,16 +36,30 @@ function syncDocxExportModal(fileName, objectUrl) {
     }
 
     if (openLink) {
-        openLink.href = objectUrl || "#";
-        if (objectUrl) {
-            openLink.removeAttribute("download");
-            openLink.setAttribute("data-filename", safeFileName);
-            openLink.target = "_blank";
-            openLink.rel = "noopener";
+        // Reset state
+        openLink.removeAttribute("download");
+        openLink.removeAttribute("href");
+        openLink.target = "";
+
+        const isTauri = !!window.__TAURI__;
+
+        if (objectUrlOrPath) {
+            if (isTauri) {
+                // Tauri mode: objectUrlOrPath is a file path
+                openLink.href = "#";
+                openLink.dataset.filepath = objectUrlOrPath;
+            } else {
+                // Web mode: objectUrlOrPath is a blob URL
+                openLink.href = objectUrlOrPath;
+                openLink.download = safeFileName;
+                openLink.target = "_blank";
+                openLink.rel = "noopener";
+            }
             openLink.dataset.openReady = "true";
         }
-        openLink.classList.toggle("pointer-events-none", !objectUrl);
-        openLink.classList.toggle("opacity-50", !objectUrl);
+
+        openLink.classList.toggle("pointer-events-none", !objectUrlOrPath);
+        openLink.classList.toggle("opacity-50", !objectUrlOrPath);
     }
 
     if (modal) showModal(modal);
@@ -73,25 +88,35 @@ function wireDocxExportModal() {
     }
 
     if (openLink) {
-        openLink.addEventListener("click", (e) => {
-            if (!lastDocxDownloadUrl) {
+
+        openLink.addEventListener("click", async (e) => {
+            if (!lastDocxDownloadUrl && !lastDocxFilePath) {
                 e.preventDefault();
                 showToast("Export a DOCX first, then try opening it again.", "warning");
                 return;
             }
 
+            // Tauri native open
+            if (window.__TAURI__ && lastDocxFilePath) {
+                e.preventDefault();
+                try {
+                    await window.__TAURI__.opener.openPath(lastDocxFilePath);
+                } catch (err) {
+                    console.error("Failed to open file:", err);
+                    showToast("Failed to open file: " + err, "error");
+                }
+                return;
+            }
+
+            // Web fallback
             if (typeof navigator !== "undefined" && navigator.msSaveOrOpenBlob && lastDocxBlob) {
                 e.preventDefault();
                 navigator.msSaveOrOpenBlob(lastDocxBlob, lastDocxFileName || "Agreement.docx");
                 return;
             }
 
-            // Let the browser handle the navigation so it is treated as a
-            // user-initiated action and isn't blocked by pop-up blockers.
-            openLink.href = lastDocxDownloadUrl;
-            openLink.target = "_blank";
-            openLink.rel = "noopener";
-            openLink.download = lastDocxFileName || "Agreement.docx";
+            // Standard web download/open
+
         });
     }
 }
@@ -164,7 +189,7 @@ export function exportDocxFromTemplate() {
             }
             return res.arrayBuffer();
         })
-        .then((arrayBuffer) => {
+        .then(async (arrayBuffer) => {
             try {
                 const uint8 = new Uint8Array(arrayBuffer);
                 const zip = new PizZip(uint8);
@@ -181,12 +206,6 @@ export function exportDocxFromTemplate() {
                 xml = applyMarkdownBoldToDocxXml(xml);
                 outZip.file("word/document.xml", xml);
 
-                const out = outZip.generate({
-                    type: "blob",
-                    mimeType:
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                });
-
                 const sanitize = (value, fallback) => {
                     const safeValue = (value || fallback || "")
                         .trim()
@@ -200,6 +219,33 @@ export function exportDocxFromTemplate() {
                 const aadhaar = sanitize(data.tenant_Aadhar, "Aadhaar");
                 const fileName = `${tenantName}_${grnNumber}_${aadhaar}_Agreement.docx`;
 
+                // Handle Tauri Export
+                if (window.__TAURI__) {
+                    const out = outZip.generate({
+                        type: "uint8array",
+                        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    });
+
+                    const { path, fs } = window.__TAURI__;
+                    const downloadDir = await path.downloadDir();
+                    const filePath = await path.join(downloadDir, fileName);
+
+                    await fs.writeFile(filePath, out);
+
+                    lastDocxFilePath = filePath;
+                    revokeLastDocxUrl(); // Clean up any previous web blobs
+
+                    syncDocxExportModal(fileName, filePath);
+                    showToast(`Saved to Downloads: ${fileName}`, "success");
+                    return;
+                }
+
+                // Handle Web Export (Fallback)
+                const out = outZip.generate({
+                    type: "blob",
+                    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                });
+
                 revokeLastDocxUrl();
                 lastDocxBlob = out;
                 lastDocxDownloadUrl = URL.createObjectURL(out);
@@ -209,7 +255,7 @@ export function exportDocxFromTemplate() {
                 showToast(`DOCX downloaded as "${fileName}"`, "success");
             } catch (e) {
                 console.error("DOCX render error:", e);
-                alert("Error while filling template. Check console for details.");
+                alert("Error while filling template: " + (e.message || e));
             }
         })
         .catch((err) => {
