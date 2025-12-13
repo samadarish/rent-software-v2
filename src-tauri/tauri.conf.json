@@ -17,13 +17,6 @@
     ],
     "security": {
       "csp": null
-    },
-    "allowlist": {
-      "plugin": {
-        "opener": {
-          "allow-open-path": true
-        }
-      }
     }
   },
   "bundle": {
