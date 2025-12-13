@@ -15,6 +15,26 @@ let docxModalWired = false;
 
 let tauriApiPromise = null;
 
+function normalizeFileUrl(pathOrUrl) {
+    if (!pathOrUrl) return "";
+
+    // If it is already a URL, just return it
+    try {
+        const candidate = new URL(pathOrUrl, "file://");
+        if (candidate.protocol !== "file:") return pathOrUrl;
+    } catch {
+        // Not a parsable URL; treat as a path
+    }
+
+    const rawPath = pathOrUrl.replace(/\\/g, "/");
+    if (rawPath.startsWith("file://")) return rawPath;
+
+    // Prepend an extra slash for Windows drive letters (C:/)
+    const needsDriveSlash = /^[A-Za-z]:/.test(rawPath);
+    const prefix = needsDriveSlash ? "file:///" : "file://";
+    return `${prefix}${rawPath}`;
+}
+
 async function loadTauriApis() {
     if (tauriApiPromise) return tauriApiPromise;
 
@@ -31,6 +51,7 @@ async function loadTauriApis() {
         const BaseDirectory = tauriGlobal.fs?.BaseDirectory || tauriGlobal.core?.fs?.BaseDirectory;
         const downloadDir = tauriGlobal.path?.downloadDir;
         const join = tauriGlobal.path?.join;
+        const convertFileSrc = tauriGlobal.tauri?.convertFileSrc;
         const open =
             tauriGlobal.opener?.open ||
             tauriGlobal.plugin?.opener?.open ||
@@ -53,6 +74,7 @@ async function loadTauriApis() {
             BaseDirectory: hasSaveApis ? BaseDirectory : null,
             downloadDir: hasSaveApis ? downloadDir : null,
             join: hasSaveApis ? join : null,
+            convertFileSrc,
             open,
         };
     })();
@@ -170,9 +192,16 @@ function wireDocxExportModal() {
             const tauriApis = await loadTauriApis();
             if (!tauriApis?.open || !targetPath) return false;
 
-            const normalizedPath = targetPath.startsWith("file://")
-                ? targetPath
-                : `file://${targetPath}`;
+            let tauriUrl = targetPath;
+            if (tauriApis.convertFileSrc) {
+                try {
+                    tauriUrl = tauriApis.convertFileSrc(targetPath);
+                } catch (error) {
+                    console.warn("convertFileSrc failed; using raw path", error);
+                }
+            }
+
+            const normalizedPath = normalizeFileUrl(tauriUrl);
 
             try {
                 const openArgs = tauriApis.open.length > 1 ? [normalizedPath, { newInstance: true }] : [normalizedPath];
