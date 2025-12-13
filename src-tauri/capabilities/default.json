@@ -6,9 +6,10 @@
   "permissions": [
     "core:default",
     "core:path:default",
-    "core:path:allow-download-dir",
     "core:path:allow-join",
     "fs:default",
+    "fs:scope-download",
+    "fs:allow-download-write",
     "opener:allow-open-path",
     "opener:default"
   ]
