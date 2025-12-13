@@ -70,21 +70,33 @@ async function loadTauriFsHelpers() {
     let fsApi = null;
     let pathApi = null;
 
-    await import("@tauri-apps/api/fs")
-        .then((mod) => {
-            fsApi = mod;
-        })
-        .catch((err) => {
-            console.warn("Unable to load Tauri fs API via import", err);
-        });
+    const fsImports = [
+        () => import("tauri://@tauri-apps/api/fs"),
+        () => import("@tauri-apps/api/fs"),
+    ];
 
-    await import("@tauri-apps/api/path")
-        .then((mod) => {
-            pathApi = mod;
-        })
-        .catch((err) => {
+    const pathImports = [
+        () => import("tauri://@tauri-apps/api/path"),
+        () => import("@tauri-apps/api/path"),
+    ];
+
+    for (const loadFs of fsImports) {
+        try {
+            fsApi = await loadFs();
+            break;
+        } catch (err) {
+            console.warn("Unable to load Tauri fs API via import", err);
+        }
+    }
+
+    for (const loadPath of pathImports) {
+        try {
+            pathApi = await loadPath();
+            break;
+        } catch (err) {
             console.warn("Unable to load Tauri path API via import", err);
-        });
+        }
+    }
 
     const importedWriteBinaryFile = fsApi?.writeBinaryFile;
     const importedDownloadDir = pathApi?.downloadDir;
