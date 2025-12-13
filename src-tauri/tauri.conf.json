@@ -20,9 +20,7 @@
     }
   },
   "plugins": {
-    "opener": {
-      "scope": ["file://*", "http://*", "https://*"]
-    }
+    "opener": {}
   },
   "bundle": {
     "active": true,
