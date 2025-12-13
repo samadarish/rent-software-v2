@@ -12,6 +12,7 @@ let lastDocxFileName = "";
 let lastDocxBlob = null;
 let lastDocxFilePath = "";
 let docxModalWired = false;
+let fsHelperPromise = null;
 
 function revokeLastDocxUrl() {
     if (lastDocxDownloadUrl) {
@@ -54,19 +55,72 @@ function syncDocxExportModal(fileName, objectUrl) {
     if (modal) showModal(modal);
 }
 
+async function loadTauriFsHelpers() {
+    const globalFs = window.__TAURI__?.fs;
+    const globalPath = window.__TAURI__?.path;
+
+    const writeBinaryFile = globalFs?.writeBinaryFile;
+    const downloadDir = globalPath?.downloadDir;
+    const join = globalPath?.join;
+
+    if (writeBinaryFile && downloadDir && join) {
+        return { writeBinaryFile, downloadDir, join };
+    }
+
+    let fsApi = null;
+    let pathApi = null;
+
+    await import("@tauri-apps/api/fs")
+        .then((mod) => {
+            fsApi = mod;
+        })
+        .catch((err) => {
+            console.warn("Unable to load Tauri fs API via import", err);
+        });
+
+    await import("@tauri-apps/api/path")
+        .then((mod) => {
+            pathApi = mod;
+        })
+        .catch((err) => {
+            console.warn("Unable to load Tauri path API via import", err);
+        });
+
+    const importedWriteBinaryFile = fsApi?.writeBinaryFile;
+    const importedDownloadDir = pathApi?.downloadDir;
+    const importedJoin = pathApi?.join;
+
+    if (importedWriteBinaryFile && importedDownloadDir && importedJoin) {
+        return {
+            writeBinaryFile: importedWriteBinaryFile,
+            downloadDir: importedDownloadDir,
+            join: importedJoin,
+        };
+    }
+
+    return null;
+}
+
+function getTauriFsHelpers() {
+    if (!fsHelperPromise) {
+        fsHelperPromise = loadTauriFsHelpers();
+    }
+    return fsHelperPromise;
+}
+
 async function saveDocxToDownloads(blob, fileName) {
     if (!window.__TAURI__) return "";
 
     try {
-        const { fs, path: tauriPath } = window.__TAURI__;
-        const writeBinaryFile = fs?.writeBinaryFile;
-        const downloadDir = tauriPath?.downloadDir;
-        const join = tauriPath?.join;
-
-        if (!writeBinaryFile || !downloadDir || !join) {
-            console.warn("Tauri FS APIs are unavailable; falling back to browser download");
+        const helpers = await getTauriFsHelpers();
+        if (!helpers) {
+            console.warn(
+                "Tauri filesystem helpers unavailable; browser download fallback will be used."
+            );
             return "";
         }
+
+        const { writeBinaryFile, downloadDir, join } = helpers;
 
         const downloads = await downloadDir();
         if (!downloads) return "";
