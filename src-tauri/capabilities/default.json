@@ -10,8 +10,10 @@
     "fs:default",
     "fs:scope-download",
     "fs:scope-download-recursive",
-    "fs:allow-download-write",
-    "fs:allow-write-file",
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": ["$DOWNLOAD/**", "$DOWNLOAD/*", "$DOWNLOAD/"]
+    },
     "opener:allow-open-path",
     "opener:default"
   ]
