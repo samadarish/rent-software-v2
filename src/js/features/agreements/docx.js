@@ -59,19 +59,19 @@ async function saveDocxToDownloads(blob, fileName) {
 
     try {
         const { fs, path: tauriPath } = window.__TAURI__;
+        const writeBinaryFile = fs?.writeBinaryFile;
+        const downloadDir = tauriPath?.downloadDir;
+        const join = tauriPath?.join;
 
-        const writeBinaryFile = fs?.writeBinaryFile
-            ? fs.writeBinaryFile
-            : (await import("@tauri-apps/api/fs")).writeBinaryFile;
+        if (!writeBinaryFile || !downloadDir || !join) {
+            console.warn("Tauri FS APIs are unavailable; falling back to browser download");
+            return "";
+        }
 
-        const path = tauriPath?.downloadDir
-            ? tauriPath
-            : await import("@tauri-apps/api/path");
-
-        const downloads = await path.downloadDir();
+        const downloads = await downloadDir();
         if (!downloads) return "";
 
-        const targetPath = await path.join(downloads, fileName);
+        const targetPath = await join(downloads, fileName);
         const bytes = new Uint8Array(await blob.arrayBuffer());
         await writeBinaryFile({ path: targetPath, contents: bytes });
         return targetPath;
@@ -85,13 +85,14 @@ async function tryOpenDocxWithTauri(event) {
     if (!window.__TAURI__ || !lastDocxFilePath) return false;
 
     try {
-        const opener = window.__TAURI__.opener ||
-            (await import("@tauri-apps/plugin-opener"));
-        const open = opener.open || opener;
-        if (typeof open !== "function") {
+        const { opener } = window.__TAURI__;
+        const openPath = opener?.openPath || opener?.open;
+
+        if (typeof openPath !== "function") {
             throw new Error("Tauri opener plugin is unavailable");
         }
-        await open(lastDocxFilePath);
+
+        await openPath(lastDocxFilePath);
         if (event) event.preventDefault();
         return true;
     } catch (err) {
