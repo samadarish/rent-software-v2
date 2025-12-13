@@ -19,37 +19,31 @@ async function loadTauriApis() {
     if (tauriApiPromise) return tauriApiPromise;
 
     tauriApiPromise = (async () => {
-        // Only attempt to import when running inside Tauri
+        // Only attempt to use Tauri when running inside its WebView context
         if (typeof window === "undefined") return null;
 
         const tauriGlobal = window.__TAURI__ || window.__TAURI_INTERNALS__;
         if (!tauriGlobal) return null;
 
         // Prefer globals if they are already injected to avoid module resolution issues
-        const writeBinaryFile = tauriGlobal.fs?.writeBinaryFile;
+        const writeBinaryFile =
+            tauriGlobal.fs?.writeBinaryFile || tauriGlobal.core?.fs?.writeBinaryFile;
         const downloadDir = tauriGlobal.path?.downloadDir;
         const join = tauriGlobal.path?.join;
         const open =
             tauriGlobal.opener?.open ||
             tauriGlobal.plugin?.opener?.open ||
-            tauriGlobal.plugins?.opener?.open;
+            tauriGlobal.plugins?.opener?.open ||
+            tauriGlobal.shell?.open;
 
         if (writeBinaryFile && downloadDir && join) {
             return { writeBinaryFile, downloadDir, join, open };
         }
 
-        try {
-            const [{ writeBinaryFile }, { downloadDir, join }, { open }] = await Promise.all([
-                import("@tauri-apps/api/fs"),
-                import("@tauri-apps/api/path"),
-                import("@tauri-apps/plugin-opener"),
-            ]);
-
-            return { writeBinaryFile, downloadDir, join, open };
-        } catch (error) {
-            console.warn("Tauri APIs unavailable; falling back to browser behavior", error);
-            return null;
-        }
+        // When globals exist but needed APIs are missing, avoid attempting module imports
+        // because bare-specifier imports fail in plain browsers/static builds.
+        console.warn("Tauri APIs detected but required methods are missing; skipping Tauri save");
+        return null;
     })();
 
     return tauriApiPromise;
