@@ -917,13 +917,19 @@ function updateSidebarSnapshot() {
                     editBtn.addEventListener("click", () => openTenancyModal(h, t));
                 }
                 if (rentBtn) {
-                    rentBtn.dataset.tenancyId = card.dataset.tenancyId;
-                    rentBtn.dataset.grn = t.grnNumber || "";
-                    rentBtn.dataset.unitLabel = h.unitLabel || "";
-                    rentBtn.dataset.startDate = h.startDate || "";
-                    rentBtn.dataset.endDate = h.endDate || "";
-                    rentBtn.dataset.status = h.status || "";
-                    rentBtn.dataset.currentRent = h.currentRent || h.rentAmount || "";
+                    rentBtn.dataset.tenancyId =
+                        card.dataset.tenancyId ||
+                        t.tenancyId ||
+                        t.tenancy_id ||
+                        t.templateData?.tenancy_id ||
+                        "";
+                    rentBtn.dataset.grn = t.grnNumber || t.grn_number || t.templateData?.grn_number || "";
+                    rentBtn.dataset.unitLabel = h.unitLabel || t.unitLabel || t.unitNumber || t.templateData?.unit_number || "";
+                    rentBtn.dataset.startDate = h.startDate || t.tenancyCommencement || t.templateData?.tenancy_comm_raw || "";
+                    rentBtn.dataset.endDate = h.endDate || t.tenancyEndDate || t.templateData?.tenancy_end_raw || "";
+                    rentBtn.dataset.status = h.status || t.status || "";
+                    rentBtn.dataset.currentRent =
+                        h.currentRent || h.rentAmount || t.currentRent || t.rentAmount || t.templateData?.rent_amount || "";
                     rentBtn.addEventListener("click", (event) => handleRentHistoryClick(event, t));
                 }
                 historyList.appendChild(card);
@@ -981,11 +987,13 @@ function resolveTenantFromElement(element, tenancyId = "") {
 
 function buildRentHistoryContext(btn, fallbackTenant) {
     const card = btn?.closest?.("[data-tenancy-id]");
-    const tenancyId = btn?.dataset?.tenancyId || card?.dataset?.tenancyId || "";
-    const tenant = fallbackTenant || resolveTenantFromElement(btn || card, tenancyId) || {};
+    const tenant = fallbackTenant || resolveTenantFromElement(btn || card, btn?.dataset?.tenancyId || card?.dataset?.tenancyId) || {};
+    const fallbackTenancyId =
+        tenant.tenancyId || tenant.tenancy_id || tenant.templateData?.tenancy_id || tenant.templateData?.tenancyId || "";
+    const tenancyId = btn?.dataset?.tenancyId || card?.dataset?.tenancyId || fallbackTenancyId || "";
     const historyEntry = tenancyId
         ? (tenant.tenancyHistory || []).find((h) => (h.tenancyId || h.tenancy_id)?.toString() === tenancyId.toString())
-        : null;
+        : (tenant.tenancyHistory || []).find((h) => (h.status || "").toLowerCase() === "active") || null;
 
     const tenancy = {
         tenancyId: tenancyId || historyEntry?.tenancyId || historyEntry?.tenancy_id,
@@ -1109,13 +1117,15 @@ function handleRentHistoryClick(event, fallbackTenant) {
 
     const { tenancy, tenant } = buildRentHistoryContext(btn, fallbackTenant);
     const contextTenant = tenant || selectedTenantForSidebar;
+    const resolvedTenancy =
+        (tenancy && tenancy.tenancyId && tenancy) || resolveFallbackTenancyContext(contextTenant) || tenancy || null;
 
-    if (!tenancy || !tenancy.tenancyId) {
+    if (!resolvedTenancy || !resolvedTenancy.tenancyId) {
         showToast("Select a tenancy first", "warning");
         return;
     }
 
-    openRentHistoryModal(tenancy, contextTenant);
+    openRentHistoryModal(resolvedTenancy, contextTenant);
 }
 
 function startNewTenancyFromSidebar() {
