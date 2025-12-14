@@ -96,6 +96,10 @@ function wireDocxExportModal() {
                 return;
             }
 
+            const closeModal = () => {
+                if (modal) hideModal(modal);
+            };
+
             // Tauri native open
             if (window.__TAURI__ && lastDocxFilePath) {
                 e.preventDefault();
@@ -105,6 +109,7 @@ function wireDocxExportModal() {
                     console.error("Failed to open file:", err);
                     showToast("Failed to open file: " + err, "error");
                 }
+                closeModal();
                 return;
             }
 
@@ -112,10 +117,12 @@ function wireDocxExportModal() {
             if (typeof navigator !== "undefined" && navigator.msSaveOrOpenBlob && lastDocxBlob) {
                 e.preventDefault();
                 navigator.msSaveOrOpenBlob(lastDocxBlob, lastDocxFileName || "Agreement.docx");
+                closeModal();
                 return;
             }
 
             // Standard web download/open
+            closeModal();
 
         });
     }
