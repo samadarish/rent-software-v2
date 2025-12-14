@@ -132,6 +132,81 @@ function getTenantIdentityKey(raw) {
 }
 
 /**
+ * Builds a stable key for grouping tenant records into a single row.
+ * @param {object} raw
+ * @returns {string}
+ */
+function getTenantGroupKey(raw) {
+    const candidates = [raw?.tenantId, raw?.tenant_id, raw?.grnNumber, raw?.grn_number, raw?.tenantFullName, raw?.tenant_name];
+    for (const candidate of candidates) {
+        const key = (candidate || "").toString().trim().toLowerCase();
+        if (key) return key;
+    }
+    return "";
+}
+
+/**
+ * Returns a deterministic key for tenancy history rows to de-dupe merged tenants.
+ * @param {object} history
+ * @returns {string}
+ */
+function getTenancyHistoryKey(history = {}) {
+    const candidates = [history.tenancyId, history.tenancy_id, history.tenancy_id, history.grnNumber];
+    for (const candidate of candidates) {
+        const key = (candidate || "").toString().trim().toLowerCase();
+        if (key) return key;
+    }
+    const start = history.startDate || history.start_date || "";
+    const unit = history.unitLabel || history.unit || "";
+    const end = history.endDate || history.end_date || "";
+    return `${unit}::${start}::${end}`.toLowerCase();
+}
+
+/**
+ * Normalizes and merges tenancy history entries for a tenant to avoid duplicates.
+ * @param {Array} existing
+ * @param {Array} incoming
+ * @returns {Array}
+ */
+function mergeTenancyHistory(existing = [], incoming = []) {
+    const map = new Map();
+    [...existing, ...incoming].forEach((entry = {}) => {
+        const key = getTenancyHistoryKey(entry);
+        if (!key) return;
+        const current = map.get(key) || {};
+        map.set(key, { ...current, ...entry });
+    });
+    return Array.from(map.values());
+}
+
+/**
+ * Collapses multiple tenant rows (often one per tenancy) into a single tenant entry with merged history.
+ * @param {Array} rawTenants
+ * @returns {Array}
+ */
+function collapseTenantRows(rawTenants = []) {
+    const grouped = new Map();
+    rawTenants.forEach((t, idx) => {
+        const key = getTenantGroupKey(t) || `row-${idx}`;
+        const history = Array.isArray(t.tenancyHistory) ? t.tenancyHistory : [];
+        if (grouped.has(key)) {
+            const existing = grouped.get(key);
+            const mergedHistory = mergeTenancyHistory(existing.tenancyHistory, history);
+            grouped.set(key, {
+                ...existing,
+                ...t,
+                tenancyHistory: mergedHistory,
+                activeTenant: existing.activeTenant || t.activeTenant,
+                family: existing.family && existing.family.length ? existing.family : t.family || [],
+            });
+        } else {
+            grouped.set(key, { ...t, tenancyHistory: history });
+        }
+    });
+    return Array.from(grouped.values());
+}
+
+/**
  * Formats tenancy end dates for table display.
  * @param {string} raw
  * @returns {string}
@@ -622,12 +697,14 @@ export async function loadTenantDirectory(forceReload = false) {
           }))
         : [];
     landlordCache = Array.isArray(landlordData.landlords) ? landlordData.landlords : [];
-    tenantCache = Array.isArray(data.tenants)
+    const normalizedTenants = Array.isArray(data.tenants)
         ? data.tenants.map((t) => ({
               ...t,
               tenancyHistory: Array.isArray(t.tenancyHistory) ? t.tenancyHistory : [],
+              family: Array.isArray(t.family) ? t.family : [],
           }))
         : [];
+    tenantCache = collapseTenantRows(normalizedTenants);
     document.dispatchEvent(new CustomEvent("landlords:updated", { detail: landlordCache }));
     hasLoadedTenants = true;
     setTenantListLoading(false);
