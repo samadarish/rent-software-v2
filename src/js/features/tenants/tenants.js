@@ -4,6 +4,8 @@ import {
     fetchUnitsFromSheet,
     updateTenantRecord,
 } from "../../api/sheets.js";
+import { getCachedGetResponse } from "../../api/appscriptClient.js";
+import { getAppScriptUrl } from "../../api/config.js";
 import { toOrdinal } from "../../utils/formatters.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
@@ -22,6 +24,59 @@ const statusClassMap = {
     active: "bg-emerald-100 text-emerald-700 border-emerald-200",
     inactive: "bg-rose-100 text-rose-700 border-rose-200",
 };
+
+function hydrateTenantDirectoryFromCache(previousSelectedGrn) {
+    const url = getAppScriptUrl();
+    if (!url) return false;
+
+    const cachedUnits = getCachedGetResponse({ url, action: "units" });
+    const cachedLandlords = getCachedGetResponse({ url, action: "landlords" });
+    const cachedTenants = getCachedGetResponse({ url, action: "tenants" });
+
+    if (
+        !Array.isArray(cachedUnits?.units) &&
+        !Array.isArray(cachedLandlords?.landlords) &&
+        !Array.isArray(cachedTenants?.tenants)
+    ) {
+        return false;
+    }
+
+    unitCache = Array.isArray(cachedUnits?.units)
+        ? cachedUnits.units.map((u) => ({
+              ...u,
+              is_occupied:
+                  u.is_occupied === true ||
+                  (typeof u.is_occupied === "string" && u.is_occupied.toLowerCase() === "true"),
+          }))
+        : unitCache;
+
+    landlordCache = Array.isArray(cachedLandlords?.landlords)
+        ? cachedLandlords.landlords
+        : landlordCache;
+
+    tenantCache = Array.isArray(cachedTenants?.tenants)
+        ? cachedTenants.tenants.map((t) => ({
+              ...t,
+              tenancyHistory: Array.isArray(t.tenancyHistory) ? t.tenancyHistory : [],
+          }))
+        : tenantCache;
+
+    if (landlordCache.length) {
+        document.dispatchEvent(new CustomEvent("landlords:updated", { detail: landlordCache }));
+    }
+
+    applyTenantFilters();
+
+    if (tenantCache.length) {
+        const match = tenantCache.find((t) => t.grnNumber === previousSelectedGrn);
+        setSidebarSelection(match || tenantCache[0]);
+    } else {
+        selectedTenantForSidebar = null;
+        updateSidebarSnapshot();
+    }
+
+    return true;
+}
 
 export function getActiveTenantsForWing(wing) {
     const normalizedWing = (wing || "").toString().trim().toLowerCase();
@@ -358,6 +413,8 @@ export async function ensureTenantDirectoryLoaded() {
 
 export async function loadTenantDirectory(forceReload = false) {
     const previousSelectedGrn = selectedTenantForSidebar?.grnNumber;
+    hydrateTenantDirectoryFromCache(previousSelectedGrn);
+
     if (hasLoadedTenants && !forceReload) {
         applyTenantFilters();
         return;

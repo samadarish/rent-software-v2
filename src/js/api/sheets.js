@@ -7,7 +7,13 @@
 import { clauseSections } from "../constants.js";
 import { currentFlow } from "../state.js";
 import { showToast, updateConnectionIndicator } from "../utils/ui.js";
-import { callAppScript, ensureAppScriptUrl } from "./appscriptClient.js";
+import { debouncePromise } from "../utils/timing.js";
+import {
+    callAppScript,
+    ensureAppScriptUrl,
+    getCachedGetResponse,
+    invalidateCachedGets,
+} from "./appscriptClient.js";
 
 // Detect accidental double-loading so we can surface clearer diagnostics
 if (globalThis.__sheetsApiLoaded) {
@@ -16,6 +22,34 @@ if (globalThis.__sheetsApiLoaded) {
     );
 } else {
     globalThis.__sheetsApiLoaded = true;
+}
+
+function applyWingsToDropdown(wings = []) {
+    const sel = document.getElementById("wing");
+    if (sel) {
+        sel.innerHTML = '<option value="">Select wing</option>';
+        wings.forEach((w) => {
+            const opt = document.createElement("option");
+            opt.value = w;
+            opt.textContent = w;
+            sel.appendChild(opt);
+        });
+
+        const billingSel = document.getElementById("billingWingSelect");
+        if (billingSel) {
+            billingSel.innerHTML = sel.innerHTML;
+        }
+        document.dispatchEvent(new CustomEvent("wings:updated"));
+    }
+}
+
+function hydrateWingsFromCache(url) {
+    const cached = getCachedGetResponse({ url, action: "wings" });
+    if (cached?.wings?.length) {
+        applyWingsToDropdown(cached.wings);
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -31,27 +65,14 @@ export async function fetchWingsFromSheet() {
     });
     if (!url) return;
 
+    hydrateWingsFromCache(url);
+
     try {
         const data = await callAppScript({ url, action: "wings" });
         if (!Array.isArray(data.wings)) return;
         updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Internet online");
 
-        const sel = document.getElementById("wing");
-        if (sel) {
-            sel.innerHTML = '<option value="">Select wing</option>';
-            data.wings.forEach((w) => {
-                const opt = document.createElement("option");
-                opt.value = w;
-                opt.textContent = w;
-                sel.appendChild(opt);
-            });
-
-            const billingSel = document.getElementById("billingWingSelect");
-            if (billingSel) {
-                billingSel.innerHTML = sel.innerHTML;
-            }
-            document.dispatchEvent(new CustomEvent("wings:updated"));
-        }
+        applyWingsToDropdown(data.wings);
     } catch (e) {
         console.warn("Could not fetch wings", e);
         updateConnectionIndicator(navigator.onLine ? "online" : "offline", navigator.onLine ? "Wing sync failed" : "Offline");
@@ -84,6 +105,7 @@ export async function addWingToSheet(wing) {
         const msg = (data && data.message) || "Wing saved";
         showToast(msg, "success");
         updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Internet online");
+        invalidateCachedGets({ action: "wings" });
         return data;
     } catch (e) {
         console.error("addWingToSheet error", e);
@@ -117,6 +139,7 @@ export async function removeWingFromSheet(wing) {
             payload: { wing: cleaned },
         });
         showToast("Wing removed", "success");
+        invalidateCachedGets({ action: "wings" });
         return data;
     } catch (e) {
         console.error("removeWingFromSheet error", e);
@@ -158,7 +181,10 @@ export async function saveLandlordConfig(payload) {
             method: "POST",
             payload,
         });
-        if (data?.ok) showToast("Landlord saved", "success");
+        if (data?.ok) {
+            showToast("Landlord saved", "success");
+            invalidateCachedGets({ action: "landlords" });
+        }
         return data;
     } catch (e) {
         console.error("saveLandlordConfig error", e);
@@ -181,7 +207,10 @@ export async function deleteLandlordConfig(landlordId) {
             method: "POST",
             payload: { landlordId },
         });
-        if (data?.ok) showToast("Landlord removed", "success");
+        if (data?.ok) {
+            showToast("Landlord removed", "success");
+            invalidateCachedGets({ action: "landlords" });
+        }
         return data;
     } catch (e) {
         console.error("deleteLandlordConfig error", e);
@@ -275,7 +304,10 @@ export async function saveUnitConfig(payload) {
             method: "POST",
             payload,
         });
-        if (data?.ok) showToast("Unit saved", "success");
+        if (data?.ok) {
+            showToast("Unit saved", "success");
+            invalidateCachedGets({ action: "units" });
+        }
         return data;
     } catch (e) {
         console.error("saveUnitConfig error", e);
@@ -298,7 +330,10 @@ export async function deleteUnitConfig(unitId) {
             method: "POST",
             payload: { unitId },
         });
-        if (data?.ok) showToast("Unit removed", "success");
+        if (data?.ok) {
+            showToast("Unit removed", "success");
+            invalidateCachedGets({ action: "units" });
+        }
         return data;
     } catch (e) {
         console.error("deleteUnitConfig error", e);
@@ -358,6 +393,7 @@ export async function savePaymentRecord(payload) {
         });
         if (data?.ok) {
             showToast("Payment saved", "success");
+            invalidateCachedGets({ action: "payments" });
         }
         return data;
     } catch (e) {
@@ -366,6 +402,37 @@ export async function savePaymentRecord(payload) {
         return {};
     }
 }
+
+function applyClausesPayload(data) {
+    clauseSections.tenant.items = Array.isArray(data?.tenant) ? data.tenant : [];
+    clauseSections.landlord.items = Array.isArray(data?.landlord) ? data.landlord : [];
+    clauseSections.penalties.items = Array.isArray(data?.penalties) ? data.penalties : [];
+    clauseSections.misc.items = Array.isArray(data?.misc) ? data.misc : [];
+
+    normalizeClauseSections();
+    renderClausesUI();
+    setClausesDirty(false);
+}
+
+function hydrateClausesFromCache(url) {
+    const cached = getCachedGetResponse({ url, action: "clauses" });
+    if (!cached) return false;
+    applyClausesPayload(cached);
+    updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Cached clauses");
+    return true;
+}
+
+const saveClausesDebounced = debouncePromise(async ({ url, payload }) => {
+    const data = await callAppScript({
+        url,
+        action: "saveClauses",
+        method: "POST",
+        payload,
+        bypassCache: true,
+    });
+    invalidateCachedGets({ action: "clauses" });
+    return data;
+}, 400);
 
 /**
  * Loads clauses from Google Sheets and updates the UI
@@ -388,17 +455,11 @@ export async function loadClausesFromSheet(showNotification = false) {
         return;
     }
 
+    hydrateClausesFromCache(url);
+
     try {
         const data = await callAppScript({ url, action: "clauses" });
-
-        clauseSections.tenant.items = Array.isArray(data.tenant) ? data.tenant : [];
-        clauseSections.landlord.items = Array.isArray(data.landlord) ? data.landlord : [];
-        clauseSections.penalties.items = Array.isArray(data.penalties) ? data.penalties : [];
-        clauseSections.misc.items = Array.isArray(data.misc) ? data.misc : [];
-
-        normalizeClauseSections();
-        renderClausesUI();
-        setClausesDirty(false);
+        applyClausesPayload(data);
         updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Internet online");
 
         if (showNotification) {
@@ -440,12 +501,7 @@ export async function saveClausesToSheet() {
     };
 
     try {
-        const data = await callAppScript({
-            url,
-            action: "saveClauses",
-            method: "POST",
-            payload,
-        });
+        const data = await saveClausesDebounced({ url, payload });
         showToast(
             (data && data.message) || "Clauses saved to Google Sheets",
             "success"
@@ -490,6 +546,19 @@ export async function fetchTenantDirectory() {
  * Updates an existing tenant + family entries in Google Sheets
  * @param {object} payload - update payload (tenantId, tenancyId, grn, updates, familyMembers)
  */
+const updateTenantRecordDebounced = debouncePromise(async ({ url, payload }) => {
+    const data = await callAppScript({
+        url,
+        action: "updateTenant",
+        method: "POST",
+        payload,
+        bypassCache: true,
+    });
+    invalidateCachedGets({ action: "tenants" });
+    invalidateCachedGets({ action: "units" });
+    return data;
+}, 400);
+
 export async function updateTenantRecord(payload) {
     const url = ensureAppScriptUrl({
         promptForConfig: true,
@@ -501,12 +570,7 @@ export async function updateTenantRecord(payload) {
     if (!url) return;
 
     try {
-        const data = await callAppScript({
-            url,
-            action: "updateTenant",
-            method: "POST",
-            payload,
-        });
+        const data = await updateTenantRecordDebounced({ url, payload });
         showToast((data && data.message) || "Tenant updated", "success");
         updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Internet online");
         return data;
@@ -550,6 +614,8 @@ export async function saveTenantToDb() {
         const { refreshUnitOptions } = await import("../features/tenants/form.js");
         refreshUnitOptions(true);
         updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Internet online");
+        invalidateCachedGets({ action: "tenants" });
+        invalidateCachedGets({ action: "units" });
     } catch (e) {
         console.error("saveTenantToDb error", e);
         alert("Failed to call Apps Script. Check URL / deployment.");
