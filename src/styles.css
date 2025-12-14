@@ -1,3 +1,8 @@
+/*
+  Global styling for the tenant management UI.
+  Tightens base typography and provides light tweaks (toasts, layout spacing)
+  that layer on top of Tailwind utility classes used throughout the app.
+*/
 /* Make everything slightly smaller overall */
 html {
   font-size: 13px !important;
