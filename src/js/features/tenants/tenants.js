@@ -985,23 +985,69 @@ function resolveTenancyForRentHistory(target) {
     return context.tenancyId ? context : historyEntry || context;
 }
 
+function resolveFallbackTenancyContext(tenant) {
+    if (!tenant) return null;
+
+    const history = Array.isArray(tenant.tenancyHistory) ? tenant.tenancyHistory : [];
+    const activeHistory = history.find((h) => (h.status || "").toLowerCase() === "active");
+    const fallbackHistory = activeHistory || history[0];
+
+    if (fallbackHistory) {
+        return {
+            tenancyId: fallbackHistory.tenancyId || fallbackHistory.tenancy_id,
+            unitLabel:
+                fallbackHistory.unitLabel ||
+                tenant.unitLabel ||
+                tenant.unitNumber ||
+                tenant.templateData?.unit_number,
+            startDate: fallbackHistory.startDate,
+            endDate: fallbackHistory.endDate,
+            status: fallbackHistory.status,
+            currentRent:
+                fallbackHistory.currentRent ||
+                fallbackHistory.rentAmount ||
+                tenant.currentRent ||
+                tenant.rentAmount,
+        };
+    }
+
+    if (tenant.tenancyId || tenant.tenancy_id) {
+        return {
+            tenancyId: tenant.tenancyId || tenant.tenancy_id,
+            unitLabel: tenant.unitLabel || tenant.unitNumber || tenant.templateData?.unit_number,
+            startDate: tenant.tenancyCommencement,
+            endDate: tenant.tenancyEndDate,
+            status: tenant.status,
+            currentRent: tenant.currentRent || tenant.rentAmount,
+        };
+    }
+
+    return null;
+}
+
 function openRentHistoryModal(tenancy, tenant) {
     const modal = document.getElementById("rentHistoryModal");
-    if (!modal || !tenancy) return;
+    if (!modal) return;
 
     const baseTenant = tenant || selectedTenantForSidebar || {};
+    const resolvedTenancy = tenancy || resolveFallbackTenancyContext(baseTenant);
+    if (!resolvedTenancy) {
+        showToast("Select a tenancy first", "warning");
+        return;
+    }
     const title = document.getElementById("rentHistoryTitle");
     if (title) {
-        const unitLabel = tenancy.unitLabel || baseTenant.unitNumber || baseTenant.templateData?.unit_number || "Unit";
+        const unitLabel =
+            resolvedTenancy.unitLabel || baseTenant.unitNumber || baseTenant.templateData?.unit_number || "Unit";
         title.textContent = `Rent History — ${unitLabel}`;
     }
 
     activeRentHistoryContext = {
-        ...tenancy,
+        ...resolvedTenancy,
         templateData: baseTenant.templateData || {},
         rentAmount:
-            tenancy.currentRent ||
-            tenancy.rentAmount ||
+            resolvedTenancy.currentRent ||
+            resolvedTenancy.rentAmount ||
             baseTenant.currentRent ||
             baseTenant.rentAmount ||
             baseTenant.templateData?.rent_amount,
@@ -1013,7 +1059,7 @@ function openRentHistoryModal(tenancy, tenant) {
         activeRentHistoryContext.currentRent ||
         "";
     renderRentHistory(baseRent);
-    loadRentHistoryForTenancy(tenancy?.tenancyId, baseRent);
+    loadRentHistoryForTenancy(resolvedTenancy?.tenancyId, baseRent);
     showModal(modal);
 }
 
