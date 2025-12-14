@@ -864,7 +864,7 @@
           </div>
         </div>
 
-        <div class="grid md:grid-cols-3 gap-2.5 tenant-core-fields tenancy-section">
+        <div class="grid md:grid-cols-4 gap-2.5 tenant-core-fields tenancy-section">
           <div>
             <label class="text-[11px] font-semibold block mb-1">Agreement Date</label>
             <input id="tenantModalAgreementDate" type="date" class="w-full border rounded px-2 py-2 text-[12px]"
@@ -873,6 +873,11 @@
           <div>
             <label class="text-[11px] font-semibold block mb-1">Tenancy Commencement</label>
             <input id="tenantModalCommencement" type="date" class="w-full border rounded px-2 py-2 text-[12px]"
+              disabled />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold block mb-1">Tenancy End Date</label>
+            <input id="tenantModalEndDate" type="date" class="w-full border rounded px-2 py-2 text-[12px]"
               disabled />
           </div>
           <div>
@@ -895,7 +900,7 @@
             <input id="tenantModalGracePeriod" type="number" class="w-full border rounded px-2 py-2 text-[12px]"
               disabled />
           </div>
-          <div class="md:col-span-3 grid md:grid-cols-3 gap-2">
+          <div class="md:col-span-4 grid md:grid-cols-3 gap-2">
             <div>
               <label class="text-[11px] font-semibold block mb-1">Landlord</label>
               <select id="tenantModalLandlord" class="w-full border rounded px-2 py-2 text-[12px] bg-white" disabled>
@@ -913,7 +918,27 @@
                 disabled />
             </div>
           </div>
-          <div class="md:col-span-3">
+          <div class="md:col-span-4 grid md:grid-cols-3 gap-2">
+            <div>
+              <label class="text-[11px] font-semibold block mb-1">Rent revision unit</label>
+              <select id="tenantModalRentRevisionUnit" class="w-full border rounded px-2 py-2 text-[12px] bg-white" disabled>
+                <option value="">Select</option>
+                <option value="MONTH">Months</option>
+                <option value="YEAR">Years</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold block mb-1">Rent revision number</label>
+              <input id="tenantModalRentRevisionNumber" type="number" class="w-full border rounded px-2 py-2 text-[12px]"
+                placeholder="e.g., 12" disabled />
+            </div>
+          </div>
+          <div class="md:col-span-4">
+            <label class="text-[11px] font-semibold block mb-1">Pet policy / notes</label>
+            <textarea id="tenantModalPetPolicy" rows="2" class="w-full border rounded px-2 py-2 text-[12px] resize-y" disabled
+              placeholder="Allowed pets, conditions, or other notes"></textarea>
+          </div>
+          <div class="md:col-span-4">
             <label class="text-[11px] font-semibold block mb-1">Vacate Reason</label>
             <input id="tenantModalVacateReason" type="text" class="w-full border rounded px-2 py-2 text-[12px]"
               disabled />
