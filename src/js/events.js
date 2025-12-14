@@ -34,6 +34,9 @@ import { hideModal, showModal } from "./utils/ui.js";
 let unitConfigCache = [];
 let landlordConfigCache = [];
 
+/**
+ * Copies the wing dropdown options into the unit configuration modal selectors.
+ */
 function syncUnitConfigWingOptions() {
     const wingSource = document.getElementById("wing");
     const unitWing = document.getElementById("unitConfigWing");
@@ -41,6 +44,10 @@ function syncUnitConfigWingOptions() {
     unitWing.innerHTML = wingSource.innerHTML;
 }
 
+/**
+ * Populates the unit configuration modal list and dropdown from the provided units array.
+ * @param {Array} units - Units fetched from Google Sheets.
+ */
 function syncUnitConfigList(units) {
     unitConfigCache = Array.isArray(units) ? units : [];
     const select = document.getElementById("unitConfigExisting");
@@ -89,6 +96,10 @@ function syncUnitConfigList(units) {
     }
 }
 
+/**
+ * Updates the landlord config dropdown with the latest saved landlords.
+ * @param {Array} landlords - Landlord records retrieved from Sheets.
+ */
 function syncLandlordConfigList(landlords) {
     landlordConfigCache = Array.isArray(landlords) ? landlords : [];
     const select = document.getElementById("landlordExistingSelect");
@@ -105,6 +116,9 @@ function syncLandlordConfigList(landlords) {
     }
 }
 
+/**
+ * Renders the list of wings as removable pills next to the wing selector.
+ */
 function syncWingList() {
     const list = document.getElementById("wingList");
     const wingSelect = document.getElementById("wing");
@@ -123,11 +137,18 @@ function syncWingList() {
     });
 }
 
+/**
+ * Generates a pseudo GRN value when the user indicates they have none.
+ * @returns {string} A random NoGRN value.
+ */
 function generateNoGrnValue() {
     const rand = Math.floor(10000 + Math.random() * 90000);
     return `NoGRN${rand}`;
 }
 
+/**
+ * Toggles the GRN input between manual and auto-generated modes.
+ */
 function toggleNoGrnMode() {
     const input = document.getElementById("grn_number");
     const btn = document.getElementById("grnNoBtn");

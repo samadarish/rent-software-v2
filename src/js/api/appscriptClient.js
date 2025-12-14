@@ -8,6 +8,11 @@ import { showModal } from "../utils/ui.js";
 
 const inflightGets = new Map();
 
+/**
+ * Builds a deterministic cache key for GET calls so repeated requests can be deduped.
+ * @param {{ url: string, action: string, params?: Record<string,string> }} config
+ * @returns {string} cache identifier combining URL, action, and sorted params
+ */
 function buildCacheKey({ url, action, params }) {
     const sortedEntries = Object.entries(params || {})
         .filter(([, value]) => value !== undefined && value !== null)
@@ -18,11 +23,19 @@ function buildCacheKey({ url, action, params }) {
     return `${url}|${action}|${paramString}`;
 }
 
+/**
+ * Opens the Apps Script URL configuration modal when the user needs to set it up.
+ */
 function showConfigModal() {
     const modal = document.getElementById("appscriptModal");
     if (modal) showModal(modal);
 }
 
+/**
+ * Returns the configured Apps Script URL, optionally triggering callbacks when missing.
+ * @param {{ onMissing?: Function, promptForConfig?: boolean }} options
+ * @returns {string} Stored Apps Script URL or empty string.
+ */
 export function ensureAppScriptUrl({ onMissing, promptForConfig = false } = {}) {
     const url = getAppScriptUrl();
     if (!url) {
@@ -32,6 +45,12 @@ export function ensureAppScriptUrl({ onMissing, promptForConfig = false } = {}) 
     return url;
 }
 
+/**
+ * Executes a JSON-based call to the Apps Script backend.
+ * Dedupes GET requests, handles payload encoding, and returns parsed JSON.
+ * @param {{ url: string, action: string, method?: string, params?: object, payload?: any }} options
+ * @returns {Promise<any>} Parsed JSON response.
+ */
 export async function callAppScript({ url, action, method = "GET", params = {}, payload }) {
     if (!url) return null;
 

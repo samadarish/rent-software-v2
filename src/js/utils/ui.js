@@ -43,6 +43,11 @@ export function showToast(message, type = "success") {
     }, 2500);
 }
 
+/**
+ * Updates the online/offline badge in the header with the latest state and helper text.
+ * @param {"checking" | "online" | "offline"} status - Connectivity state.
+ * @param {string} message - Optional label to display instead of default status text.
+ */
 export function updateConnectionIndicator(status = "checking", message = "") {
     const indicator = document.getElementById("connectionIndicator");
     if (!indicator) return;
@@ -86,6 +91,12 @@ const DEFAULT_ANIM_MS = 200;
  * @param {boolean} show
  * @param {{ baseClass?: string, activeClass?: string, hidingClass?: string, hiddenClass?: string, duration?: number }} options
  */
+/**
+ * Smoothly toggles visibility for a given element using utility classes.
+ * @param {HTMLElement | null} element - Element being shown/hidden.
+ * @param {boolean} show - Whether the element should be visible.
+ * @param {{ baseClass?: string, activeClass?: string, hidingClass?: string, hiddenClass?: string, duration?: number }} options
+ */
 export function smoothToggle(element, show, options = {}) {
     if (!element) return;
 
@@ -121,10 +132,18 @@ const modalAnimationOptions = {
     duration: 220,
 };
 
+/**
+ * Displays a modal overlay with a fade animation.
+ * @param {HTMLElement | null} modal
+ */
 export function showModal(modal) {
     smoothToggle(modal, true, modalAnimationOptions);
 }
 
+/**
+ * Hides a modal overlay with a fade animation.
+ * @param {HTMLElement | null} modal
+ */
 export function hideModal(modal) {
     smoothToggle(modal, false, modalAnimationOptions);
 }

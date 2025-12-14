@@ -17,6 +17,11 @@ export function getAppScriptUrl() {
     return (localStorage.getItem(STORAGE_KEYS.APP_SCRIPT_URL) || "").trim();
 }
 
+/**
+ * Validates and normalizes an Apps Script web app URL.
+ * @param {string} rawUrl - Raw URL text from the settings field.
+ * @returns {URL | null} Parsed URL object when valid; otherwise null.
+ */
 function parseAppScriptUrl(rawUrl) {
     try {
         const parsed = new URL(rawUrl);
@@ -84,6 +89,10 @@ export function ensureAppScriptConfigured() {
     }
 }
 
+/**
+ * Reads landlord defaults from local storage and returns an object shape.
+ * @returns {{ name?: string, aadhaar?: string, address?: string }} persisted defaults
+ */
 export function getLandlordDefaults() {
     try {
         const raw = localStorage.getItem(STORAGE_KEYS.LANDLORD_DEFAULTS);
@@ -94,6 +103,10 @@ export function getLandlordDefaults() {
     }
 }
 
+/**
+ * Prefills landlord fields in the agreement form based on saved defaults.
+ * @param {boolean} force - When true, overwrite existing values.
+ */
 export function applyLandlordDefaultsToForm(force = false) {
     const defaults = getLandlordDefaults();
     if (!defaults) return;
@@ -111,6 +124,9 @@ export function applyLandlordDefaultsToForm(force = false) {
     setValue("landlord_address", defaults.address || "");
 }
 
+/**
+ * Opens the landlord configuration modal and hydrates inputs with stored defaults.
+ */
 export function openLandlordConfigModal() {
     const modal = document.getElementById("landlordConfigModal");
     if (!modal) return;
@@ -131,6 +147,9 @@ export function openLandlordConfigModal() {
     showModal(modal);
 }
 
+/**
+ * Persists landlord defaults to local storage and reapplies them to the form.
+ */
 export function saveLandlordDefaults() {
     const name = document.getElementById("landlordDefaultName")?.value.trim() || "";
     const aadhaar = document.getElementById("landlordDefaultAadhaar")?.value.trim() || "";
@@ -149,6 +168,9 @@ export function saveLandlordDefaults() {
     showToast("Landlord defaults saved", "success");
 }
 
+/**
+ * Adds a wing from within the landlord config modal and refreshes the wing list.
+ */
 export async function saveWingFromLandlordConfig() {
     const wingInput = document.getElementById("landlordDefaultWing");
     if (!wingInput) return;

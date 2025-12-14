@@ -23,6 +23,11 @@ const statusClassMap = {
     inactive: "bg-rose-100 text-rose-700 border-rose-200",
 };
 
+/**
+ * Returns all active tenants for a given wing, ensuring duplicates are filtered out.
+ * @param {string} wing - Wing identifier from the dropdown.
+ * @returns {Array} Filtered tenant list.
+ */
 export function getActiveTenantsForWing(wing) {
     const normalizedWing = (wing || "").toString().trim().toLowerCase();
     if (!normalizedWing) return [];
@@ -41,10 +46,18 @@ export function getActiveTenantsForWing(wing) {
     });
 }
 
+/**
+ * Returns a shallow copy of the current tenant cache for read-only usage.
+ */
 export function getTenantDirectorySnapshot() {
     return [...tenantCache];
 }
 
+/**
+ * Formats the rent amount for display in the tenant list.
+ * @param {number|string} amount
+ * @returns {string}
+ */
 function formatRent(amount) {
     if (!amount) return "-";
     const numeric = parseInt(amount, 10);
@@ -52,12 +65,22 @@ function formatRent(amount) {
     return `₹${numeric.toLocaleString("en-IN")}`;
 }
 
+/**
+ * Combines wing and floor data into a concise badge label for UI chips.
+ * @param {object} tenant
+ * @returns {string}
+ */
 function formatWingFloor(tenant) {
     const wing = tenant.wing || "-";
     const floor = tenant.floor || "-";
     return `${wing} / ${floor}`;
 }
 
+/**
+ * Converts date inputs into the browser-friendly YYYY-MM-DD format.
+ * @param {string|Date} raw
+ * @returns {string}
+ */
 function formatDateForInput(raw) {
     if (!raw) return "";
     const d = new Date(raw);
@@ -68,11 +91,21 @@ function formatDateForInput(raw) {
     return `${year}-${month}-${day}`;
 }
 
+/**
+ * Ensures a falsy-safe, formatted date string for any provided value.
+ * @param {string|Date} raw
+ * @returns {string}
+ */
 function normalizeDateInputValue(raw) {
     const formatted = formatDateForInput(raw);
     return formatted || "";
 }
 
+/**
+ * Computes a unique identity key for a tenant entry to collapse duplicates.
+ * @param {object} raw
+ * @returns {string}
+ */
 function getTenantIdentityKey(raw) {
     const candidates = [
         raw?.tenancyId,
@@ -93,12 +126,22 @@ function getTenantIdentityKey(raw) {
     return "";
 }
 
+/**
+ * Formats tenancy end dates for table display.
+ * @param {string} raw
+ * @returns {string}
+ */
 function formatTenancyEndDate(raw) {
     if (!raw) return "-";
     const formatted = formatDateForInput(raw);
     return formatted || raw;
 }
 
+/**
+ * Clones option elements from one select to another while preserving selection.
+ * @param {string} sourceId
+ * @param {string} targetId
+ */
 function cloneSelectOptions(sourceId, targetId) {
     const source = document.getElementById(sourceId);
     const target = document.getElementById(targetId);
@@ -117,6 +160,9 @@ function cloneSelectOptions(sourceId, targetId) {
     }
 }
 
+/**
+ * Refreshes all tenant modal picklists so they match the primary form values.
+ */
 function syncTenantModalPicklists() {
     cloneSelectOptions("wing", "tenantModalWing");
     cloneSelectOptions("payable_date", "tenantModalPayable");
@@ -127,6 +173,11 @@ function syncTenantModalPicklists() {
     cloneSelectOptions("landlord_selector", "tenantModalLandlord");
 }
 
+/**
+ * Builds the list of available units in the tenant modal while respecting occupancy.
+ * @param {string} selectedUnitId
+ * @param {string} tenancyId
+ */
 function populateUnitDropdown(selectedUnitId, tenancyId) {
     const select = document.getElementById("tenantModalUnit");
     if (!select) return;
@@ -156,6 +207,10 @@ function populateUnitDropdown(selectedUnitId, tenancyId) {
     }
 }
 
+/**
+ * Applies unit attributes from the cache to the modal fields.
+ * @param {string} unitId
+ */
 function applyUnitSelectionToModal(unitId) {
     if (!unitId) return;
     const unit = unitCache.find((u) => u.unit_id === unitId);
@@ -172,6 +227,10 @@ function applyUnitSelectionToModal(unitId) {
     if (meter) meter.value = unit.meter_number || "";
 }
 
+/**
+ * Syncs landlord selection into the modal fields for Aadhaar and address.
+ * @param {string} landlordId
+ */
 function applyLandlordSelectionToModal(landlordId) {
     const landlord = landlordCache.find((l) => l.landlord_id === landlordId);
     const select = document.getElementById("tenantModalLandlord");
@@ -184,12 +243,23 @@ function applyLandlordSelectionToModal(landlordId) {
     if (address) address.value = landlord?.address || "";
 }
 
+/**
+ * Builds a concise label for a unit for dropdown and table usage.
+ * @param {object} unit
+ * @returns {string}
+ */
 function buildUnitLabel(unit) {
     if (!unit) return "";
     const parts = [unit.wing, unit.unit_number].filter(Boolean);
     return parts.join(" - ") || unit.unit_id || "";
 }
 
+/**
+ * Updates cached unit occupancy to keep dropdowns in sync without refetching.
+ * @param {string} unitId
+ * @param {boolean} occupied
+ * @param {string} tenancyId
+ */
 function markUnitOccupancy(unitId, occupied, tenancyId) {
     if (!unitId) return;
     const target = unitCache.find((u) => u.unit_id === unitId);
@@ -199,12 +269,21 @@ function markUnitOccupancy(unitId, occupied, tenancyId) {
     }
 }
 
+/**
+ * Normalizes day-of-month values by stripping non-digits for storage/display.
+ * @param {string|number} val
+ * @returns {string}
+ */
 function normalizeDayValue(val) {
     if (!val) return "";
     const match = String(val).match(/\d+/);
     return match ? match[0] : String(val);
 }
 
+/**
+ * Updates the badge within the tenant modal to reflect active/inactive status.
+ * @param {boolean} active
+ */
 function setTenantModalStatusPill(active) {
     const pill = document.getElementById("tenantModalStatusPill");
     if (!pill) return;
@@ -214,6 +293,10 @@ function setTenantModalStatusPill(active) {
     }`;
 }
 
+/**
+ * Shows or hides tenant list loading states while data is fetched.
+ * @param {boolean} isLoading
+ */
 function setTenantListLoading(isLoading) {
     const table = document.getElementById("tenantTableBody");
     const emptyState = document.getElementById("tenantListEmpty");
@@ -224,10 +307,20 @@ function setTenantListLoading(isLoading) {
     if (emptyState && isLoading) emptyState.classList.add("hidden");
 }
 
+/**
+ * Converts a boolean active flag into user-facing status text.
+ * @param {boolean} active
+ * @returns {string}
+ */
 function getStatusLabel(active) {
     return active ? "Active" : "Inactive";
 }
 
+/**
+ * Builds a status pill element for the tenant list based on active state.
+ * @param {boolean} active
+ * @returns {HTMLSpanElement}
+ */
 function renderStatusPill(active) {
     const span = document.createElement("span");
     span.className = `text-[10px] px-2 py-1 rounded-full border font-semibold ${active ? statusClassMap.active : statusClassMap.inactive}`;
@@ -235,6 +328,10 @@ function renderStatusPill(active) {
     return span;
 }
 
+/**
+ * Renders tenant rows into the directory table and binds actions.
+ * @param {Array} rows
+ */
 function renderTenantRows(rows) {
     const tbody = document.getElementById("tenantTableBody");
     const emptyState = document.getElementById("tenantListEmpty");
@@ -314,6 +411,9 @@ function renderTenantRows(rows) {
     highlightSelectedRow();
 }
 
+/**
+ * Applies search and status filters to the cached tenant list before rendering.
+ */
 function applyTenantFilters() {
     let filtered = [...tenantCache];
 
@@ -339,6 +439,9 @@ function applyTenantFilters() {
     if (totalLabel) totalLabel.textContent = `${filtered.length} shown / ${tenantCache.length} total`;
 }
 
+/**
+ * Updates the active/inactive filter buttons to reflect the selected filter.
+ */
 function syncStatusButtons() {
     document.querySelectorAll("[data-tenant-status-filter]").forEach((btn) => {
         const val = btn.getAttribute("data-tenant-status-filter");
@@ -351,11 +454,18 @@ function syncStatusButtons() {
     });
 }
 
+/**
+ * Ensures tenants are loaded exactly once; subsequent calls are no-ops.
+ */
 export async function ensureTenantDirectoryLoaded() {
     if (hasLoadedTenants) return;
     await loadTenantDirectory();
 }
 
+/**
+ * Fetches tenant, unit, and landlord data then renders the directory.
+ * @param {boolean} forceReload - When true, bypasses the cache.
+ */
 export async function loadTenantDirectory(forceReload = false) {
     const previousSelectedGrn = selectedTenantForSidebar?.grnNumber;
     if (hasLoadedTenants && !forceReload) {
