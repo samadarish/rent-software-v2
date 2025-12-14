@@ -876,6 +876,12 @@ function updateSidebarSnapshot() {
             history.forEach((h) => {
                 const card = document.createElement("div");
                 card.className = "border rounded-lg p-2 bg-slate-50";
+                card.dataset.tenancyId = h.tenancyId || h.tenancy_id || "";
+                card.dataset.unitLabel = h.unitLabel || "";
+                card.dataset.startDate = h.startDate || "";
+                card.dataset.endDate = h.endDate || "";
+                card.dataset.status = h.status || "";
+                card.dataset.currentRent = h.currentRent || h.rentAmount || "";
                 const statusPill = document.createElement("span");
                 statusPill.className = `text-[9px] px-2 py-0.5 rounded-full border ${
                     (h.status || "").toLowerCase() === "active" ? statusClassMap.active : statusClassMap.inactive
@@ -1555,6 +1561,28 @@ export function initTenantDirectory() {
     const vacateSaveBtn = document.getElementById("vacateSaveBtn");
     if (vacateSaveBtn) {
         vacateSaveBtn.addEventListener("click", saveVacateModal);
+    }
+
+    const sidebarHistory = document.getElementById("sidebarUnitHistory");
+    if (sidebarHistory) {
+        sidebarHistory.addEventListener("click", (event) => {
+            const btn = event.target.closest(".rent-history-btn");
+            if (!btn) return;
+            const card = btn.closest("[data-tenancy-id]");
+            const tenancy = card
+                ? {
+                      tenancyId: card.dataset.tenancyId,
+                      unitLabel: card.dataset.unitLabel,
+                      startDate: card.dataset.startDate,
+                      endDate: card.dataset.endDate,
+                      status: card.dataset.status,
+                      currentRent: card.dataset.currentRent,
+                  }
+                : null;
+            if (tenancy) {
+                openRentHistoryModal(tenancy, selectedTenantForSidebar);
+            }
+        });
     }
 
     syncStatusButtons();
