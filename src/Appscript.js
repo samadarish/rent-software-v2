@@ -611,6 +611,22 @@ function buildTenantDirectory_() {
   const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
   const families = readTable_(FAMILY_SHEET, FAMILY_HEADERS);
   const landlords = readTable_(LANDLORDS_SHEET, LANDLORD_HEADERS);
+  const revisions = readTable_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS)
+    .map((r) => ({
+      ...r,
+      effective_month: normalizeMonthKey_(r.effective_month),
+      rent_amount: Number(r.rent_amount) || 0,
+    }))
+    .sort((a, b) => (a.effective_month || '').localeCompare(b.effective_month || '') * -1);
+
+  const revisionCache = revisions.reduce((m, r) => {
+    if (!m[r.tenancy_id]) m[r.tenancy_id] = [];
+    m[r.tenancy_id].push(r);
+    return m;
+  }, {});
+
+  const today = new Date();
+  const currentMonthKey = `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, '0')}`;
 
   const landlordById = landlords.reduce((m, l) => {
     m[l.landlord_id] = l;
@@ -656,7 +672,11 @@ function buildTenantDirectory_() {
         endDate: t.end_date || '',
         status: t.status || '',
         grnNumber: t.grn_number || tenant.grn_number || '',
+        currentRent:
+          getEffectiveRentForMonth_(t.tenancy_id, currentMonthKey, revisionCache) ?? Number(t.rent_base) || 0,
       }));
+    const baseRent = Number(tenancy.rent_base) || 0;
+    const currentRent = getEffectiveRentForMonth_(tenancy.tenancy_id, currentMonthKey, revisionCache);
     return {
       tenantId: tenant.tenant_id,
       tenancyId: tenancy.tenancy_id,
@@ -678,6 +698,7 @@ function buildTenantDirectory_() {
       landlordAddress: landlord.address || '',
       unitOccupied: normalizeBoolean_(unit.is_occupied),
       rentAmount: tenancy.rent_base || '',
+      currentRent: (currentRent === null || typeof currentRent === 'undefined') ? baseRent : currentRent,
       payableDate: tenancy.rent_payable_day || '',
       securityDeposit: tenancy.security_deposit || '',
       rentIncrease: tenancy.rent_revision_number || '',

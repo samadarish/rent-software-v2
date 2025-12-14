@@ -17,11 +17,12 @@ let currentStatusFilter = "active"; // all | active | inactive
 let currentSearch = "";
 let activeTenantForModal = null;
 let activeRentRevisions = [];
+let activeRentHistoryContext = null;
 let selectedTenantForSidebar = null;
 let pendingVacateTenant = null;
 let pendingNewTenancyTenant = null;
 let tenantModalEditable = false;
-let tenantModalMode = "tenant"; // tenant | tenancy | rent
+let tenantModalMode = "tenant"; // tenant | tenancy
 
 const statusClassMap = {
     active: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -218,9 +219,9 @@ function formatTenancyEndDate(raw) {
 }
 
 function renderRentHistory(baseRent) {
-    const tbody = document.getElementById("tenantRentHistoryTableBody");
-    const empty = document.getElementById("tenantRentHistoryEmpty");
-    const currentRentEl = document.getElementById("tenantCurrentRentValue");
+    const tbody = document.getElementById("rentHistoryTableBody");
+    const empty = document.getElementById("rentHistoryEmpty");
+    const currentRentEl = document.getElementById("rentHistoryCurrentValue");
     if (!tbody || !empty) return;
 
     tbody.innerHTML = "";
@@ -255,15 +256,13 @@ function toggleTenantModalSections(mode) {
     tenantModalMode = mode;
     const tenantSections = document.querySelectorAll(".tenant-section");
     const tenancySections = document.querySelectorAll(".tenancy-section");
-    const rentSections = document.querySelectorAll(".rent-history-section");
 
     tenantSections.forEach((el) => el.classList.toggle("hidden", mode !== "tenant"));
     tenancySections.forEach((el) => el.classList.toggle("hidden", mode !== "tenancy"));
-    rentSections.forEach((el) => el.classList.toggle("hidden", mode !== "rent"));
 }
 
 async function loadRentHistoryForTenancy(tenancyId, baseRent) {
-    const loader = document.getElementById("tenantRentHistoryLoader");
+    const loader = document.getElementById("rentHistoryLoader");
     if (loader) loader.classList.remove("hidden");
     activeRentRevisions = [];
     renderRentHistory(baseRent);
@@ -282,16 +281,16 @@ async function loadRentHistoryForTenancy(tenancyId, baseRent) {
 }
 
 async function handleRentRevisionSave() {
-    if (!activeTenantForModal) return;
-    const tenancyId = activeTenantForModal.tenancyId || activeTenantForModal.templateData?.tenancy_id;
+    if (!activeRentHistoryContext) return;
+    const tenancyId = activeRentHistoryContext.tenancyId || activeRentHistoryContext.templateData?.tenancy_id;
     if (!tenancyId) {
         showToast("Save tenancy first to add revisions", "warning");
         return;
     }
 
-    const monthInput = document.getElementById("tenantRentRevisionMonth");
-    const amountInput = document.getElementById("tenantRentRevisionAmount");
-    const noteInput = document.getElementById("tenantRentRevisionNote");
+    const monthInput = document.getElementById("rentRevisionMonth");
+    const amountInput = document.getElementById("rentRevisionAmount");
+    const noteInput = document.getElementById("rentRevisionNote");
 
     const effectiveMonth = normalizeMonthKey(monthInput?.value || "");
     const rentAmount = Number(amountInput?.value || 0);
@@ -306,13 +305,18 @@ async function handleRentRevisionSave() {
         return;
     }
 
-    const saveBtn = document.getElementById("tenantRentRevisionSaveBtn");
+    const saveBtn = document.getElementById("rentRevisionSaveBtn");
     if (saveBtn) saveBtn.disabled = true;
     try {
         const res = await saveRentRevision({ tenancyId, effectiveMonth, rentAmount, note });
         if (res?.ok) {
             activeRentRevisions = Array.isArray(res.revisions) ? res.revisions : activeRentRevisions;
-            renderRentHistory(activeTenantForModal.rentAmount || activeTenantForModal.templateData?.rent_amount || "");
+            const baseRent =
+                activeRentHistoryContext.rentAmount ||
+                activeRentHistoryContext.templateData?.rent_amount ||
+                activeRentHistoryContext.currentRent ||
+                "";
+            renderRentHistory(baseRent);
             if (monthInput) monthInput.value = "";
             if (amountInput) amountInput.value = "";
             if (noteInput) noteInput.value = "";
@@ -796,14 +800,6 @@ function setTenantModalEditable(enabled) {
         saveBtn.classList.toggle("opacity-60", !enabled);
     }
 
-    const rentHistoryFields = document.querySelectorAll(
-        "#tenantRentRevisionMonth, #tenantRentRevisionAmount, #tenantRentRevisionNote, #tenantRentRevisionSaveBtn"
-    );
-    rentHistoryFields.forEach((el) => {
-        el.disabled = !enabled;
-        el.classList.toggle("opacity-50", !enabled);
-    });
-
     document.querySelectorAll(".tenant-modal-edit-toggle").forEach((btn) => {
         btn.textContent = enabled ? "Editing enabled" : "Edit details";
     });
@@ -893,7 +889,9 @@ function updateSidebarSnapshot() {
                         <div>
                             <p class="font-semibold text-[12px]">${h.unitLabel || "Unit"}</p>
                             <p class="text-[10px] text-slate-500">${dates}</p>
-                            <p class="text-[10px] text-slate-500">Current rent: ${formatRent(h.currentRent || t.rentAmount)}</p>
+                            <p class="text-[10px] text-slate-500">Current rent: ${formatRent(
+                                h.currentRent ?? t.currentRent ?? t.rentAmount
+                            )}</p>
                         </div>
                         <div class="flex flex-col gap-1 items-end">
                             <span class="self-end">${statusPill.outerHTML}</span>
@@ -946,14 +944,37 @@ function openTenancyModal(tenancy, tenant) {
 }
 
 function openRentHistoryModal(tenancy, tenant) {
-    const modal = document.getElementById("tenantDetailModal");
-    activeTenantForModal = { ...(tenant || selectedTenantForSidebar), tenancyId: tenancy?.tenancyId };
-    if (!modal) return;
-    toggleTenantModalSections("rent");
-    renderRentHistory(tenancy?.currentRent || activeTenantForModal.rentAmount || "");
-    loadRentHistoryForTenancy(tenancy?.tenancyId, tenancy?.currentRent || activeTenantForModal.rentAmount || "");
-    setTenantModalEditable(true);
+    const modal = document.getElementById("rentHistoryModal");
+    if (!modal || !tenancy) return;
+
+    const baseTenant = tenant || selectedTenantForSidebar || {};
+    const title = document.getElementById("rentHistoryTitle");
+    if (title) {
+        const unitLabel = tenancy.unitLabel || baseTenant.unitNumber || baseTenant.templateData?.unit_number || "Unit";
+        title.textContent = `Rent History — ${unitLabel}`;
+    }
+
+    activeRentHistoryContext = {
+        ...tenancy,
+        templateData: baseTenant.templateData || {},
+        rentAmount: tenancy.rentAmount || baseTenant.rentAmount,
+    };
+    activeRentRevisions = [];
+    const baseRent =
+        activeRentHistoryContext.rentAmount ||
+        activeRentHistoryContext.templateData?.rent_amount ||
+        activeRentHistoryContext.currentRent ||
+        "";
+    renderRentHistory(baseRent);
+    loadRentHistoryForTenancy(tenancy?.tenancyId, baseRent);
     showModal(modal);
+}
+
+function closeRentHistoryModal() {
+    const modal = document.getElementById("rentHistoryModal");
+    if (modal) hideModal(modal);
+    activeRentHistoryContext = null;
+    activeRentRevisions = [];
 }
 
 function startNewTenancyFromSidebar() {
@@ -1518,10 +1539,12 @@ export function initTenantDirectory() {
         saveBtn.addEventListener("click", saveTenantModal);
     }
 
-    const rentRevisionSaveBtn = document.getElementById("tenantRentRevisionSaveBtn");
+    const rentRevisionSaveBtn = document.getElementById("rentRevisionSaveBtn");
     if (rentRevisionSaveBtn) {
         rentRevisionSaveBtn.addEventListener("click", handleRentRevisionSave);
     }
+
+    document.querySelectorAll(".rent-history-close").forEach((btn) => btn.addEventListener("click", closeRentHistoryModal));
 
     const insightsCloseBtns = document.querySelectorAll(".tenant-insights-close");
     insightsCloseBtns.forEach((btn) => btn.addEventListener("click", closeTenantInsightsModal));
