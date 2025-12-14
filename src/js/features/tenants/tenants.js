@@ -903,8 +903,8 @@ function updateSidebarSnapshot() {
                         <div class="flex flex-col gap-1 items-end">
                             <span class="self-end">${statusPill.outerHTML}</span>
                             <div class="flex gap-1">
-                                <button class="px-2 py-1 rounded text-[10px] bg-white border border-slate-200 font-semibold tenancy-edit-btn">Edit tenancy</button>
-                                <button class="px-2 py-1 rounded text-[10px] bg-white border border-indigo-200 text-indigo-700 font-semibold rent-history-btn">Rent history</button>
+                                <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-slate-200 font-semibold tenancy-edit-btn">Edit tenancy</button>
+                                <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-indigo-200 text-indigo-700 font-semibold rent-history-btn">Rent history</button>
                             </div>
                         </div>
                     </div>
@@ -1177,6 +1177,7 @@ function populateTenantModal(tenant, mode = "tenant") {
         tenantModalOccupation: tenant.tenantOccupation || templateData.Tenant_occupation || "",
         tenantModalAddress: tenant.tenantPermanentAddress || templateData.Tenant_Permanent_Address || "",
         tenantModalAadhaar: tenant.tenantAadhaar || templateData.tenant_Aadhar || "",
+        tenantModalGrn: tenant.grnNumber || templateData["GRN number"] || "",
         tenantModalUnit: tenant.unitId || templateData.unit_id || "",
         tenantModalWing: tenant.wing || templateData.wing || "",
         tenantModalUnitNumber: tenant.unitNumber || templateData.unit_number || templateData.unitNumber || "",
@@ -1276,6 +1277,7 @@ async function saveTenantModal() {
         tenantOccupation: document.getElementById("tenantModalOccupation")?.value || "",
         tenantPermanentAddress: document.getElementById("tenantModalAddress")?.value || "",
         tenantAadhaar: document.getElementById("tenantModalAadhaar")?.value || "",
+        grnNumber: document.getElementById("tenantModalGrn")?.value.trim() || "",
         unitId: document.getElementById("tenantModalUnit")?.value || "",
         wing: document.getElementById("tenantModalWing")?.value.trim() || "",
         floor: document.getElementById("tenantModalFloor")?.value.trim() || "",
@@ -1306,8 +1308,8 @@ async function saveTenantModal() {
         rentRevisionNumber: document.getElementById("tenantModalRentRevisionNumber")?.value || "",
         petPolicy: document.getElementById("tenantModalPetPolicy")?.value || "",
     };
-
     const existingGrn = activeTenantForModal.grnNumber || activeTenantForModal.templateData?.["GRN number"] || "";
+    const submittedGrn = updates.grnNumber || existingGrn;
 
     const familyMembers = collectFamilyRows();
 
@@ -1320,7 +1322,7 @@ async function saveTenantModal() {
             forceNewTenancyId: activeTenantForModal.tenancyId,
             keepPreviousActive: !!activeTenantForModal.keepPreviousActive,
             unitId: updates.unitId || activeTenantForModal.unitId,
-            grn: existingGrn,
+            grn: submittedGrn,
             templateData: activeTenantForModal.templateData,
             updates,
             familyMembers,
@@ -1335,7 +1337,7 @@ async function saveTenantModal() {
             landlordName: landlord.name || activeTenantForModal.landlordName,
             landlordAadhaar: landlord.aadhaar || activeTenantForModal.landlordAadhaar,
             landlordAddress: landlord.address || activeTenantForModal.landlordAddress,
-            grnNumber: existingGrn,
+            grnNumber: submittedGrn,
             activeTenant:
                 activeTenantForModal.isNewTenancy || typeof updates.activeTenant !== "undefined"
                     ? updates.activeTenant ?? true
@@ -1673,6 +1675,8 @@ export function initTenantDirectory() {
             const { tenancy, tenant } = resolveTenancyForRentHistory(btn);
             if (tenancy) {
                 openRentHistoryModal(tenancy, tenant || selectedTenantForSidebar);
+            } else {
+                showToast("Select a tenancy first", "warning");
             }
         });
     }
@@ -1685,6 +1689,8 @@ export function initTenantDirectory() {
         const { tenancy, tenant } = resolveTenancyForRentHistory(btn);
         if (tenancy) {
             openRentHistoryModal(tenancy, tenant || selectedTenantForSidebar);
+        } else {
+            showToast("Select a tenancy first", "warning");
         }
     });
 
