@@ -1107,6 +1107,34 @@
       </div>
     </div>
 
+    <!-- NEW TENANCY CONFIRM MODAL -->
+    <div id="newTenancyConfirmModal"
+      class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-lg p-4 md:p-5 space-y-4 modal-panel">
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="text-[10px] uppercase text-slate-500 font-semibold">New tenancy</p>
+            <h3 class="text-base font-semibold">Confirm unit choice</h3>
+          </div>
+          <button class="new-tenancy-confirm-close text-slate-500 hover:text-slate-800">✕</button>
+        </div>
+
+        <div class="space-y-2 text-sm text-slate-700">
+          <p id="newTenancyConfirmMessage">
+            Move tenant to a new unit? Click OK to move (previous tenancy ends). Click Cancel to keep previous tenancy active
+            and add another unit.
+          </p>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button id="newTenancyConfirmCancel"
+            class="px-3 py-2 rounded border border-slate-300 text-[11px] font-semibold text-slate-700">Cancel</button>
+          <button id="newTenancyConfirmOk"
+            class="px-3 py-2 rounded bg-indigo-600 text-white text-[11px] font-semibold">OK</button>
+        </div>
+      </div>
+    </div>
+
     <!-- VACATE MODAL -->
     <div id="vacateModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
       <div class="bg-white rounded-xl shadow-lg w-full max-w-lg p-4 md:p-5 space-y-4 modal-panel">

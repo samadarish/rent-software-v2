@@ -19,6 +19,7 @@ let activeTenantForModal = null;
 let activeRentRevisions = [];
 let selectedTenantForSidebar = null;
 let pendingVacateTenant = null;
+let pendingNewTenancyTenant = null;
 let tenantModalEditable = false;
 let tenantModalMode = "tenant"; // tenant | tenancy | rent
 
@@ -883,10 +884,33 @@ function startNewTenancyFromSidebar() {
         showToast("Select a tenant first", "warning");
         return;
     }
-    const base = selectedTenantForSidebar;
-    const moveChoice = window.confirm(
-        "Move tenant to a new unit? Click OK to move (previous tenancy ends). Click Cancel to keep previous tenancy active and add another unit."
-    );
+    pendingNewTenancyTenant = selectedTenantForSidebar;
+    const msg = document.getElementById("newTenancyConfirmMessage");
+    if (msg) {
+        msg.textContent =
+            "Move tenant to a new unit? Click OK to move (previous tenancy ends). Click Cancel to keep previous tenancy active and add another unit.";
+    }
+    openNewTenancyConfirmModal();
+}
+
+function openNewTenancyConfirmModal() {
+    const modal = document.getElementById("newTenancyConfirmModal");
+    if (modal) showModal(modal);
+}
+
+function closeNewTenancyConfirmModal() {
+    const modal = document.getElementById("newTenancyConfirmModal");
+    if (modal) hideModal(modal);
+    pendingNewTenancyTenant = null;
+}
+
+function handleNewTenancyChoice(moveChoice) {
+    const base = pendingNewTenancyTenant || selectedTenantForSidebar;
+    if (!base) {
+        closeNewTenancyConfirmModal();
+        return;
+    }
+
     const keepPreviousActive = !moveChoice;
     const newTenancyId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `tenancy-${Date.now()}`;
     const templateData = { ...(base.templateData || {}), tenancy_id: newTenancyId };
@@ -907,6 +931,7 @@ function startNewTenancyFromSidebar() {
         templateData,
     };
 
+    closeNewTenancyConfirmModal();
     populateTenantModal(draftTenancy, "tenancy");
     setTenantModalEditable(true);
 }
@@ -1363,6 +1388,20 @@ export function initTenantDirectory() {
     if (newTenancyBtn) {
         newTenancyBtn.addEventListener("click", startNewTenancyFromSidebar);
     }
+
+    const newTenancyConfirmOkBtn = document.getElementById("newTenancyConfirmOk");
+    if (newTenancyConfirmOkBtn) {
+        newTenancyConfirmOkBtn.addEventListener("click", () => handleNewTenancyChoice(true));
+    }
+
+    const newTenancyConfirmCancelBtn = document.getElementById("newTenancyConfirmCancel");
+    if (newTenancyConfirmCancelBtn) {
+        newTenancyConfirmCancelBtn.addEventListener("click", () => handleNewTenancyChoice(false));
+    }
+
+    document.querySelectorAll(".new-tenancy-confirm-close").forEach((btn) =>
+        btn.addEventListener("click", () => closeNewTenancyConfirmModal())
+    );
 
     const editTenantBtn = document.getElementById("sidebarEditTenantBtn");
     if (editTenantBtn) {
