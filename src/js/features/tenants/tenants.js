@@ -20,6 +20,7 @@ let activeRentRevisions = [];
 let selectedTenantForSidebar = null;
 let pendingVacateTenant = null;
 let tenantModalEditable = false;
+let tenantModalMode = "tenant"; // tenant | tenancy | rent
 
 const statusClassMap = {
     active: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -172,6 +173,17 @@ function renderRentHistory(baseRent) {
                 ? "-"
                 : `₹${(Number(effective) || 0).toLocaleString("en-IN")}`;
     }
+}
+
+function toggleTenantModalSections(mode) {
+    tenantModalMode = mode;
+    const tenantSections = document.querySelectorAll(".tenant-section");
+    const tenancySections = document.querySelectorAll(".tenancy-section");
+    const rentSections = document.querySelectorAll(".rent-history-section");
+
+    tenantSections.forEach((el) => el.classList.toggle("hidden", mode !== "tenant"));
+    tenancySections.forEach((el) => el.classList.toggle("hidden", mode !== "tenancy"));
+    rentSections.forEach((el) => el.classList.toggle("hidden", mode !== "rent"));
 }
 
 async function loadRentHistoryForTenancy(tenancyId, baseRent) {
@@ -853,7 +865,8 @@ function openTenancyModal(tenancy, tenant) {
         rentAmount: tenancy?.currentRent || base.rentAmount,
         activeTenant: (tenancy?.status || "").toLowerCase() === "active",
     };
-    populateTenantModal(merged);
+    // UX note: tenancy edit is invoked from the unit history action; tenant identity/family stay within tenant mode.
+    populateTenantModal(merged, "tenancy");
     setTenantModalEditable(true);
 }
 
@@ -861,8 +874,7 @@ function openRentHistoryModal(tenancy, tenant) {
     const modal = document.getElementById("tenantDetailModal");
     activeTenantForModal = { ...(tenant || selectedTenantForSidebar), tenancyId: tenancy?.tenancyId };
     if (!modal) return;
-    document.querySelectorAll(".tenant-rent-history-panel").forEach((section) => section.classList.remove("hidden"));
-    document.querySelectorAll(".tenant-core-fields").forEach((section) => section.classList.add("hidden"));
+    toggleTenantModalSections("rent");
     renderRentHistory(tenancy?.currentRent || activeTenantForModal.rentAmount || "");
     loadRentHistoryForTenancy(tenancy?.tenancyId, tenancy?.currentRent || activeTenantForModal.rentAmount || "");
     setTenantModalEditable(true);
@@ -902,14 +914,13 @@ function startNewTenancyFromSidebar() {
     setTenantModalEditable(true);
 }
 
-function populateTenantModal(tenant) {
+function populateTenantModal(tenant, mode = "tenant") {
     activeTenantForModal = tenant;
     activeRentRevisions = [];
     const modal = document.getElementById("tenantDetailModal");
     if (!modal) return;
 
-    document.querySelectorAll(".tenant-core-fields").forEach((section) => section.classList.remove("hidden"));
-    document.querySelectorAll(".tenant-rent-history-panel").forEach((section) => section.classList.remove("hidden"));
+    toggleTenantModalSections(mode);
 
     const templateData = tenant.templateData || {};
 
@@ -917,7 +928,14 @@ function populateTenantModal(tenant) {
     populateUnitDropdown(tenant.unitId || templateData.unit_id, tenant.tenancyId || templateData.tenancy_id);
 
     const title = document.getElementById("tenantModalTitle");
-    if (title) title.textContent = tenant.tenantFullName || "Tenant";
+    if (title) {
+        const statusLabel = tenant.activeTenant ? "Active" : "Inactive";
+        const unitLabel = tenant.unitNumber || templateData.unit_number || templateData.unitNumber;
+        title.textContent =
+            mode === "tenancy" && unitLabel
+                ? `Edit Tenancy — ${unitLabel} (${statusLabel})`
+                : tenant.tenantFullName || "Tenant";
+    }
 
     setTenantModalStatusPill(tenant.activeTenant);
 
@@ -975,8 +993,10 @@ function populateTenantModal(tenant) {
 
     applyUnitSelectionToModal(tenant.unitId || templateData.unit_id || "");
 
-    renderRentHistory(tenant.rentAmount || templateData.rent_amount || "");
-    loadRentHistoryForTenancy(tenant.tenancyId || templateData.tenancy_id, tenant.rentAmount || templateData.rent_amount || "");
+    if (mode === "rent") {
+        renderRentHistory(tenant.rentAmount || templateData.rent_amount || "");
+        loadRentHistoryForTenancy(tenant.tenancyId || templateData.tenancy_id, tenant.rentAmount || templateData.rent_amount || "");
+    }
 
     setTenantModalEditable(false);
     showModal(modal);
@@ -1144,7 +1164,7 @@ export function openTenantModal(tenant) {
         showToast("Tenant not found", "error");
         return;
     }
-    populateTenantModal(tenant);
+    populateTenantModal(tenant, "tenant");
 }
 
 function closeTenantInsightsModal() {
