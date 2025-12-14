@@ -218,63 +218,6 @@
   </div>
 
 
-  <!-- RENT HISTORY MODAL -->
-  <div id="rentHistoryModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
-    <div class="bg-white rounded-xl shadow-lg w-full max-w-3xl p-4 md:p-6 space-y-4 modal-panel">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <p class="text-[10px] uppercase text-slate-500 font-semibold">Rent history</p>
-          <h3 id="rentHistoryTitle" class="text-base font-semibold">Rent history</h3>
-          <p class="text-[10px] text-slate-500">View past revisions and update the rent for this tenancy.</p>
-        </div>
-        <button class="rent-history-close text-slate-500 hover:text-slate-800">✕</button>
-      </div>
-
-      <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded px-3 py-2">
-        <div>
-          <p class="text-[10px] uppercase text-slate-500 font-semibold">Current rent</p>
-          <p id="rentHistoryCurrentValue" class="text-sm font-semibold text-slate-900">-</p>
-        </div>
-        <div id="rentHistoryLoader"
-          class="hidden text-[11px] text-slate-600 bg-white border border-slate-200 rounded px-2 py-1">Loading rent history...
-        </div>
-      </div>
-
-      <div class="border rounded overflow-auto">
-        <table class="w-full text-left">
-          <thead class="bg-slate-50 text-[11px] uppercase text-slate-600">
-            <tr>
-              <th class="px-2 py-2">Effective month</th>
-              <th class="px-2 py-2">Rent (₹)</th>
-              <th class="px-2 py-2">Note</th>
-            </tr>
-          </thead>
-          <tbody id="rentHistoryTableBody" class="text-[11px]"></tbody>
-        </table>
-        <div id="rentHistoryEmpty" class="text-[11px] text-slate-500 px-2 py-3">No rent revisions yet.</div>
-      </div>
-
-      <div class="grid md:grid-cols-4 gap-2 items-end">
-        <div>
-          <label class="text-[11px] font-semibold block mb-1">Effective Month</label>
-          <input type="month" id="rentRevisionMonth" class="w-full border rounded px-2 py-2 text-[12px]" />
-        </div>
-        <div>
-          <label class="text-[11px] font-semibold block mb-1">Rent Amount (₹)</label>
-          <input type="number" id="rentRevisionAmount" class="w-full border rounded px-2 py-2 text-[12px]" />
-        </div>
-        <div>
-          <label class="text-[11px] font-semibold block mb-1">Note</label>
-          <input type="text" id="rentRevisionNote" class="w-full border rounded px-2 py-2 text-[12px]" placeholder="Optional" />
-        </div>
-        <div>
-          <button id="rentRevisionSaveBtn" class="w-full px-3 py-2 rounded bg-slate-900 text-white text-[11px] font-semibold">Save revision</button>
-        </div>
-      </div>
-      <p class="text-[10px] text-slate-500">Latest revision on or before a month is used for billing when no manual override
-        exists.</p>
-    </div>
-  </div>
 
           <!-- LANDLORD -->
           <div class="border rounded-lg p-2.5 space-y-2.5">
@@ -1719,5 +1662,63 @@
       </div>
     </div>
 </body>
+
+  <!-- RENT HISTORY MODAL (Moved to root) -->
+  <div id="rentHistoryModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
+    <div class="bg-white rounded-xl shadow-lg w-full max-w-3xl p-4 md:p-6 space-y-4 modal-panel">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[10px] uppercase text-slate-500 font-semibold">Rent history</p>
+          <h3 id="rentHistoryTitle" class="text-base font-semibold">Rent history</h3>
+          <p class="text-[10px] text-slate-500">View past revisions and update the rent for this tenancy.</p>
+        </div>
+        <button class="rent-history-close text-slate-500 hover:text-slate-800">✕</button>
+      </div>
+
+      <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded px-3 py-2">
+        <div>
+          <p class="text-[10px] uppercase text-slate-500 font-semibold">Current rent</p>
+          <p id="rentHistoryCurrentValue" class="text-sm font-semibold text-slate-900">-</p>
+        </div>
+        <div id="rentHistoryLoader"
+          class="hidden text-[11px] text-slate-600 bg-white border border-slate-200 rounded px-2 py-1">Loading rent history...
+        </div>
+      </div>
+
+      <div class="border rounded overflow-auto">
+        <table class="w-full text-left">
+          <thead class="bg-slate-50 text-[11px] uppercase text-slate-600">
+            <tr>
+              <th class="px-2 py-2">Effective month</th>
+              <th class="px-2 py-2">Rent (₹)</th>
+              <th class="px-2 py-2">Note</th>
+            </tr>
+          </thead>
+          <tbody id="rentHistoryTableBody" class="text-[11px]"></tbody>
+        </table>
+        <div id="rentHistoryEmpty" class="text-[11px] text-slate-500 px-2 py-3">No rent revisions yet.</div>
+      </div>
+
+      <div class="grid md:grid-cols-4 gap-2 items-end">
+        <div>
+          <label class="text-[11px] font-semibold block mb-1">Effective Month</label>
+          <input type="month" id="rentRevisionMonth" class="w-full border rounded px-2 py-2 text-[12px]" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold block mb-1">Rent Amount (₹)</label>
+          <input type="number" id="rentRevisionAmount" class="w-full border rounded px-2 py-2 text-[12px]" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold block mb-1">Note</label>
+          <input type="text" id="rentRevisionNote" class="w-full border rounded px-2 py-2 text-[12px]" placeholder="Optional" />
+        </div>
+        <div>
+          <button id="rentRevisionSaveBtn" class="w-full px-3 py-2 rounded bg-slate-900 text-white text-[11px] font-semibold">Save revision</button>
+        </div>
+      </div>
+      <p class="text-[10px] text-slate-500">Latest revision on or before a month is used for billing when no manual override
+        exists.</p>
+    </div>
+  </div>
 
 </html>
