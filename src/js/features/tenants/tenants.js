@@ -735,7 +735,6 @@ function updateSidebarSnapshot() {
     const emptyState = document.getElementById("sidebarSnapshotEmpty");
     const detailsPanel = document.getElementById("tenantDetailsPanel");
     const nameEl = document.getElementById("sidebarTenantName");
-    const grnEl = document.getElementById("sidebarTenantGRN");
     const statusEl = document.getElementById("sidebarStatusPill");
     const mobileEl = document.getElementById("sidebarTenantMobile");
     const occupationEl = document.getElementById("sidebarTenantOccupation");
@@ -748,7 +747,6 @@ function updateSidebarSnapshot() {
         if (emptyState) emptyState.classList.remove("hidden");
         if (detailsPanel) detailsPanel.classList.add("hidden");
         if (nameEl) nameEl.textContent = "Select a tenant";
-        if (grnEl) grnEl.textContent = "GRN";
         if (statusEl) {
             statusEl.textContent = "Status";
             statusEl.className = "text-[10px] px-2 py-1 rounded-full border bg-slate-50 text-slate-600";
@@ -766,7 +764,6 @@ function updateSidebarSnapshot() {
     if (emptyState) emptyState.classList.add("hidden");
     if (detailsPanel) detailsPanel.classList.remove("hidden");
     if (nameEl) nameEl.textContent = t.tenantFullName || "Tenant";
-    if (grnEl) grnEl.textContent = t.grnNumber || "-";
     const isActive = (t.tenancyHistory || []).some((h) => (h.status || "").toLowerCase() === "active") || t.activeTenant;
     if (statusEl) {
         statusEl.textContent = getStatusLabel(isActive);
@@ -910,7 +907,7 @@ function startNewTenancyFromSidebar() {
         templateData,
     };
 
-    populateTenantModal(draftTenancy);
+    populateTenantModal(draftTenancy, "tenancy");
     setTenantModalEditable(true);
 }
 
@@ -931,16 +928,20 @@ function populateTenantModal(tenant, mode = "tenant") {
     if (title) {
         const statusLabel = tenant.activeTenant ? "Active" : "Inactive";
         const unitLabel = tenant.unitNumber || templateData.unit_number || templateData.unitNumber;
-        title.textContent =
-            mode === "tenancy" && unitLabel
-                ? `Edit Tenancy — ${unitLabel} (${statusLabel})`
-                : tenant.tenantFullName || "Tenant";
+        if (mode === "tenancy") {
+            if (unitLabel) {
+                title.textContent = `Edit Tenancy — ${unitLabel} (${statusLabel})`;
+            } else {
+                title.textContent = `New Tenancy — ${tenant.tenantFullName || "Tenant"}`;
+            }
+        } else {
+            title.textContent = tenant.tenantFullName || "Tenant";
+        }
     }
 
     setTenantModalStatusPill(tenant.activeTenant);
 
     const fields = {
-        tenantModalGRN: tenant.grnNumber || templateData["GRN number"] || "",
         tenantModalFullName: tenant.tenantFullName || templateData.Tenant_Full_Name || "",
         tenantModalOccupation: tenant.tenantOccupation || templateData.Tenant_occupation || "",
         tenantModalAddress: tenant.tenantPermanentAddress || templateData.Tenant_Permanent_Address || "",
@@ -1036,7 +1037,6 @@ async function saveTenantModal() {
     const payableSelect = document.getElementById("tenantModalPayable");
 
     const updates = {
-        grnNumber: document.getElementById("tenantModalGRN")?.value || "",
         tenantFullName: document.getElementById("tenantModalFullName")?.value || "",
         tenantOccupation: document.getElementById("tenantModalOccupation")?.value || "",
         tenantPermanentAddress: document.getElementById("tenantModalAddress")?.value || "",
@@ -1068,6 +1068,8 @@ async function saveTenantModal() {
         unitNumber: document.getElementById("tenantModalUnitNumber")?.value || "",
     };
 
+    const existingGrn = activeTenantForModal.grnNumber || activeTenantForModal.templateData?.["GRN number"] || "";
+
     const familyMembers = collectFamilyRows();
 
     try {
@@ -1079,7 +1081,7 @@ async function saveTenantModal() {
             forceNewTenancyId: activeTenantForModal.tenancyId,
             keepPreviousActive: !!activeTenantForModal.keepPreviousActive,
             unitId: updates.unitId || activeTenantForModal.unitId,
-            grn: updates.grnNumber || activeTenantForModal.grnNumber,
+            grn: existingGrn,
             templateData: activeTenantForModal.templateData,
             updates,
             familyMembers,
@@ -1094,7 +1096,7 @@ async function saveTenantModal() {
             landlordName: landlord.name || activeTenantForModal.landlordName,
             landlordAadhaar: landlord.aadhaar || activeTenantForModal.landlordAadhaar,
             landlordAddress: landlord.address || activeTenantForModal.landlordAddress,
-            grnNumber: updates.grnNumber || activeTenantForModal.grnNumber,
+            grnNumber: existingGrn,
             activeTenant:
                 activeTenantForModal.isNewTenancy || typeof updates.activeTenant !== "undefined"
                     ? updates.activeTenant ?? true
