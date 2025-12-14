@@ -447,7 +447,7 @@ function mapTenantPayload_(payload) {
     status: activeFlag === false || (typeof activeFlag === 'string' && activeFlag.toLowerCase() === 'no') ? 'ENDED' : 'ACTIVE',
     vacate_reason: updates.vacateReason || template.vacateReason || '',
     security_deposit: updates.securityDeposit || template.secu_depo || '',
-    rent_base: updates.rentAmount || template.rent_amount || '',
+    rent_base: '',
     rent_payable_day: updates.payableDate || template.payable_date_raw || '',
     tenant_notice_months: updates.tenantNoticeMonths || template.notice_num_t || '',
     landlord_notice_months: updates.landlordNoticeMonths || template.notice_num_l || '',
@@ -467,12 +467,14 @@ function mapTenantPayload_(payload) {
         relationship: fm.relationship || '',
         occupation: fm.occupation || '',
         aadhaar: fm.aadhaar || '',
-        address: fm.address || '',
-        created_at: now,
-      }))
+      address: fm.address || '',
+      created_at: now,
+    }))
     : [];
 
-  return { tenant, unit, tenancy, family };
+  const rentAmountValue = Number(updates.rentAmount || template.rent_amount);
+
+  return { tenant, unit, tenancy, family, rentAmountValue: isNaN(rentAmountValue) ? null : rentAmountValue };
 }
 
 function handleSaveUnit_(payload) {
@@ -562,6 +564,18 @@ function handleSaveTenant_(payload) {
     writeTableRows_(FAMILY_SHEET, FAMILY_HEADERS, mapped.family);
   }
 
+  if (mapped.rentAmountValue !== null) {
+    const effectiveMonth =
+      normalizeMonthKey_(mapped.tenancy.commencement_date || mapped.tenancy.agreement_date) || normalizeMonthKey_(new Date());
+    if (effectiveMonth) {
+      upsertTenancyRentRevision_({
+        tenancyId: mapped.tenancy.tenancy_id,
+        effectiveMonth,
+        rentAmount: mapped.rentAmountValue,
+      });
+    }
+  }
+
   return jsonResponse({ ok: true, message: 'Tenant saved', tenantId: mapped.tenant.tenant_id, tenancyId: mapped.tenancy.tenancy_id });
 }
 
@@ -599,6 +613,18 @@ function handleUpdateTenant_(payload) {
     if (retained.length) {
       const rows = retained.map((r) => FAMILY_HEADERS.map((key) => r[key] ?? ''));
       sheet.getRange(2, 1, rows.length, FAMILY_HEADERS.length).setValues(rows);
+    }
+  }
+
+  if (mapped.rentAmountValue !== null) {
+    const effectiveMonth =
+      normalizeMonthKey_(mapped.tenancy.commencement_date || mapped.tenancy.agreement_date) || normalizeMonthKey_(new Date());
+    if (effectiveMonth) {
+      upsertTenancyRentRevision_({
+        tenancyId: mapped.tenancy.tenancy_id,
+        effectiveMonth,
+        rentAmount: mapped.rentAmountValue,
+      });
     }
   }
 
@@ -677,6 +703,7 @@ function buildTenantDirectory_() {
       }));
     const baseRent = Number(tenancy.rent_base) || 0;
     const currentRent = getEffectiveRentForMonth_(tenancy.tenancy_id, currentMonthKey, revisionCache);
+    const resolvedRent = currentRent === null || typeof currentRent === 'undefined' ? baseRent : currentRent;
     return {
       tenantId: tenant.tenant_id,
       tenancyId: tenancy.tenancy_id,
@@ -697,8 +724,8 @@ function buildTenantDirectory_() {
       landlordAadhaar: landlord.aadhaar || '',
       landlordAddress: landlord.address || '',
       unitOccupied: normalizeBoolean_(unit.is_occupied),
-      rentAmount: tenancy.rent_base || '',
-      currentRent: (currentRent === null || typeof currentRent === 'undefined') ? baseRent : currentRent,
+      rentAmount: resolvedRent,
+      currentRent: resolvedRent,
       payableDate: tenancy.rent_payable_day || '',
       securityDeposit: tenancy.security_deposit || '',
       rentIncrease: tenancy.rent_revision_number || '',
@@ -734,7 +761,7 @@ function buildTenantDirectory_() {
         Landlord_name: landlord.name || templateData.Landlord_name || '',
         landlord_address: landlord.address || templateData.landlord_address || '',
         landlord_aadhar: landlord.aadhaar || templateData.landlord_aadhar || '',
-        rent_amount: tenancy.rent_base || '',
+        rent_amount: resolvedRent,
         payable_date_raw: tenancy.rent_payable_day || '',
         secu_depo: tenancy.security_deposit || '',
         rent_rev_number: tenancy.rent_revision_number || '',
