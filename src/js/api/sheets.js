@@ -58,6 +58,11 @@ export async function fetchWingsFromSheet() {
     }
 }
 
+/**
+ * Persists a new wing value to Google Sheets and refreshes UI indicators.
+ * @param {string} wing - Wing name entered by the user.
+ * @returns {Promise<object>} API response shape from the Apps Script endpoint.
+ */
 export async function addWingToSheet(wing) {
     const url = ensureAppScriptUrl({
         promptForConfig: true,
@@ -93,6 +98,11 @@ export async function addWingToSheet(wing) {
     }
 }
 
+/**
+ * Removes an existing wing from Google Sheets.
+ * @param {string} wing - Wing identifier to delete.
+ * @returns {Promise<object>} Result payload from the Apps Script endpoint.
+ */
 export async function removeWingFromSheet(wing) {
     const url = ensureAppScriptUrl({
         promptForConfig: true,
@@ -125,6 +135,10 @@ export async function removeWingFromSheet(wing) {
     }
 }
 
+/**
+ * Retrieves saved landlord profiles from Google Sheets.
+ * @returns {Promise<{landlords: Array}>} Fetched landlord collection (empty on failure).
+ */
 export async function fetchLandlordsFromSheet() {
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view landlords", "warning"),
@@ -144,6 +158,11 @@ export async function fetchLandlordsFromSheet() {
     }
 }
 
+/**
+ * Saves or updates a landlord configuration record.
+ * @param {object} payload - Landlord details (id, name, aadhaar, address, defaults).
+ * @returns {Promise<object>} Apps Script response with ok/message flags.
+ */
 export async function saveLandlordConfig(payload) {
     const url = ensureAppScriptUrl({
         promptForConfig: true,
@@ -167,6 +186,11 @@ export async function saveLandlordConfig(payload) {
     }
 }
 
+/**
+ * Deletes a landlord configuration from Sheets storage.
+ * @param {string} landlordId - Identifier of the landlord to remove.
+ * @returns {Promise<object>} API response containing ok/message metadata.
+ */
 export async function deleteLandlordConfig(landlordId) {
     const url = ensureAppScriptUrl({
         promptForConfig: true,
@@ -190,6 +214,10 @@ export async function deleteLandlordConfig(landlordId) {
     }
 }
 
+/**
+ * Loads the list of previously generated bills for quick access in the UI.
+ * @returns {Promise<{bills: Array}>} Generated bill summaries or empty list on error.
+ */
 export async function fetchGeneratedBills() {
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view generated bills", "warning"),
@@ -205,6 +233,12 @@ export async function fetchGeneratedBills() {
     }
 }
 
+/**
+ * Retrieves a saved billing record for a given month/wing combination.
+ * @param {string} monthKey - Month key in YYYY-MM format.
+ * @param {string} wing - Wing identifier to scope the record lookup.
+ * @returns {Promise<object>} Billing payload (charges, meta, tenants) or empty object.
+ */
 export async function fetchBillingRecord(monthKey, wing) {
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view saved billing", "warning"),
@@ -221,6 +255,10 @@ export async function fetchBillingRecord(monthKey, wing) {
     }
 }
 
+/**
+ * Fetches all configured units from Google Sheets for selector population.
+ * @returns {Promise<{units: Array}>} Unit list payload (empty on failure).
+ */
 export async function fetchUnitsFromSheet() {
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view units", "warning"),
@@ -236,6 +274,11 @@ export async function fetchUnitsFromSheet() {
     }
 }
 
+/**
+ * Persists billing calculations to Google Sheets.
+ * @param {object} payload - Billing metadata, tenant charges, and notes.
+ * @returns {Promise<object>} Apps Script response reflecting save status.
+ */
 export async function saveBillingRecord(payload) {
     const url = ensureAppScriptUrl({
         promptForConfig: true,
@@ -261,6 +304,11 @@ export async function saveBillingRecord(payload) {
     }
 }
 
+/**
+ * Saves or updates an individual unit configuration.
+ * @param {object} payload - Unit fields including wing, number, direction, and floor.
+ * @returns {Promise<object>} Apps Script response describing persistence outcome.
+ */
 export async function saveUnitConfig(payload) {
     const url = ensureAppScriptUrl({
         promptForConfig: true,
@@ -284,6 +332,11 @@ export async function saveUnitConfig(payload) {
     }
 }
 
+/**
+ * Deletes an existing unit record by id.
+ * @param {string} unitId - Unique identifier for the unit.
+ * @returns {Promise<object>} Apps Script response noting deletion status.
+ */
 export async function deleteUnitConfig(unitId) {
     const url = ensureAppScriptUrl({
         promptForConfig: true,
@@ -307,6 +360,10 @@ export async function deleteUnitConfig(unitId) {
     }
 }
 
+/**
+ * Loads payment records from Google Sheets for display in the Payments tab.
+ * @returns {Promise<{payments: Array}>} Collection of payment rows or empty array.
+ */
 export async function fetchPayments() {
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view payments", "warning"),
@@ -322,6 +379,11 @@ export async function fetchPayments() {
     }
 }
 
+/**
+ * Requests a pre-signed URL or preview blob for an attachment stored remotely.
+ * @param {string} attachmentUrl - URL returned from Sheets storage.
+ * @returns {Promise<object>} Preview payload or empty object on failure.
+ */
 export async function fetchAttachmentPreview(attachmentUrl) {
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view attachments", "warning"),
@@ -342,6 +404,11 @@ export async function fetchAttachmentPreview(attachmentUrl) {
     }
 }
 
+/**
+ * Saves a payment entry against a tenant/unit combination.
+ * @param {object} payload - Payment details including amount, date, and attachment info.
+ * @returns {Promise<object>} Result payload including ok/message flags.
+ */
 export async function savePaymentRecord(payload) {
     const url = ensureAppScriptUrl({
         promptForConfig: true,

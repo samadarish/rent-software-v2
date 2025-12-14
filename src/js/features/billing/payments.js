@@ -1,3 +1,10 @@
+/**
+ * Payments Feature Module
+ *
+ * Displays recorded payments, allows adding new receipts, and links
+ * payments to generated bills and tenant directory context.
+ */
+
 import { fetchAttachmentPreview, fetchGeneratedBills, fetchPayments, savePaymentRecord } from "../../api/sheets.js";
 import { ensureTenantDirectoryLoaded } from "../tenants/tenants.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
@@ -919,6 +926,10 @@ function wireAttachmentHandlers() {
     }
 }
 
+/**
+ * Boots the Payments tab by loading data, connecting click handlers,
+ * and syncing bill tabs with the payment form.
+ */
 export function initPaymentsFeature() {
     const refreshBtn = document.getElementById("paymentsRefreshBtn");
     if (refreshBtn) refreshBtn.addEventListener("click", () => {

@@ -1,3 +1,11 @@
+/**
+ * Billing Feature Module
+ *
+ * Calculates monthly charges, renders bill previews, and synchronizes
+ * billing metadata with Google Sheets. This module keeps the billing
+ * state, parses tenant/unit data, and wires modal interactions.
+ */
+
 import { numberToIndianWords } from "../../utils/formatters.js";
 import { hideModal, showModal, showToast, smoothToggle } from "../../utils/ui.js";
 import { ensureTenantDirectoryLoaded, getActiveTenantsForWing } from "../tenants/tenants.js";
@@ -1164,6 +1172,10 @@ function cloneWingOptions(targetId) {
     }
 }
 
+/**
+ * Initializes the Billing tab by loading cached data, wiring events,
+ * and rendering the default view state.
+ */
 export function initBillingFeature() {
     renderBillingCalendar();
     cloneWingOptions("billingWingSelect");
