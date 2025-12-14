@@ -466,7 +466,7 @@
               shown</div>
           </div>
 
-          <div class="grid lg:grid-cols-[40%_60%] gap-3">
+          <div class="grid lg:grid-cols-1 gap-3">
             <!-- LEFT PANE: MASTER LIST -->
             <div class="space-y-2">
               <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
@@ -513,74 +513,9 @@
             </div>
 
             <!-- RIGHT PANE: DETAILS PANEL -->
-            <div class="space-y-3">
-              <div id="sidebarSnapshotEmpty" class="text-[11px] text-slate-500 border rounded-lg p-4 bg-slate-50">Pick any
-                tenant row to see details.</div>
-
-              <div id="tenantDetailsPanel" class="hidden space-y-3">
-                <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <h3 class="text-xs font-semibold">Tenant Details</h3>
-                      <p class="text-[10px] text-slate-500">Identity fields only</p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span id="sidebarStatusPill"
-                        class="text-[10px] px-2 py-1 rounded-full border bg-slate-50 text-slate-600">Status</span>
-                      <button id="sidebarEditTenantBtn"
-                        class="px-3 py-1.5 rounded bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">Edit
-                        Tenant</button>
-                    </div>
-                  </div>
-                  <div class="grid sm:grid-cols-2 gap-2 text-[11px]">
-                    <div>
-                      <p class="text-[10px] text-slate-500">Name</p>
-                      <p id="sidebarTenantName" class="font-semibold">Select a tenant</p>
-                    </div>
-                    <div>
-                      <p class="text-[10px] text-slate-500">GRN</p>
-                      <p id="sidebarTenantGRN" class="font-semibold">-</p>
-                    </div>
-                    <div>
-                      <p class="text-[10px] text-slate-500">Mobile</p>
-                      <p id="sidebarTenantMobile" class="font-semibold">-</p>
-                    </div>
-                    <div>
-                      <p class="text-[10px] text-slate-500">Occupation</p>
-                      <p id="sidebarTenantOccupation" class="font-semibold">-</p>
-                    </div>
-                    <div class="sm:col-span-2">
-                      <p class="text-[10px] text-slate-500">Address</p>
-                      <p id="sidebarTenantAddress" class="font-semibold">-</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <h4 class="text-xs font-semibold">Family snapshot</h4>
-                      <p class="text-[10px] text-slate-500">Occupants linked to tenant</p>
-                    </div>
-                    <span class="text-[10px] text-slate-500" id="sidebarFamilyCount">0 members</span>
-                  </div>
-                  <ul id="sidebarFamilyList" class="space-y-1 text-[11px] text-slate-700">
-                    <li class="text-[10px] text-slate-500">No tenant selected.</li>
-                  </ul>
-                </div>
-
-                <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <h4 class="text-xs font-semibold">Unit history</h4>
-                      <p class="text-[10px] text-slate-500">Active first, then recent inactive</p>
-                    </div>
-                    <button id="sidebarNewTenancyBtn"
-                      class="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">New tenancy</button>
-                  </div>
-                  <div id="sidebarUnitHistory" class="space-y-2 text-[11px]"></div>
-                </div>
-              </div>
+            <!-- Tenant details render in the right sidebar (directorySidebarContent) -->
+            <div class="text-[11px] text-slate-600 bg-slate-50 border border-dashed border-slate-200 rounded-lg p-3">
+              Tenant details now live in the right sidebar. Pick a tenant row on the left to load it there.
             </div>
           </div>
         </section>
@@ -719,84 +654,74 @@
               </ul>
             </div>
 
-            <!-- DIRECTORY MODE SNAPSHOT -->
+            <!-- DIRECTORY MODE SIDEBAR (Tenant details + history) -->
             <div id="directorySidebarContent" class="hidden space-y-3">
-              <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
-                <div class="flex items-start justify-between gap-2">
-                  <div>
-                    <p class="text-[10px] uppercase text-slate-500 font-semibold">Tenant Snapshot</p>
-                    <h4 id="sidebarTenantName" class="text-sm font-semibold">Select a tenant</h4>
-                    <p id="sidebarTenantGRN" class="text-[10px] text-slate-500">GRN: -</p>
-                  </div>
-                  <div id="sidebarStatusPill"
-                    class="text-[10px] px-2 py-1 rounded-full border bg-slate-50 text-slate-600">
-                    Status
-                  </div>
-                </div>
+              <div id="sidebarSnapshotEmpty" class="text-[11px] text-slate-500 border rounded-lg p-4 bg-slate-50">Pick any
+                tenant row to see details.</div>
 
-                <div id="sidebarSnapshotEmpty" class="text-[11px] text-slate-500">Pick any tenant row to see quick
-                  facts.</div>
-                <div id="sidebarSnapshotDetails" class="hidden space-y-2">
-                  <div class="grid grid-cols-2 gap-2 text-[11px]">
-                    <div class="bg-slate-50 rounded p-2">
-                      <p class="text-[10px] text-slate-500">Wing / Floor</p>
-                      <p id="sidebarTenantWingFloor" class="font-semibold">-</p>
+              <div id="tenantDetailsPanel" class="hidden space-y-3">
+                <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <h3 class="text-xs font-semibold">Tenant Details</h3>
+                      <p class="text-[10px] text-slate-500">Identity fields only</p>
                     </div>
-                    <div class="bg-slate-50 rounded p-2">
-                      <p class="text-[10px] text-slate-500">Rent (₹)</p>
-                      <p id="sidebarTenantRent" class="font-semibold">-</p>
+                    <div class="flex items-center gap-2">
+                      <span id="sidebarStatusPill"
+                        class="text-[10px] px-2 py-1 rounded-full border bg-slate-50 text-slate-600">Status</span>
+                      <button id="sidebarEditTenantBtn"
+                        class="px-3 py-1.5 rounded bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">Edit
+                        Tenant</button>
                     </div>
-                    <div class="bg-slate-50 rounded p-2">
+                  </div>
+                  <div class="grid sm:grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <p class="text-[10px] text-slate-500">Name</p>
+                      <p id="sidebarTenantName" class="font-semibold">Select a tenant</p>
+                    </div>
+                    <div>
+                      <p class="text-[10px] text-slate-500">GRN</p>
+                      <p id="sidebarTenantGRN" class="font-semibold">-</p>
+                    </div>
+                    <div>
                       <p class="text-[10px] text-slate-500">Mobile</p>
                       <p id="sidebarTenantMobile" class="font-semibold">-</p>
                     </div>
-                    <div class="bg-slate-50 rounded p-2">
-                      <p class="text-[10px] text-slate-500">Meter #</p>
-                      <p id="sidebarTenantMeter" class="font-semibold">-</p>
-                    </div>
-                  </div>
-
-                  <div class="flex items-center justify-between gap-2">
                     <div>
-                      <p class="text-[10px] text-slate-500">Tenancy End</p>
-                      <p id="sidebarTenantEnd" class="text-[11px] font-semibold">-</p>
+                      <p class="text-[10px] text-slate-500">Occupation</p>
+                      <p id="sidebarTenantOccupation" class="font-semibold">-</p>
                     </div>
-                    <div class="flex gap-2">
-                      <button id="sidebarNewTenancyBtn"
-                        class="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">New
-                        tenancy</button>
-                      <button id="tenantInsightsBtn"
-                        class="px-3 py-1.5 rounded bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">View
-                        insights</button>
+                    <div class="sm:col-span-2">
+                      <p class="text-[10px] text-slate-500">Address</p>
+                      <p id="sidebarTenantAddress" class="font-semibold">-</p>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <h4 class="text-xs font-semibold">Family snapshot</h4>
-                    <p class="text-[10px] text-slate-500">Recent occupants linked to the tenant.</p>
+                <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <h4 class="text-xs font-semibold">Family snapshot</h4>
+                      <p class="text-[10px] text-slate-500">Occupants linked to tenant</p>
+                    </div>
+                    <span class="text-[10px] text-slate-500" id="sidebarFamilyCount">0 members</span>
                   </div>
-                  <span class="text-[10px] text-slate-500" id="sidebarFamilyCount">0 members</span>
+                  <ul id="sidebarFamilyList" class="space-y-1 text-[11px] text-slate-700">
+                    <li class="text-[10px] text-slate-500">No tenant selected.</li>
+                  </ul>
                 </div>
-                <ul id="sidebarFamilyList" class="space-y-1 text-[11px] text-slate-700">
-                  <li class="text-[10px] text-slate-500">No tenant selected.</li>
-                </ul>
-                </div>
-              </div>
 
-              <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <h4 class="text-xs font-semibold">Unit history</h4>
-                    <p class="text-[10px] text-slate-500">Latest moves for this tenancy.</p>
+                <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <h4 class="text-xs font-semibold">Unit history</h4>
+                      <p class="text-[10px] text-slate-500">Active first, then recent inactive</p>
+                    </div>
+                    <button id="sidebarNewTenancyBtn"
+                      class="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">New tenancy</button>
                   </div>
+                  <div id="sidebarUnitHistory" class="space-y-2 text-[11px]"></div>
                 </div>
-                <ul id="sidebarTenantMoves" class="text-[11px] text-slate-700 space-y-1">
-                  <li class="text-[10px] text-slate-500">No tenant selected.</li>
-                </ul>
               </div>
             </div>
 
