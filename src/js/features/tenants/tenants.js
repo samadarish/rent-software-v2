@@ -483,28 +483,25 @@ function renderTenantRows(rows) {
         tr.className = "border-b last:border-0 hover:bg-slate-50 cursor-pointer";
         tr.dataset.grn = t.grnNumber || "";
 
-        const statusCell = renderStatusPill(t.activeTenant);
-
-        const isActive = !!t.activeTenant;
+        const activeHistory = Array.isArray(t.tenancyHistory)
+            ? t.tenancyHistory.filter((h) => (h.status || "").toLowerCase() === "active")
+            : [];
+        const activeCount = activeHistory.length;
+        const unitLabels = activeHistory.map((h) => h.unitLabel).filter(Boolean).join(", ") || "—";
+        const isActive = activeCount > 0 || !!t.activeTenant;
+        const statusCell = renderStatusPill(isActive);
 
         tr.innerHTML = `
             <td class="px-2 py-1.5">
                 <div class="font-semibold text-xs leading-tight">${t.tenantFullName || "Unnamed"}</div>
             </td>
-            <td class="px-2 py-1.5 text-xs">${formatWingFloor(t)}</td>
-            <td class="px-2 py-1.5 text-xs">${formatRent(t.rentAmount)}</td>
+            <td class="px-2 py-1.5 text-xs">${activeCount}</td>
+            <td class="px-2 py-1.5 text-xs">${unitLabels}</td>
             <td class="px-2 py-1.5 text-xs">
                 <div class="flex items-center gap-1 status-slot"></div>
             </td>
             <td class="px-2 py-1.5 text-xs">
-                <button class="text-indigo-600 hover:text-indigo-800 font-semibold text-[11px] underline">View</button>
-            </td>
-            <td class="px-2 py-1.5 text-xs">
-                <button class="inline-flex items-center px-2.5 py-1 rounded font-semibold text-[11px] ${
-                    isActive
-                        ? "bg-rose-600 text-white border border-rose-700 hover:bg-rose-700"
-                        : "bg-slate-200 text-slate-600 border border-slate-300 cursor-not-allowed"
-                }">${isActive ? "Vacate" : "Vacated"}</button>
+                <button class="text-indigo-600 hover:text-indigo-800 font-semibold text-[11px] underline">Edit Tenant</button>
             </td>
         `;
 
@@ -513,27 +510,14 @@ function renderTenantRows(rows) {
 
         const actionBtn = tr.querySelector("button");
         if (actionBtn) {
-            actionBtn.addEventListener("click", () => {
+            actionBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
                 setSidebarSelection(t);
                 openTenantModal(t);
             });
         }
 
-        const vacateBtn = tr.querySelectorAll("button")[1];
-        if (vacateBtn) {
-            if (!isActive) {
-                vacateBtn.disabled = true;
-            }
-            vacateBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                if (!isActive) return;
-                setSidebarSelection(t);
-                openVacateModal(t);
-            });
-        }
-
-        tr.addEventListener("click", (e) => {
-            if (e.target instanceof HTMLButtonElement) return;
+        tr.addEventListener("click", () => {
             setSidebarSelection(t);
         });
 
@@ -551,7 +535,12 @@ function applyTenantFilters() {
 
     if (currentStatusFilter !== "all") {
         const shouldBeActive = currentStatusFilter === "active";
-        filtered = filtered.filter((t) => !!t.activeTenant === shouldBeActive);
+        filtered = filtered.filter((t) => {
+            const activeHistory = Array.isArray(t.tenancyHistory)
+                ? t.tenancyHistory.some((h) => (h.status || "").toLowerCase() === "active")
+                : false;
+            return (activeHistory || !!t.activeTenant) === shouldBeActive;
+        });
     }
 
     if (currentSearch) {
@@ -732,94 +721,113 @@ function setTenantModalEditable(enabled) {
 
 function updateSidebarSnapshot() {
     const emptyState = document.getElementById("sidebarSnapshotEmpty");
-    const details = document.getElementById("sidebarSnapshotDetails");
+    const detailsPanel = document.getElementById("tenantDetailsPanel");
     const nameEl = document.getElementById("sidebarTenantName");
     const grnEl = document.getElementById("sidebarTenantGRN");
     const statusEl = document.getElementById("sidebarStatusPill");
-    const wingFloorEl = document.getElementById("sidebarTenantWingFloor");
-    const rentEl = document.getElementById("sidebarTenantRent");
     const mobileEl = document.getElementById("sidebarTenantMobile");
-    const meterEl = document.getElementById("sidebarTenantMeter");
-    const endEl = document.getElementById("sidebarTenantEnd");
-    const insightsBtn = document.getElementById("tenantInsightsBtn");
-    const newTenancyBtn = document.getElementById("sidebarNewTenancyBtn");
+    const occupationEl = document.getElementById("sidebarTenantOccupation");
+    const addressEl = document.getElementById("sidebarTenantAddress");
     const familyCount = document.getElementById("sidebarFamilyCount");
     const familyList = document.getElementById("sidebarFamilyList");
-    const moveList = document.getElementById("sidebarTenantMoves");
+    const historyList = document.getElementById("sidebarUnitHistory");
 
     if (!selectedTenantForSidebar) {
         if (emptyState) emptyState.classList.remove("hidden");
-        if (details) details.classList.add("hidden");
+        if (detailsPanel) detailsPanel.classList.add("hidden");
         if (nameEl) nameEl.textContent = "Select a tenant";
-        if (grnEl) grnEl.textContent = "GRN: -";
+        if (grnEl) grnEl.textContent = "GRN";
         if (statusEl) {
             statusEl.textContent = "Status";
             statusEl.className = "text-[10px] px-2 py-1 rounded-full border bg-slate-50 text-slate-600";
         }
-        if (wingFloorEl) wingFloorEl.textContent = "-";
-        if (rentEl) rentEl.textContent = "-";
         if (mobileEl) mobileEl.textContent = "-";
-        if (meterEl) meterEl.textContent = "-";
-        if (endEl) endEl.textContent = "-";
-        if (insightsBtn) insightsBtn.disabled = true;
-        if (newTenancyBtn) newTenancyBtn.disabled = true;
+        if (occupationEl) occupationEl.textContent = "-";
+        if (addressEl) addressEl.textContent = "-";
         if (familyCount) familyCount.textContent = "0 members";
         if (familyList) familyList.innerHTML = '<li class="text-[10px] text-slate-500">No tenant selected.</li>';
-        if (moveList) moveList.innerHTML = '<li class="text-[10px] text-slate-500">No tenant selected.</li>';
+        if (historyList) historyList.innerHTML = '<div class="text-[10px] text-slate-500">No tenant selected.</div>';
         return;
     }
 
     const t = selectedTenantForSidebar;
     if (emptyState) emptyState.classList.add("hidden");
-    if (details) details.classList.remove("hidden");
+    if (detailsPanel) detailsPanel.classList.remove("hidden");
     if (nameEl) nameEl.textContent = t.tenantFullName || "Tenant";
-    if (grnEl) grnEl.textContent = `GRN: ${t.grnNumber || "-"}`;
+    if (grnEl) grnEl.textContent = t.grnNumber || "-";
+    const isActive = (t.tenancyHistory || []).some((h) => (h.status || "").toLowerCase() === "active") || t.activeTenant;
     if (statusEl) {
-        statusEl.textContent = getStatusLabel(t.activeTenant);
-        statusEl.className = `text-[10px] px-2 py-1 rounded-full border font-semibold ${t.activeTenant ? statusClassMap.active : statusClassMap.inactive}`;
+        statusEl.textContent = getStatusLabel(isActive);
+        statusEl.className = `text-[10px] px-2 py-1 rounded-full border font-semibold ${isActive ? statusClassMap.active : statusClassMap.inactive}`;
     }
-    if (wingFloorEl) wingFloorEl.textContent = formatWingFloor(t);
-    if (rentEl) rentEl.textContent = formatRent(t.rentAmount);
     if (mobileEl) mobileEl.textContent = t.tenantMobile || "-";
-    if (meterEl) meterEl.textContent = t.meterNumber || "-";
-    if (endEl) endEl.textContent = formatTenancyEndDate(t.tenancyEndDate);
+    if (occupationEl) occupationEl.textContent = t.tenantOccupation || "-";
+    if (addressEl) addressEl.textContent = t.tenantPermanentAddress || "-";
 
-    if (insightsBtn) {
-        insightsBtn.disabled = false;
-        insightsBtn.onclick = () => openTenantInsightsModal(t);
-    }
-
-    if (newTenancyBtn) {
-        newTenancyBtn.disabled = false;
-    }
-
-    if (familyList && Array.isArray(t.family)) {
+    if (familyList) {
         familyList.innerHTML = "";
-        t.family.slice(0, 6).forEach((member) => {
+        (t.family || []).forEach((member) => {
             const li = document.createElement("li");
             li.textContent = `${member.name || "Member"} – ${member.relationship || "Relation"}`;
             familyList.appendChild(li);
         });
-        if (familyCount) familyCount.textContent = `${t.family.length} member${t.family.length === 1 ? "" : "s"}`;
-    } else if (familyList) {
-        familyList.innerHTML = '<li class="text-[10px] text-slate-500">No family on record.</li>';
-        if (familyCount) familyCount.textContent = "0 members";
+        if (!(t.family || []).length) {
+            familyList.innerHTML = '<li class="text-[10px] text-slate-500">No family members recorded.</li>';
+        }
+    }
+    if (familyCount) {
+        familyCount.textContent = `${t.family?.length || 0} members`;
     }
 
-    if (moveList) {
-        moveList.innerHTML = "";
-        const history = Array.isArray(t.tenancyHistory) ? t.tenancyHistory.slice(0, 5) : [];
+    if (historyList) {
+        const history = Array.isArray(t.tenancyHistory) ? [...t.tenancyHistory] : [];
+        history.sort((a, b) => {
+            const aKey = `${(a.status || "").toLowerCase() === "active" ? 0 : 1}${a.startDate || ""}`;
+            const bKey = `${(b.status || "").toLowerCase() === "active" ? 0 : 1}${b.startDate || ""}`;
+            return aKey.localeCompare(bKey);
+        });
         if (!history.length) {
-            moveList.innerHTML = '<li class="text-[10px] text-slate-500">No tenancy history yet.</li>';
+            historyList.innerHTML = '<div class="text-[10px] text-slate-500">No tenancy history yet.</div>';
         } else {
-            history.forEach((m) => {
-                const li = document.createElement("li");
-                const start = formatDateForInput(m.startDate) || m.startDate || "";
-                const end = formatDateForInput(m.endDate) || m.endDate || "";
-                const status = (m.status || "").toLowerCase();
-                const endLabel = end ? ` → ${end}` : "";
-                li.textContent = `${m.unitLabel || "Unit"} (${start || ""}${endLabel}) ${status ? `- ${status}` : ""}`;
-                moveList.appendChild(li);
+            historyList.innerHTML = "";
+            history.forEach((h) => {
+                const card = document.createElement("div");
+                card.className = "border rounded-lg p-2 bg-slate-50";
+                const statusPill = document.createElement("span");
+                statusPill.className = `text-[9px] px-2 py-0.5 rounded-full border ${
+                    (h.status || "").toLowerCase() === "active" ? statusClassMap.active : statusClassMap.inactive
+                }`;
+                statusPill.textContent = h.status || "-";
+                const dates = [formatDateForInput(h.startDate) || "", formatTenancyEndDate(h.endDate) || "Present"]
+                    .filter(Boolean)
+                    .join(" → ");
+                card.innerHTML = `
+                    <div class="flex items-center justify-between gap-2">
+                        <div>
+                            <p class="font-semibold text-[12px]">${h.unitLabel || "Unit"}</p>
+                            <p class="text-[10px] text-slate-500">${dates}</p>
+                            <p class="text-[10px] text-slate-500">Current rent: ${formatRent(h.currentRent || t.rentAmount)}</p>
+                        </div>
+                        <div class="flex flex-col gap-1 items-end">
+                            <span class="self-end">${statusPill.outerHTML}</span>
+                            <div class="flex gap-1">
+                                <button class="px-2 py-1 rounded text-[10px] bg-white border border-slate-200 font-semibold tenancy-edit-btn">Edit tenancy</button>
+                                <button class="px-2 py-1 rounded text-[10px] bg-white border border-indigo-200 text-indigo-700 font-semibold rent-history-btn">Rent history</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                const pillHolder = card.querySelector("span.self-end");
+                if (pillHolder) pillHolder.replaceWith(statusPill);
+                const editBtn = card.querySelector(".tenancy-edit-btn");
+                const rentBtn = card.querySelector(".rent-history-btn");
+                if (editBtn) {
+                    editBtn.addEventListener("click", () => openTenancyModal(h, t));
+                }
+                if (rentBtn) {
+                    rentBtn.addEventListener("click", () => openRentHistoryModal(h, t));
+                }
+                historyList.appendChild(card);
             });
         }
     }
@@ -830,6 +838,35 @@ function updateSidebarSnapshot() {
 function setSidebarSelection(tenant) {
     selectedTenantForSidebar = tenant;
     updateSidebarSnapshot();
+}
+
+function openTenancyModal(tenancy, tenant) {
+    const base = tenant || selectedTenantForSidebar;
+    if (!base) return;
+    const merged = {
+        ...base,
+        tenancyId: tenancy?.tenancyId || base.tenancyId,
+        unitId: tenancy?.unitId || base.unitId,
+        unitNumber: tenancy?.unitLabel || base.unitNumber,
+        tenancyCommencementRaw: tenancy?.startDate || base.tenancyCommencement,
+        tenancyEndDate: tenancy?.endDate || base.tenancyEndDate,
+        rentAmount: tenancy?.currentRent || base.rentAmount,
+        activeTenant: (tenancy?.status || "").toLowerCase() === "active",
+    };
+    populateTenantModal(merged);
+    setTenantModalEditable(true);
+}
+
+function openRentHistoryModal(tenancy, tenant) {
+    const modal = document.getElementById("tenantDetailModal");
+    activeTenantForModal = { ...(tenant || selectedTenantForSidebar), tenancyId: tenancy?.tenancyId };
+    if (!modal) return;
+    document.querySelectorAll(".tenant-rent-history-panel").forEach((section) => section.classList.remove("hidden"));
+    document.querySelectorAll(".tenant-core-fields").forEach((section) => section.classList.add("hidden"));
+    renderRentHistory(tenancy?.currentRent || activeTenantForModal.rentAmount || "");
+    loadRentHistoryForTenancy(tenancy?.tenancyId, tenancy?.currentRent || activeTenantForModal.rentAmount || "");
+    setTenantModalEditable(true);
+    showModal(modal);
 }
 
 function startNewTenancyFromSidebar() {
@@ -870,6 +907,9 @@ function populateTenantModal(tenant) {
     activeRentRevisions = [];
     const modal = document.getElementById("tenantDetailModal");
     if (!modal) return;
+
+    document.querySelectorAll(".tenant-core-fields").forEach((section) => section.classList.remove("hidden"));
+    document.querySelectorAll(".tenant-rent-history-panel").forEach((section) => section.classList.remove("hidden"));
 
     const templateData = tenant.templateData || {};
 
@@ -1292,6 +1332,14 @@ export function initTenantDirectory() {
     const newTenancyBtn = document.getElementById("sidebarNewTenancyBtn");
     if (newTenancyBtn) {
         newTenancyBtn.addEventListener("click", startNewTenancyFromSidebar);
+    }
+
+    const editTenantBtn = document.getElementById("sidebarEditTenantBtn");
+    if (editTenantBtn) {
+        editTenantBtn.addEventListener("click", () => {
+            if (!selectedTenantForSidebar) return;
+            openTenantModal(selectedTenantForSidebar);
+        });
     }
 
     const modalCloseButtons = document.querySelectorAll(".tenant-modal-close");
