@@ -673,7 +673,7 @@ function buildTenantDirectory_() {
         status: t.status || '',
         grnNumber: t.grn_number || tenant.grn_number || '',
         currentRent:
-          getEffectiveRentForMonth_(t.tenancy_id, currentMonthKey, revisionCache) ?? Number(t.rent_base) || 0,
+          (getEffectiveRentForMonth_(t.tenancy_id, currentMonthKey, revisionCache) ?? Number(t.rent_base)) || 0,
       }));
     const baseRent = Number(tenancy.rent_base) || 0;
     const currentRent = getEffectiveRentForMonth_(tenancy.tenancy_id, currentMonthKey, revisionCache);
