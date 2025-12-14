@@ -924,10 +924,7 @@ function updateSidebarSnapshot() {
                     rentBtn.dataset.endDate = h.endDate || "";
                     rentBtn.dataset.status = h.status || "";
                     rentBtn.dataset.currentRent = h.currentRent || h.rentAmount || "";
-                    rentBtn.addEventListener("click", (event) => {
-                        const { tenancy, tenant } = resolveTenancyForRentHistory(event.target);
-                        openRentHistoryModal(tenancy, tenant || t);
-                    });
+                    rentBtn.addEventListener("click", (event) => handleRentHistoryClick(event, t));
                 }
                 historyList.appendChild(card);
             });
@@ -960,10 +957,22 @@ function openTenancyModal(tenancy, tenant) {
     setTenantModalEditable(true);
 }
 
-function resolveTenantFromElement(element) {
+function resolveTenantFromElement(element, tenancyId = "") {
     const grn = element?.dataset.grn || element?.dataset.tenantGrn || "";
     if (grn) {
         const match = tenantCache.find((t) => (t.grnNumber || t.grn_number || "").toString() === grn);
+        if (match) return match;
+    }
+
+    if (tenancyId) {
+        const match = tenantCache.find((t) => {
+            const target = tenancyId.toString();
+            const directIdMatches = [t.tenancyId, t.tenancy_id].some((id) => id && id.toString() === target);
+            const historyMatches =
+                Array.isArray(t.tenancyHistory) &&
+                t.tenancyHistory.some((h) => (h.tenancyId || h.tenancy_id)?.toString() === target);
+            return directIdMatches || historyMatches;
+        });
         if (match) return match;
     }
 
@@ -975,9 +984,9 @@ function resolveTenancyForRentHistory(target) {
     const card = target?.closest("[data-tenancy-id]");
 
     const tenancyId = btn?.dataset.tenancyId || card?.dataset.tenancyId || "";
-    const tenant = resolveTenantFromElement(btn || card) || {};
+    const tenant = resolveTenantFromElement(btn || card, tenancyId) || {};
     const historyEntry = tenancyId
-        ? (tenant.tenancyHistory || []).find((h) => (h.tenancyId || h.tenancy_id) === tenancyId)
+        ? (tenant.tenancyHistory || []).find((h) => (h.tenancyId || h.tenancy_id)?.toString() === tenancyId.toString())
         : null;
 
     const tenancy = {
@@ -1083,6 +1092,24 @@ function closeRentHistoryModal() {
     if (modal) hideModal(modal);
     activeRentHistoryContext = null;
     activeRentRevisions = [];
+}
+
+function handleRentHistoryClick(event, fallbackTenant) {
+    const btn = event?.target?.closest?.(".rent-history-btn");
+    if (!btn) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const { tenancy, tenant } = resolveTenancyForRentHistory(btn);
+    const contextTenant = fallbackTenant || tenant || selectedTenantForSidebar;
+
+    if (!tenancy || !tenancy.tenancyId) {
+        showToast("Select a tenancy first", "warning");
+        return;
+    }
+
+    openRentHistoryModal(tenancy, contextTenant);
 }
 
 function startNewTenancyFromSidebar() {
@@ -1669,29 +1696,13 @@ export function initTenantDirectory() {
 
     const sidebarHistory = document.getElementById("sidebarUnitHistory");
     if (sidebarHistory) {
-        sidebarHistory.addEventListener("click", (event) => {
-            const btn = event.target.closest(".rent-history-btn");
-            if (!btn) return;
-            const { tenancy, tenant } = resolveTenancyForRentHistory(btn);
-            if (tenancy) {
-                openRentHistoryModal(tenancy, tenant || selectedTenantForSidebar);
-            } else {
-                showToast("Select a tenancy first", "warning");
-            }
-        });
+        sidebarHistory.addEventListener("click", (event) => handleRentHistoryClick(event));
     }
 
     document.addEventListener("click", (event) => {
-        const btn = event.target.closest(".rent-history-btn");
-        if (!btn) return;
         const modal = document.getElementById("rentHistoryModal");
         if (modal && !modal.classList.contains("hidden")) return;
-        const { tenancy, tenant } = resolveTenancyForRentHistory(btn);
-        if (tenancy) {
-            openRentHistoryModal(tenancy, tenant || selectedTenantForSidebar);
-        } else {
-            showToast("Select a tenancy first", "warning");
-        }
+        handleRentHistoryClick(event);
     });
 
     syncStatusButtons();
