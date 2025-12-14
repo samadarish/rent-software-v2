@@ -2,6 +2,8 @@ import {
     fetchLandlordsFromSheet,
     fetchTenantDirectory,
     fetchUnitsFromSheet,
+    getRentRevisions,
+    saveRentRevision,
     updateTenantRecord,
 } from "../../api/sheets.js";
 import { toOrdinal } from "../../utils/formatters.js";
@@ -14,6 +16,7 @@ let landlordCache = [];
 let currentStatusFilter = "active"; // all | active | inactive
 let currentSearch = "";
 let activeTenantForModal = null;
+let activeRentRevisions = [];
 let selectedTenantForSidebar = null;
 let pendingVacateTenant = null;
 let tenantModalEditable = false;
@@ -137,6 +140,137 @@ function formatTenancyEndDate(raw) {
     return formatted || raw;
 }
 
+function renderRentHistory(baseRent) {
+    const tbody = document.getElementById("tenantRentHistoryTableBody");
+    const empty = document.getElementById("tenantRentHistoryEmpty");
+    const currentRentEl = document.getElementById("tenantCurrentRentValue");
+    if (!tbody || !empty) return;
+
+    tbody.innerHTML = "";
+    const revisions = Array.isArray(activeRentRevisions) ? activeRentRevisions : [];
+    if (!revisions.length) {
+        empty.classList.remove("hidden");
+    } else {
+        empty.classList.add("hidden");
+        revisions.forEach((rev) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td class="px-2 py-1 text-[11px] text-slate-700">${formatMonthLabel(rev.effective_month)}</td>
+                <td class="px-2 py-1 text-[11px] font-semibold">₹${(Number(rev.rent_amount) || 0).toLocaleString("en-IN")}</td>
+                <td class="px-2 py-1 text-[11px] text-slate-600">${rev.note || ""}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    if (currentRentEl) {
+        const today = new Date();
+        const monthKey = `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}`;
+        const effective = getEffectiveRentFromRevisions(revisions, monthKey, baseRent);
+        currentRentEl.textContent =
+            effective === null || typeof effective === "undefined"
+                ? "-"
+                : `₹${(Number(effective) || 0).toLocaleString("en-IN")}`;
+    }
+}
+
+async function loadRentHistoryForTenancy(tenancyId, baseRent) {
+    const loader = document.getElementById("tenantRentHistoryLoader");
+    if (loader) loader.classList.remove("hidden");
+    activeRentRevisions = [];
+    renderRentHistory(baseRent);
+    if (!tenancyId) {
+        if (loader) loader.classList.add("hidden");
+        return;
+    }
+    try {
+        const res = await getRentRevisions(tenancyId);
+        activeRentRevisions = Array.isArray(res?.revisions) ? res.revisions : [];
+    } catch (e) {
+        console.error("Failed to load rent revisions", e);
+    }
+    renderRentHistory(baseRent);
+    if (loader) loader.classList.add("hidden");
+}
+
+async function handleRentRevisionSave() {
+    if (!activeTenantForModal) return;
+    const tenancyId = activeTenantForModal.tenancyId || activeTenantForModal.templateData?.tenancy_id;
+    if (!tenancyId) {
+        showToast("Save tenancy first to add revisions", "warning");
+        return;
+    }
+
+    const monthInput = document.getElementById("tenantRentRevisionMonth");
+    const amountInput = document.getElementById("tenantRentRevisionAmount");
+    const noteInput = document.getElementById("tenantRentRevisionNote");
+
+    const effectiveMonth = normalizeMonthKey(monthInput?.value || "");
+    const rentAmount = Number(amountInput?.value || 0);
+    const note = noteInput?.value || "";
+
+    if (!effectiveMonth || !/^\d{4}-\d{2}$/.test(effectiveMonth)) {
+        showToast("Enter a valid effective month (YYYY-MM)", "warning");
+        return;
+    }
+    if (isNaN(rentAmount) || rentAmount <= 0) {
+        showToast("Enter a valid rent amount", "warning");
+        return;
+    }
+
+    const saveBtn = document.getElementById("tenantRentRevisionSaveBtn");
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+        const res = await saveRentRevision({ tenancyId, effectiveMonth, rentAmount, note });
+        if (res?.ok) {
+            activeRentRevisions = Array.isArray(res.revisions) ? res.revisions : activeRentRevisions;
+            renderRentHistory(activeTenantForModal.rentAmount || activeTenantForModal.templateData?.rent_amount || "");
+            if (monthInput) monthInput.value = "";
+            if (amountInput) amountInput.value = "";
+            if (noteInput) noteInput.value = "";
+        }
+    } catch (e) {
+        console.error("Failed to save rent revision", e);
+    } finally {
+        if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
+function normalizeMonthKey(raw) {
+    if (!raw) return "";
+    const str = raw.toString().trim();
+    const match = str.match(/^(\d{4})-(\d{1,2})/);
+    if (match) return `${match[1]}-${match[2].padStart(2, "0")}`;
+    const compact = str.match(/^(\d{4})(\d{2})$/);
+    if (compact) return `${compact[1]}-${compact[2]}`;
+    return str;
+}
+
+function formatMonthLabel(monthKey) {
+    const normalized = normalizeMonthKey(monthKey);
+    if (!normalized) return "";
+    const match = normalized.match(/^(\d{4})-(\d{2})$/);
+    if (!match) return normalized;
+    const d = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
+function getEffectiveRentFromRevisions(revisions, monthKey, baseRent) {
+    const normalizedMonth = normalizeMonthKey(monthKey);
+    if (!normalizedMonth) return baseRent ?? null;
+    const ordered = [...(revisions || [])].sort(
+        (a, b) => (normalizeMonthKey(b.effective_month) || "").localeCompare(normalizeMonthKey(a.effective_month) || "")
+    );
+    for (const rev of ordered) {
+        const eff = normalizeMonthKey(rev.effective_month);
+        if (eff && eff <= normalizedMonth) {
+            const amt = Number(rev.rent_amount);
+            return isNaN(amt) ? baseRent ?? null : amt;
+        }
+    }
+    return baseRent ?? null;
+}
+
 /**
  * Clones option elements from one select to another while preserving selection.
  * @param {string} sourceId
@@ -166,8 +300,6 @@ function cloneSelectOptions(sourceId, targetId) {
 function syncTenantModalPicklists() {
     cloneSelectOptions("wing", "tenantModalWing");
     cloneSelectOptions("payable_date", "tenantModalPayable");
-    cloneSelectOptions("rent_rev_number", "tenantModalRentRevNumber");
-    cloneSelectOptions("rent_rev_year_mon", "tenantModalRentRevUnit");
     cloneSelectOptions("notice_num_t", "tenantModalTenantNotice");
     cloneSelectOptions("notice_num_l", "tenantModalLandlordNotice");
     cloneSelectOptions("landlord_selector", "tenantModalLandlord");
@@ -585,6 +717,14 @@ function setTenantModalEditable(enabled) {
         saveBtn.classList.toggle("opacity-60", !enabled);
     }
 
+    const rentHistoryFields = document.querySelectorAll(
+        "#tenantRentRevisionMonth, #tenantRentRevisionAmount, #tenantRentRevisionNote, #tenantRentRevisionSaveBtn"
+    );
+    rentHistoryFields.forEach((el) => {
+        el.disabled = !enabled;
+        el.classList.toggle("opacity-50", !enabled);
+    });
+
     document.querySelectorAll(".tenant-modal-edit-toggle").forEach((btn) => {
         btn.textContent = enabled ? "Editing enabled" : "Edit details";
     });
@@ -727,6 +867,7 @@ function startNewTenancyFromSidebar() {
 
 function populateTenantModal(tenant) {
     activeTenantForModal = tenant;
+    activeRentRevisions = [];
     const modal = document.getElementById("tenantDetailModal");
     if (!modal) return;
 
@@ -757,9 +898,6 @@ function populateTenantModal(tenant) {
             tenant.payableDate || templateData.payable_date_raw || templateData.payable_date || ""
         ),
         tenantModalDeposit: tenant.securityDeposit || templateData.secu_depo || "",
-        tenantModalRentIncrease: tenant.rentIncrease || templateData.rent_inc || "",
-        tenantModalRentRevNumber: tenant.rentRevisionNumber || templateData.rent_rev_number || "",
-        tenantModalRentRevUnit: tenant.rentRevisionUnit || templateData["rent_rev year_mon"] || "",
         tenantModalTenantNotice: tenant.tenantNoticeMonths || templateData.notice_num_t || "",
         tenantModalLandlordNotice: tenant.landlordNoticeMonths || templateData.notice_num_l || "",
         tenantModalLateRent: tenant.lateRentPerDay || templateData.late_rent || "",
@@ -796,6 +934,9 @@ function populateTenantModal(tenant) {
     }
 
     applyUnitSelectionToModal(tenant.unitId || templateData.unit_id || "");
+
+    renderRentHistory(tenant.rentAmount || templateData.rent_amount || "");
+    loadRentHistoryForTenancy(tenant.tenancyId || templateData.tenancy_id, tenant.rentAmount || templateData.rent_amount || "");
 
     setTenantModalEditable(false);
     showModal(modal);
@@ -851,9 +992,6 @@ async function saveTenantModal() {
                 ? toOrdinal(parseInt(payableSelect.value, 10))
                 : payableSelect?.value || "",
         securityDeposit: document.getElementById("tenantModalDeposit")?.value || "",
-        rentIncrease: document.getElementById("tenantModalRentIncrease")?.value || "",
-        rentRevisionNumber: document.getElementById("tenantModalRentRevNumber")?.value || "",
-        rentRevisionUnit: document.getElementById("tenantModalRentRevUnit")?.value || "",
         tenantNoticeMonths: document.getElementById("tenantModalTenantNotice")?.value || "",
         landlordNoticeMonths: document.getElementById("tenantModalLandlordNotice")?.value || "",
         lateRentPerDay: document.getElementById("tenantModalLateRent")?.value || "",
@@ -958,6 +1096,7 @@ export function closeTenantModal() {
     const modal = document.getElementById("tenantDetailModal");
     if (modal) hideModal(modal);
     setTenantModalEditable(false);
+    activeRentRevisions = [];
 }
 
 export function openTenantModal(tenant) {
@@ -1183,6 +1322,11 @@ export function initTenantDirectory() {
     const saveBtn = document.getElementById("tenantModalSaveBtn");
     if (saveBtn) {
         saveBtn.addEventListener("click", saveTenantModal);
+    }
+
+    const rentRevisionSaveBtn = document.getElementById("tenantRentRevisionSaveBtn");
+    if (rentRevisionSaveBtn) {
+        rentRevisionSaveBtn.addEventListener("click", handleRentRevisionSave);
     }
 
     const insightsCloseBtns = document.querySelectorAll(".tenant-insights-close");

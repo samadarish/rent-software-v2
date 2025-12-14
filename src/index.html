@@ -387,25 +387,10 @@
                 <input type="text" id="secu_amount_words" class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50"
                   readonly />
               </div>
-              <div>
-                <label class="text-[11px] font-semibold block mb-1">Rent Increase (₹)</label>
-                <input type="number" id="rent_inc" class="w-full border rounded px-2 py-1.5 text-xs" />
-              </div>
-              <div>
-                <label class="text-[11px] font-semibold block mb-1">Increase Amount (in words)</label>
-                <input type="text" id="increase_amount_word"
-                  class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50" readonly />
-              </div>
-              <div>
-                <label class="text-[11px] font-semibold block mb-1">Increase Every</label>
-                <select id="rent_rev_number" class="w-full border rounded px-2 py-1.5 text-xs bg-white"></select>
-              </div>
-              <div>
-                <label class="text-[11px] font-semibold block mb-1">Unit</label>
-                <select id="rent_rev_year_mon" class="w-full border rounded px-2 py-1.5 text-xs bg-white">
-                  <option>year(s)</option>
-                  <option>month(s)</option>
-                </select>
+              <div class="md:col-span-3 bg-slate-50 border border-slate-200 rounded px-3 py-2">
+                <p class="text-[11px] font-semibold text-slate-800">Rent revisions</p>
+                <p class="text-[10px] text-slate-600">Track rent changes per tenancy using the Rent History ledger after saving
+                  the tenant.</p>
               </div>
             </div>
           </div>
@@ -902,23 +887,6 @@
               disabled />
           </div>
           <div>
-            <label class="text-[11px] font-semibold block mb-1">Rent Increase (₹)</label>
-            <input id="tenantModalRentIncrease" type="number" class="w-full border rounded px-2 py-2 text-[12px]"
-              disabled />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Rent Revision Number</label>
-            <select id="tenantModalRentRevNumber" class="w-full border rounded px-2 py-2 text-[12px] bg-white"
-              disabled></select>
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Rent Revision Unit</label>
-            <select id="tenantModalRentRevUnit" class="w-full border rounded px-2 py-2 text-[12px] bg-white" disabled>
-              <option value="year(s)">year(s)</option>
-              <option value="month(s)">month(s)</option>
-            </select>
-          </div>
-          <div>
             <label class="text-[11px] font-semibold block mb-1">Tenant Notice (months)</label>
             <select id="tenantModalTenantNotice" class="w-full border rounded px-2 py-2 text-[12px] bg-white"
               disabled></select>
@@ -961,6 +929,58 @@
             <input id="tenantModalVacateReason" type="text" class="w-full border rounded px-2 py-2 text-[12px]"
               disabled />
           </div>
+        </div>
+
+        <div class="border rounded-lg p-3 space-y-2">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h4 class="text-[12px] font-semibold">Rent history</h4>
+              <p class="text-[10px] text-slate-500">Add revisions to update future billing for this tenancy.</p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] uppercase text-slate-500 font-semibold">Current rent</p>
+              <p id="tenantCurrentRentValue" class="text-sm font-semibold text-slate-900">-</p>
+            </div>
+          </div>
+          <div id="tenantRentHistoryLoader"
+            class="hidden text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1">Loading rent history...
+          </div>
+          <div class="border rounded overflow-auto">
+            <table class="w-full text-left">
+              <thead class="bg-slate-50 text-[11px] uppercase text-slate-600">
+                <tr>
+                  <th class="px-2 py-2">Effective month</th>
+                  <th class="px-2 py-2">Rent (₹)</th>
+                  <th class="px-2 py-2">Note</th>
+                </tr>
+              </thead>
+              <tbody id="tenantRentHistoryTableBody" class="text-[11px]"></tbody>
+            </table>
+            <div id="tenantRentHistoryEmpty" class="text-[11px] text-slate-500 px-2 py-3">No rent revisions yet.</div>
+          </div>
+          <div class="grid md:grid-cols-4 gap-2 items-end">
+            <div>
+              <label class="text-[11px] font-semibold block mb-1">Effective Month</label>
+              <input type="month" id="tenantRentRevisionMonth" class="w-full border rounded px-2 py-2 text-[12px]"
+                disabled />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold block mb-1">Rent Amount (₹)</label>
+              <input type="number" id="tenantRentRevisionAmount" class="w-full border rounded px-2 py-2 text-[12px]"
+                disabled />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold block mb-1">Note</label>
+              <input type="text" id="tenantRentRevisionNote" class="w-full border rounded px-2 py-2 text-[12px]"
+                placeholder="Optional" disabled />
+            </div>
+            <div>
+              <button id="tenantRentRevisionSaveBtn"
+                class="w-full px-3 py-2 rounded bg-slate-900 text-white text-[11px] font-semibold" disabled>Save revision</button>
+            </div>
+          </div>
+          <p class="text-[10px] text-slate-500">Latest revision on or before a month is used for billing when no manual override
+            exists.</p>
         </div>
 
         <div class="space-y-2">

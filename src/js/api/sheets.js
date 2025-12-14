@@ -585,6 +585,83 @@ export async function updateTenantRecord(payload) {
     }
 }
 
+export async function getRentRevisions(tenancyId) {
+    const url = ensureAppScriptUrl({
+        promptForConfig: true,
+        onMissing: () => {
+            alert("Please configure the Apps Script URL first.");
+            updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Set Apps Script URL");
+        },
+    });
+    if (!url) return { ok: false, revisions: [] };
+
+    try {
+        const data = await callAppScript({
+            url,
+            action: "getRentRevisions",
+            method: "POST",
+            payload: { tenancyId },
+        });
+        return data;
+    } catch (e) {
+        console.error("getRentRevisions error", e);
+        showToast("Failed to load rent history", "error");
+        return { ok: false, revisions: [] };
+    }
+}
+
+export async function saveRentRevision(payload) {
+    const url = ensureAppScriptUrl({
+        promptForConfig: true,
+        onMissing: () => {
+            alert("Please configure the Apps Script URL first.");
+            updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Set Apps Script URL");
+        },
+    });
+    if (!url) return { ok: false };
+
+    try {
+        const data = await callAppScript({
+            url,
+            action: "saveRentRevision",
+            method: "POST",
+            payload,
+        });
+        if (data?.ok) showToast("Rent revision saved", "success");
+        return data;
+    } catch (e) {
+        console.error("saveRentRevision error", e);
+        showToast("Failed to save rent revision", "error");
+        return { ok: false };
+    }
+}
+
+export async function deleteRentRevision(revisionId) {
+    const url = ensureAppScriptUrl({
+        promptForConfig: true,
+        onMissing: () => {
+            alert("Please configure the Apps Script URL first.");
+            updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Set Apps Script URL");
+        },
+    });
+    if (!url) return { ok: false };
+
+    try {
+        const data = await callAppScript({
+            url,
+            action: "deleteRentRevision",
+            method: "POST",
+            payload: { revisionId },
+        });
+        if (data?.ok) showToast("Rent revision removed", "success");
+        return data;
+    } catch (e) {
+        console.error("deleteRentRevision error", e);
+        showToast("Failed to delete rent revision", "error");
+        return { ok: false };
+    }
+}
+
 /**
  * Saves tenant data to Google Sheets database
  */

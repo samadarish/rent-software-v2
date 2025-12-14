@@ -196,14 +196,9 @@ export function initFormOptions() {
     // Notice period dropdowns (1-12 months)
     const noticeTenant = document.getElementById("notice_num_t");
     const noticeLandlord = document.getElementById("notice_num_l");
-    const rentRevNumber = document.getElementById("rent_rev_number");
 
     for (let i = 0; i <= 12; i++) {
         const label = i.toString();
-        if (rentRevNumber) {
-            const opt1 = new Option(label, label);
-            rentRevNumber.appendChild(opt1);
-        }
         if (i > 0) {
             if (noticeTenant) {
                 const opt2 = new Option(label, label);
@@ -279,16 +274,7 @@ export function collectFormDataForTemplate() {
         .join("\n");
 
     // Calculate rent increase amount in words
-    let increaseAmountWord = "";
-    const incWordEl = document.getElementById("increase_amount_word");
-    if (incWordEl && incWordEl.value.trim()) {
-        increaseAmountWord = incWordEl.value.trim();
-    } else {
-        const incVal = parseInt(document.getElementById("rent_inc").value, 10);
-        if (!isNaN(incVal) && incVal > 0) {
-            increaseAmountWord = numberToIndianWords(incVal) + " only";
-        }
-    }
+    const increaseAmountWord = "";
 
     const landlordName = selectedLandlord?.name ?? document.getElementById("Landlord_name").value;
     const landlordAddress = selectedLandlord?.address ?? document.getElementById("landlord_address").value;
@@ -338,11 +324,9 @@ export function collectFormDataForTemplate() {
         secu_amount_words: document
             .getElementById("secu_amount_words")
             .value.trim(),
-        rent_inc: document.getElementById("rent_inc").value.trim(),
-        rent_rev_number: document.getElementById("rent_rev_number").value.trim(),
-        "rent_rev year_mon": document
-            .getElementById("rent_rev_year_mon")
-            .value.trim(),
+        rent_inc: "",
+        rent_rev_number: "",
+        "rent_rev year_mon": "",
 
         pet_text_area: document.getElementById("pet_text_area").value.trim(),
         late_rent: document.getElementById("late_rent").value.trim(),

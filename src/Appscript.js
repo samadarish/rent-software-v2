@@ -26,6 +26,7 @@ const PAYMENTS_SHEET = 'Payments';
 const PAYMENT_ALLOCATIONS_SHEET = 'PaymentAllocations';
 const ATTACHMENTS_SHEET = 'Attachments';
 const INDEX_SHEET = 'Index';
+const TENANCY_RENT_REVISIONS_SHEET = 'TenancyRentRevisions';
 
 /********* HEADERS *********/
 const TENANTS_HEADERS = [
@@ -123,6 +124,15 @@ const TENANT_READING_HEADERS = [
   'included',
   'override_rent',
   'notes',
+  'created_at',
+];
+
+const TENANCY_RENT_REVISION_HEADERS = [
+  'revision_id',
+  'tenancy_id',
+  'effective_month',
+  'rent_amount',
+  'note',
   'created_at',
 ];
 
@@ -727,6 +737,73 @@ function buildUnitLabel_(unit) {
   return parts.join(' - ') || unit.unit_id || '';
 }
 
+/********* TENANCY RENT REVISIONS *********/
+function listTenancyRentRevisions_(tenancyId) {
+  if (!tenancyId) return [];
+  return readTable_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS)
+    .filter((r) => r.tenancy_id === tenancyId)
+    .map((r) => ({
+      ...r,
+      effective_month: normalizeMonthKey_(r.effective_month),
+      rent_amount: Number(r.rent_amount) || 0,
+    }))
+    .sort((a, b) => (a.effective_month || '').localeCompare(b.effective_month || '') * -1);
+}
+
+function upsertTenancyRentRevision_(payload = {}) {
+  const tenancyId = payload.tenancyId || payload.tenancy_id;
+  const effectiveMonth = normalizeMonthKey_(payload.effectiveMonth || payload.effective_month);
+  const rentAmount = Number(payload.rentAmount ?? payload.rent_amount);
+  const note = payload.note || '';
+
+  if (!tenancyId) throw new Error('tenancyId required');
+  if (!effectiveMonth || !/^\d{4}-\d{2}$/.test(effectiveMonth)) throw new Error('Invalid effective month');
+  if (isNaN(rentAmount) || rentAmount < 0) throw new Error('Invalid rent amount');
+
+  const record = {
+    revision_id: payload.revision_id || payload.revisionId || Utilities.getUuid(),
+    tenancy_id: tenancyId,
+    effective_month: effectiveMonth,
+    rent_amount: rentAmount,
+    note,
+    created_at: payload.created_at || new Date(),
+  };
+
+  upsertUnique_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS, ['tenancy_id', 'effective_month'], record);
+  return record;
+}
+
+function deleteTenancyRentRevision_(revisionId) {
+  if (!revisionId) return false;
+  const remaining = readTable_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS).filter(
+    (r) => r.revision_id !== revisionId
+  );
+  const sheet = getSheetWithHeaders_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, TENANCY_RENT_REVISION_HEADERS.length).clearContent();
+  if (remaining.length) {
+    const rows = remaining.map((r) => TENANCY_RENT_REVISION_HEADERS.map((key) => r[key] ?? ''));
+    sheet.getRange(2, 1, rows.length, TENANCY_RENT_REVISION_HEADERS.length).setValues(rows);
+  }
+  return true;
+}
+
+function getEffectiveRentForMonth_(tenancyId, monthKey, revisionCache) {
+  const normalizedMonth = normalizeMonthKey_(monthKey || '');
+  if (!tenancyId || !normalizedMonth) return null;
+  const revisions = revisionCache ? revisionCache[tenancyId] || [] : listTenancyRentRevisions_(tenancyId);
+  for (let i = 0; i < revisions.length; i++) {
+    const rev = revisions[i];
+    const effective = normalizeMonthKey_(rev.effective_month);
+    if (!effective) continue;
+    if (effective <= normalizedMonth) {
+      const amount = Number(rev.rent_amount);
+      return isNaN(amount) ? null : amount;
+    }
+  }
+  return null;
+}
+
 /********* BILLING *********/
 function computeMotorShare_(config, includedCount) {
   const motorUnits = Number(config.motor_new || 0) - Number(config.motor_prev || 0);
@@ -768,6 +845,22 @@ function handleSaveBillingRecord_(payload) {
       tenancyByGrn[grnKey].push(t);
     }
   });
+
+  const rentRevisionCache = readTable_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS).reduce((m, r) => {
+    const tenancyId = r.tenancy_id;
+    const effectiveMonth = normalizeMonthKey_(r.effective_month);
+    if (!tenancyId || !effectiveMonth) return m;
+    if (!m[tenancyId]) m[tenancyId] = [];
+    m[tenancyId].push({
+      ...r,
+      effective_month: effectiveMonth,
+      rent_amount: Number(r.rent_amount) || 0,
+    });
+    return m;
+  }, {});
+  Object.values(rentRevisionCache).forEach((list) =>
+    list.sort((a, b) => (a.effective_month || '').localeCompare(b.effective_month || '') * -1)
+  );
 
   const readingRows = [];
   const billRows = [];
@@ -814,7 +907,8 @@ function handleSaveBillingRecord_(payload) {
   readingRows.forEach((reading) => {
     const tenancy = tenancyById[reading.tenancy_id];
     if (!tenancy) return;
-    const rent = reading.override_rent || tenancy.rent_base || 0;
+    const effectiveRent = getEffectiveRentForMonth_(tenancy.tenancy_id, monthKey, rentRevisionCache);
+    const rent = reading.override_rent || effectiveRent || tenancy.rent_base || 0;
     const units = Math.max(Number(reading.new_reading || 0) - Number(reading.prev_reading || 0), 0);
     const electricityAmount = Math.round(units * rate * 100) / 100;
     const sweepAmount = normalizeBoolean_(reading.included) ? sweep : 0;
@@ -870,6 +964,21 @@ function handleGetBillingRecord_(monthKeyRaw, wingRaw) {
   const tenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
   const tenants = readTable_(TENANTS_SHEET, TENANTS_HEADERS);
   const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
+  const rentRevisionCache = readTable_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS).reduce((m, r) => {
+    const tenancyId = r.tenancy_id;
+    const effectiveMonth = normalizeMonthKey_(r.effective_month);
+    if (!tenancyId || !effectiveMonth) return m;
+    if (!m[tenancyId]) m[tenancyId] = [];
+    m[tenancyId].push({
+      ...r,
+      effective_month: effectiveMonth,
+      rent_amount: Number(r.rent_amount) || 0,
+    });
+    return m;
+  }, {});
+  Object.values(rentRevisionCache).forEach((list) =>
+    list.sort((a, b) => (a.effective_month || '').localeCompare(b.effective_month || '') * -1)
+  );
 
   const unitMap = units.reduce((m, u) => {
     if ((u.wing || '').toString().trim().toLowerCase() === wingNormalized) m[u.unit_id] = u;
@@ -896,6 +1005,7 @@ function handleGetBillingRecord_(monthKeyRaw, wingRaw) {
     const tenancy = tenancyMap[reading.tenancy_id] || {};
     const tenant = tenantMap[tenancy.tenant_id] || {};
     const unit = unitMap[tenancy.unit_id] || {};
+    const effectiveRent = getEffectiveRentForMonth_(reading.tenancy_id, monthKey, rentRevisionCache);
     return {
       tenancyId: reading.tenancy_id,
       tenantKey: tenancy.grn_number || tenant.full_name || '',
@@ -906,7 +1016,7 @@ function handleGetBillingRecord_(monthKeyRaw, wingRaw) {
       newReading: reading.new_reading || '',
       included: normalizeBoolean_(reading.included),
       override_rent: reading.override_rent || '',
-      rentAmount: tenancy.rent_base || '',
+      rentAmount: reading.override_rent || effectiveRent || tenancy.rent_base || '',
       payableDate: tenancy.rent_payable_day || '',
       direction: unit.direction || '',
       floor: unit.floor || '',
@@ -1227,6 +1337,25 @@ function doPost(e) {
     if (action === 'saveClauses') {
       writeUnifiedClauses_(body.payload || {});
       return jsonResponse({ ok: true, message: 'Clauses saved to Google Sheets' });
+    }
+    if (action === 'getRentRevisions') {
+      const tenancyId = body.payload && (body.payload.tenancyId || body.payload.tenancy_id);
+      const revisions = tenancyId ? listTenancyRentRevisions_(tenancyId) : [];
+      return jsonResponse({ ok: true, revisions });
+    }
+    if (action === 'saveRentRevision') {
+      try {
+        const record = upsertTenancyRentRevision_(body.payload || {});
+        const revisions = listTenancyRentRevisions_(record.tenancy_id);
+        return jsonResponse({ ok: true, revision: record, revisions });
+      } catch (err) {
+        return jsonResponse({ ok: false, error: String(err) });
+      }
+    }
+    if (action === 'deleteRentRevision') {
+      const revisionId = body.payload && (body.payload.revisionId || body.payload.revision_id);
+      const ok = deleteTenancyRentRevision_(revisionId);
+      return jsonResponse({ ok, revisionId });
     }
     if (action === 'addWing') {
       const wing = (body.payload && body.payload.wing || '').toString().trim();
