@@ -10,6 +10,7 @@ import { toOrdinal } from "../../utils/formatters.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
 let tenantCache = [];
+let tenantRowsCache = [];
 let hasLoadedTenants = false;
 let unitCache = [];
 let landlordCache = [];
@@ -38,7 +39,9 @@ export function getActiveTenantsForWing(wing) {
     const normalizedWing = (wing || "").toString().trim().toLowerCase();
     if (!normalizedWing) return [];
 
-    return tenantCache.filter((t) => {
+    const source = tenantRowsCache.length ? tenantRowsCache : tenantCache;
+
+    return source.filter((t) => {
         const matchesWing = (t.wing || "").toString().trim().toLowerCase() === normalizedWing;
         const isActive = !!t.activeTenant;
         return matchesWing && isActive;
@@ -701,6 +704,7 @@ export async function loadTenantDirectory(forceReload = false) {
               family: Array.isArray(t.family) ? t.family : [],
           }))
         : [];
+    tenantRowsCache = normalizedTenants;
     tenantCache = collapseTenantRows(normalizedTenants);
     document.dispatchEvent(new CustomEvent("landlords:updated", { detail: landlordCache }));
     hasLoadedTenants = true;
