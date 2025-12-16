@@ -865,6 +865,12 @@ function handleSaveBillingRecord_(payload) {
   const wing = (payload.wing || '').toString().trim();
   if (!monthKey || !wing) return jsonResponse({ ok: false, error: 'Missing month or wing' });
 
+  const wingNormalized = wing.toLowerCase();
+  const unitById = readTable_(UNITS_SHEET, UNITS_HEADERS).reduce((m, u) => {
+    m[u.unit_id] = u;
+    return m;
+  }, {});
+
   const meta = payload.meta || {};
   const wingConfig = {
     wing_month_id: Utilities.getUuid(),
@@ -924,27 +930,39 @@ function handleSaveBillingRecord_(payload) {
       : tenancyByGrn[grnKey]
         ? tenancyByGrn[grnKey]
         : [];
-    const tenancy = tenancyOptions.find((t) => (t.status || '').toUpperCase() === 'ACTIVE') || tenancyOptions[0];
-    if (!tenancy) return;
+    const tenancyMatchesWing = (t) => {
+      const unit = unitById[t.unit_id];
+      if (!unit) return false;
+      return (unit.wing || '').toString().trim().toLowerCase() === wingNormalized;
+    };
+    const matchingTenancies = tenancyOptions.filter(
+      (t) => tenancyMatchesWing(t) && (t.status || '').toUpperCase() === 'ACTIVE'
+    );
+    const resolvedTenancies = matchingTenancies.length
+      ? matchingTenancies
+      : tenancyOptions.filter(tenancyMatchesWing);
+    if (!resolvedTenancies.length) return;
 
     const included = normalizeBoolean_(tenant.included);
     const prev = Number(tenant.prevReading || 0) || 0;
     const next = Number(tenant.newReading || 0) || 0;
     const units = Math.max(next - prev, 0);
-    if (included) includedTenancies.push(tenancy.tenancy_id);
+    resolvedTenancies.forEach((tenancy) => {
+      if (included) includedTenancies.push(tenancy.tenancy_id);
 
-    const reading = {
-      reading_id: Utilities.getUuid(),
-      month_key: monthKey,
-      tenancy_id: tenancy.tenancy_id,
-      prev_reading: tenant.prevReading || '',
-      new_reading: tenant.newReading || '',
-      included,
-      override_rent: tenant.override_rent || '',
-      notes: tenant.notes || '',
-      created_at: new Date(),
-    };
-    readingRows.push(reading);
+      const reading = {
+        reading_id: Utilities.getUuid(),
+        month_key: monthKey,
+        tenancy_id: tenancy.tenancy_id,
+        prev_reading: tenant.prevReading || '',
+        new_reading: tenant.newReading || '',
+        included,
+        override_rent: tenant.override_rent || '',
+        notes: tenant.notes || '',
+        created_at: new Date(),
+      };
+      readingRows.push(reading);
+    });
   });
 
   const motorPerTenant = computeMotorShare_(wingConfig, includedTenancies.length);
