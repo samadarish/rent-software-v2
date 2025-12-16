@@ -65,7 +65,6 @@ const TENANCIES_HEADERS = [
   'status',
   'vacate_reason',
   'security_deposit',
-  'rent_base',
   'rent_payable_day',
   'tenant_notice_months',
   'landlord_notice_months',
@@ -447,7 +446,6 @@ function mapTenantPayload_(payload) {
     status: activeFlag === false || (typeof activeFlag === 'string' && activeFlag.toLowerCase() === 'no') ? 'ENDED' : 'ACTIVE',
     vacate_reason: updates.vacateReason || template.vacateReason || '',
     security_deposit: updates.securityDeposit || template.secu_depo || '',
-    rent_base: '',
     rent_payable_day: updates.payableDate || template.payable_date_raw || '',
     tenant_notice_months: updates.tenantNoticeMonths || template.notice_num_t || '',
     landlord_notice_months: updates.landlordNoticeMonths || template.notice_num_l || '',
@@ -698,12 +696,10 @@ function buildTenantDirectory_() {
         endDate: t.end_date || '',
         status: t.status || '',
         grnNumber: t.grn_number || tenant.grn_number || '',
-        currentRent:
-          (getEffectiveRentForMonth_(t.tenancy_id, currentMonthKey, revisionCache) ?? Number(t.rent_base)) || 0,
+        currentRent: getEffectiveRentForMonth_(t.tenancy_id, currentMonthKey, revisionCache) ?? 0,
       }));
-    const baseRent = Number(tenancy.rent_base) || 0;
     const currentRent = getEffectiveRentForMonth_(tenancy.tenancy_id, currentMonthKey, revisionCache);
-    const resolvedRent = currentRent === null || typeof currentRent === 'undefined' ? baseRent : currentRent;
+    const resolvedRent = currentRent ?? 0;
     return {
       tenantId: tenant.tenant_id,
       tenancyId: tenancy.tenancy_id,
@@ -919,6 +915,7 @@ function handleSaveBillingRecord_(payload) {
   const readingRows = [];
   const billRows = [];
   const includedTenancies = [];
+  const rentByTenancy = {};
 
   tenants.forEach((tenant) => {
     const grnKey = (tenant.grn || tenant.tenantKey || tenant.tenantName || '').toString().toLowerCase();
@@ -947,8 +944,10 @@ function handleSaveBillingRecord_(payload) {
     const prev = Number(tenant.prevReading || 0) || 0;
     const next = Number(tenant.newReading || 0) || 0;
     const units = Math.max(next - prev, 0);
+    const rentFromPayload = Number(tenant.rentAmount || 0) || 0;
     resolvedTenancies.forEach((tenancy) => {
       if (included) includedTenancies.push(tenancy.tenancy_id);
+      rentByTenancy[tenancy.tenancy_id] = rentFromPayload;
 
       const reading = {
         reading_id: Utilities.getUuid(),
@@ -974,7 +973,7 @@ function handleSaveBillingRecord_(payload) {
     const tenancy = tenancyById[reading.tenancy_id];
     if (!tenancy) return;
     const effectiveRent = getEffectiveRentForMonth_(tenancy.tenancy_id, monthKey, rentRevisionCache);
-    const rent = reading.override_rent || effectiveRent || tenancy.rent_base || 0;
+    const rent = reading.override_rent || effectiveRent || rentByTenancy[reading.tenancy_id] || 0;
     const units = Math.max(Number(reading.new_reading || 0) - Number(reading.prev_reading || 0), 0);
     const electricityAmount = Math.round(units * rate * 100) / 100;
     const sweepAmount = normalizeBoolean_(reading.included) ? sweep : 0;
@@ -1082,7 +1081,7 @@ function handleGetBillingRecord_(monthKeyRaw, wingRaw) {
       newReading: reading.new_reading || '',
       included: normalizeBoolean_(reading.included),
       override_rent: reading.override_rent || '',
-      rentAmount: reading.override_rent || effectiveRent || tenancy.rent_base || '',
+      rentAmount: reading.override_rent || effectiveRent || '',
       payableDate: tenancy.rent_payable_day || '',
       direction: unit.direction || '',
       floor: unit.floor || '',
