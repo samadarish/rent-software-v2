@@ -44,10 +44,13 @@ export function getActiveTenantsForWing(wing) {
         const isActive = !!t.activeTenant;
         if (!matchesWing || !isActive) return false;
 
-        const key = getTenantIdentityKey(t);
-        if (!key) return true;
-        if (seen.has(key)) return false;
-        seen.add(key);
+        const tenancyId = (t.tenancyId || t.tenancy_id || "").toString().trim().toLowerCase();
+        const unitKey = (t.unitId || t.unit_id || "").toString().trim().toLowerCase();
+        const dedupeKey = tenancyId || (normalizedWing && unitKey ? `${normalizedWing}|${unitKey}` : "");
+
+        if (!dedupeKey) return true;
+        if (seen.has(dedupeKey)) return false;
+        seen.add(dedupeKey);
         return true;
     });
 }

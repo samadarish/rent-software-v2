@@ -631,20 +631,23 @@ function mergeTenantData(activeTenants, savedEntries = [], previousEntries = [])
 
     const { lookup: savedLookup, canonical: savedCanonical } = buildLookup(savedEntries);
     const { lookup: previousLookup, canonical: previousCanonical } = buildLookup(previousEntries);
-
-    const activeMap = new Map();
-    activeTenants.forEach((tenant) => {
-        const keys = getTenantKeyCandidates(tenant);
-        const identityKey = keys[0] || normalizeTenantKey(`${tenant.wing || ""}-${tenant.unitId || ""}-${tenant.tenantFullName || tenant.name || ""}`);
-        if (identityKey && !activeMap.has(identityKey)) {
-            activeMap.set(identityKey, { ...tenant, tenantKey: identityKey, __keys: keys });
-        }
-    });
-
+    const processedTenancyIds = new Set();
     const merged = [];
 
-    activeMap.forEach((tenant, mapKey) => {
-        const keys = tenant.__keys || [mapKey];
+    activeTenants.forEach((tenant, idx) => {
+        const tenancyId = normalizeTenantKey(tenant.tenancyId || tenant.tenancy_id);
+        if (tenancyId) {
+            if (processedTenancyIds.has(tenancyId)) return;
+            processedTenancyIds.add(tenancyId);
+        }
+
+        const candidateKeys = getTenantKeyCandidates(tenant);
+        const identityKey =
+            candidateKeys[0] ||
+            normalizeTenantKey(`${tenant.wing || ""}-${tenant.unitId || ""}-${tenant.tenantFullName || tenant.name || ""}`) ||
+            `tenant-${idx}`;
+        const keys = candidateKeys.length ? candidateKeys : [identityKey];
+
         let saved = null;
         for (const key of keys) {
             const savedIdx = savedLookup.get(key);
@@ -670,7 +673,7 @@ function mergeTenantData(activeTenants, savedEntries = [], previousEntries = [])
         const included = saved && saved.included !== undefined ? normalizeIncludedFlag(saved.included) : true;
 
         merged.push({
-            tenantKey: tenant.tenantKey || mapKey,
+            tenantKey: tenant.tenantKey || identityKey,
             grn: tenant.grnNumber || tenant.grn || "",
             name: tenant.tenantFullName || tenant.name || "Unnamed",
             tenancyId: tenant.tenancyId || "",
