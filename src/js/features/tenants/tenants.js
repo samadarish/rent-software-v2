@@ -38,20 +38,10 @@ export function getActiveTenantsForWing(wing) {
     const normalizedWing = (wing || "").toString().trim().toLowerCase();
     if (!normalizedWing) return [];
 
-    const seen = new Set();
     return tenantCache.filter((t) => {
         const matchesWing = (t.wing || "").toString().trim().toLowerCase() === normalizedWing;
         const isActive = !!t.activeTenant;
-        if (!matchesWing || !isActive) return false;
-
-        const tenancyId = (t.tenancyId || t.tenancy_id || "").toString().trim().toLowerCase();
-        const unitKey = (t.unitId || t.unit_id || "").toString().trim().toLowerCase();
-        const dedupeKey = tenancyId || (normalizedWing && unitKey ? `${normalizedWing}|${unitKey}` : "");
-
-        if (!dedupeKey) return true;
-        if (seen.has(dedupeKey)) return false;
-        seen.add(dedupeKey);
-        return true;
+        return matchesWing && isActive;
     });
 }
 

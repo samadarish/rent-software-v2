@@ -631,16 +631,9 @@ function mergeTenantData(activeTenants, savedEntries = [], previousEntries = [])
 
     const { lookup: savedLookup, canonical: savedCanonical } = buildLookup(savedEntries);
     const { lookup: previousLookup, canonical: previousCanonical } = buildLookup(previousEntries);
-    const processedTenancyIds = new Set();
     const merged = [];
 
     activeTenants.forEach((tenant, idx) => {
-        const tenancyId = normalizeTenantKey(tenant.tenancyId || tenant.tenancy_id);
-        if (tenancyId) {
-            if (processedTenancyIds.has(tenancyId)) return;
-            processedTenancyIds.add(tenancyId);
-        }
-
         const candidateKeys = getTenantKeyCandidates(tenant);
         const identityKey =
             candidateKeys[0] ||
