@@ -24,6 +24,7 @@ let pendingVacateTenant = null;
 let pendingNewTenancyTenant = null;
 let tenantModalEditable = false;
 let tenantModalMode = "tenant"; // tenant | tenancy
+let tenantModalRentLocked = false;
 
 const statusClassMap = {
     active: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -771,6 +772,10 @@ function setTenantModalEditable(enabled) {
         "tenantModalLandlordAddress",
     ]);
 
+    if (tenantModalRentLocked) {
+        alwaysReadOnly.add("tenantModalRent");
+    }
+
     modal.querySelectorAll("input, select, textarea").forEach((el) => {
         if (alwaysReadOnly.has(el.id)) {
             el.disabled = true;
@@ -778,6 +783,9 @@ function setTenantModalEditable(enabled) {
             return;
         }
         el.disabled = !enabled;
+        if (enabled) {
+            el.classList.remove("bg-slate-50", "text-slate-700");
+        }
     });
 
     modal.querySelectorAll("#tenantFamilyTableBody button").forEach((btn) => {
@@ -945,6 +953,7 @@ function setSidebarSelection(tenant) {
 function openTenancyModal(tenancy, tenant) {
     const base = tenant || selectedTenantForSidebar;
     if (!base) return;
+    tenantModalRentLocked = true;
     const merged = {
         ...base,
         tenancyId: tenancy?.tenancyId || base.tenancyId,
@@ -1178,6 +1187,7 @@ function handleNewTenancyChoice(moveChoice) {
     };
 
     closeNewTenancyConfirmModal();
+    tenantModalRentLocked = false;
     populateTenantModal(draftTenancy, "tenancy");
     setTenantModalEditable(true);
 }
@@ -1348,6 +1358,10 @@ async function saveTenantModal() {
         rentRevisionNumber: document.getElementById("tenantModalRentRevisionNumber")?.value || "",
         petPolicy: document.getElementById("tenantModalPetPolicy")?.value || "",
     };
+
+    if (tenantModalRentLocked) {
+        delete updates.rentAmount;
+    }
     const existingGrn = activeTenantForModal.grnNumber || activeTenantForModal.templateData?.["GRN number"] || "";
     const submittedGrn = updates.grnNumber || existingGrn;
 
@@ -1439,6 +1453,7 @@ export function closeTenantModal() {
     const modal = document.getElementById("tenantDetailModal");
     if (modal) hideModal(modal);
     setTenantModalEditable(false);
+    tenantModalRentLocked = false;
     activeRentRevisions = [];
 }
 
@@ -1447,6 +1462,7 @@ export function openTenantModal(tenant) {
         showToast("Tenant not found", "error");
         return;
     }
+    tenantModalRentLocked = false;
     populateTenantModal(tenant, "tenant");
 }
 
