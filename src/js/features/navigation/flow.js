@@ -176,7 +176,7 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     const directorySidebarContent = document.getElementById("directorySidebarContent");
     const utilitySidebarContent = document.getElementById("utilitySidebarContent");
     const grnInput = document.getElementById("grn_number");
-    const noGrnBtn = document.getElementById("grnNoBtn");
+    const noGrnCheckbox = document.getElementById("grnNoCheckbox");
 
     if (clausesAgreementContent && clausesPlaceholderContent && directorySidebarContent) {
         const showClauses = mode === "agreement";
@@ -190,18 +190,19 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
         smoothToggle(utilitySidebarContent, showUtilitySidebar);
     }
 
-    if (grnInput && noGrnBtn) {
+    if (grnInput && noGrnCheckbox) {
         const allowNoGrn = mode === "createTenantNew" || mode === "addPastTenant";
-        noGrnBtn.classList.toggle("hidden", !allowNoGrn);
+        noGrnCheckbox.closest("label")?.classList.toggle("hidden", !allowNoGrn);
 
         if (!allowNoGrn) {
             grnInput.disabled = false;
             grnInput.dataset.noGrn = "0";
+            grnInput.value = "";
             if (grnInput.dataset.prevGrn) {
                 grnInput.value = grnInput.dataset.prevGrn || grnInput.value;
                 delete grnInput.dataset.prevGrn;
             }
-            noGrnBtn.textContent = "No GRN?";
+            noGrnCheckbox.checked = false;
         }
     }
 
