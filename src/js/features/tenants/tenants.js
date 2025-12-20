@@ -43,7 +43,10 @@ export function getActiveTenantsForWing(wing) {
 
     return source.filter((t) => {
         const matchesWing = (t.wing || "").toString().trim().toLowerCase() === normalizedWing;
-        const isActive = !!t.activeTenant;
+        const hasActiveHistory = Array.isArray(t.tenancyHistory)
+            ? t.tenancyHistory.some((h) => (h.status || "").toLowerCase() === "active")
+            : false;
+        const isActive = !!t.activeTenant || hasActiveHistory;
         return matchesWing && isActive;
     });
 }
