@@ -1302,6 +1302,61 @@ function collectFamilyRows() {
     return members;
 }
 
+function normalizeComparisonValue(val) {
+    if (val === null || typeof val === "undefined") return "";
+    if (typeof val === "number") return val.toString();
+    return val.toString().trim();
+}
+
+function normalizeFamilyMembersForCompare(list = []) {
+    return list
+        .map((member = {}) => ({
+            name: (member.name || "").trim(),
+            relationship: (member.relationship || "").trim(),
+            occupation: (member.occupation || "").trim(),
+            aadhaar: (member.aadhaar || "").trim(),
+            address: (member.address || "").trim(),
+        }))
+        .filter((member) => Object.values(member).some(Boolean))
+        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+}
+
+function buildTenantUpdateSnapshot(tenant = {}) {
+    const templateData = tenant.templateData || {};
+    const payableRaw = normalizeDayValue(tenant.payableDate || templateData.payable_date_raw || templateData.payable_date || "");
+    const payableDate = payableRaw ? toOrdinal(parseInt(payableRaw, 10)) : payableRaw || "";
+
+    return {
+        tenantFullName: tenant.tenantFullName || templateData.Tenant_Full_Name || "",
+        tenantOccupation: tenant.tenantOccupation || templateData.Tenant_occupation || "",
+        tenantPermanentAddress: tenant.tenantPermanentAddress || templateData.Tenant_Permanent_Address || "",
+        tenantAadhaar: tenant.tenantAadhaar || templateData.tenant_Aadhar || "",
+        grnNumber: tenant.grnNumber || templateData["GRN number"] || "",
+        unitId: tenant.unitId || templateData.unit_id || "",
+        wing: tenant.wing || templateData.wing || "",
+        floor: tenant.floor || templateData["floor_of_building "] || templateData.floor_of_building || "",
+        direction: tenant.direction || templateData.direction_build || "",
+        meterNumber: tenant.meterNumber || templateData.meter_number || "",
+        rentAmount: tenant.rentAmount || templateData.rent_amount || "",
+        payableDate,
+        securityDeposit: tenant.securityDeposit || templateData.secu_depo || "",
+        tenantNoticeMonths: tenant.tenantNoticeMonths || templateData.notice_num_t || "",
+        landlordNoticeMonths: tenant.landlordNoticeMonths || templateData.notice_num_l || "",
+        lateRentPerDay: tenant.lateRentPerDay || templateData.late_rent || "",
+        lateGracePeriodDays: tenant.lateGracePeriodDays || templateData.late_days || "",
+        landlordId: tenant.landlordId || templateData.landlord_id || "",
+        agreementDateRaw: normalizeDateInputValue(tenant.agreementDateRaw || templateData.agreement_date_raw || ""),
+        tenancyCommencementRaw: normalizeDateInputValue(tenant.tenancyCommencementRaw || templateData.tenancy_comm_raw || ""),
+        tenancyEndRaw: normalizeDateInputValue(tenant.tenancyEndDate || templateData.tenancy_end_raw || ""),
+        tenantMobile: tenant.tenantMobile || templateData.tenant_mobile || "",
+        vacateReason: tenant.vacateReason || "",
+        unitNumber: tenant.unitNumber || templateData.unit_number || templateData.unitNumber || "",
+        rentRevisionUnit: tenant.rentRevisionUnit || templateData["rent_rev year_mon"] || "",
+        rentRevisionNumber: tenant.rentRevisionNumber || templateData.rent_rev_number || "",
+        petPolicy: tenant.petPolicy || templateData.pet_text_area || "",
+    };
+}
+
 async function saveTenantModal() {
     if (!activeTenantForModal) return;
 
@@ -1352,6 +1407,22 @@ async function saveTenantModal() {
     const submittedGrn = updates.grnNumber || existingGrn;
 
     const familyMembers = collectFamilyRows();
+
+    const existingSnapshot = buildTenantUpdateSnapshot(activeTenantForModal);
+    const hasFieldChanges = Object.keys(updates).some(
+        (key) => normalizeComparisonValue(updates[key]) !== normalizeComparisonValue(existingSnapshot[key])
+    );
+
+    const existingFamily = normalizeFamilyMembersForCompare(activeTenantForModal.family || []);
+    const updatedFamily = normalizeFamilyMembersForCompare(familyMembers);
+    const hasFamilyChanges =
+        existingFamily.length !== updatedFamily.length ||
+        existingFamily.some((member, idx) => JSON.stringify(member) !== JSON.stringify(updatedFamily[idx]));
+
+    if (!hasFieldChanges && !hasFamilyChanges) {
+        showToast("No changes to save", "info");
+        return;
+    }
 
     try {
         const res = await updateTenantRecord({
