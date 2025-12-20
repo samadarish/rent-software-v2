@@ -67,6 +67,15 @@ function formatRent(amount) {
     return `₹${numeric.toLocaleString("en-IN")}`;
 }
 
+function pickRentValue(...candidates) {
+    for (const val of candidates) {
+        if (val !== null && typeof val !== "undefined" && val !== "") {
+            return val;
+        }
+    }
+    return "";
+}
+
 /**
  * Combines wing and floor data into a concise badge label for UI chips.
  * @param {object} tenant
@@ -879,7 +888,7 @@ function updateSidebarSnapshot() {
                 card.dataset.startDate = h.startDate || "";
                 card.dataset.endDate = h.endDate || "";
                 card.dataset.status = h.status || "";
-                card.dataset.currentRent = h.currentRent || h.rentAmount || "";
+                card.dataset.currentRent = pickRentValue(h.currentRent, h.rentAmount, t.currentRent, t.rentAmount, "");
                 const statusPill = document.createElement("span");
                 statusPill.className = `text-[9px] px-2 py-0.5 rounded-full border ${
                     (h.status || "").toLowerCase() === "active" ? statusClassMap.active : statusClassMap.inactive
@@ -923,10 +932,21 @@ function updateSidebarSnapshot() {
                     rentBtn.dataset.grn = t.grnNumber || t.grn_number || t.templateData?.grn_number || "";
                     rentBtn.dataset.unitLabel = h.unitLabel || t.unitLabel || t.unitNumber || t.templateData?.unit_number || "";
                     rentBtn.dataset.startDate = h.startDate || t.tenancyCommencement || t.templateData?.tenancy_comm_raw || "";
-                    rentBtn.dataset.endDate = h.endDate || t.tenancyEndDate || t.templateData?.tenancy_end_raw || "";
+                    rentBtn.dataset.endDate =
+                        h.endDate ||
+                        t.tenancyEndRaw ||
+                        t.tenancyEndDate ||
+                        t.templateData?.tenancy_end_raw ||
+                        "";
                     rentBtn.dataset.status = h.status || t.status || "";
-                    rentBtn.dataset.currentRent =
-                        h.currentRent || h.rentAmount || t.currentRent || t.rentAmount || t.templateData?.rent_amount || "";
+                    rentBtn.dataset.currentRent = pickRentValue(
+                        h.currentRent,
+                        h.rentAmount,
+                        t.currentRent,
+                        t.rentAmount,
+                        t.templateData?.rent_amount,
+                        ""
+                    );
                     rentBtn.addEventListener("click", (event) => handleRentHistoryClick(event, t));
                 }
                 historyList.appendChild(card);
@@ -951,8 +971,9 @@ function openTenancyModal(tenancy, tenant) {
         unitId: tenancy?.unitId || base.unitId,
         unitNumber: tenancy?.unitLabel || base.unitNumber,
         tenancyCommencementRaw: tenancy?.startDate || base.tenancyCommencement,
-        tenancyEndDate: tenancy?.endDate || base.tenancyEndDate,
-        rentAmount: tenancy?.currentRent || base.rentAmount,
+        tenancyEndDate:
+            tenancy?.endDate || tenancy?.tenancyEndDate || tenancy?.tenancyEndRaw || base.tenancyEndRaw || base.tenancyEndDate,
+        rentAmount: pickRentValue(tenancy?.currentRent, base.rentAmount),
         activeTenant: (tenancy?.status || "").toLowerCase() === "active",
     };
     // UX note: tenancy edit is invoked from the unit history action; tenant identity/family stay within tenant mode.
@@ -1002,15 +1023,21 @@ function buildRentHistoryContext(btn, fallbackTenant) {
             tenant.unitNumber ||
             "",
         startDate: btn?.dataset?.startDate || card?.dataset?.startDate || historyEntry?.startDate || tenant.tenancyCommencement,
-        endDate: btn?.dataset?.endDate || card?.dataset?.endDate || historyEntry?.endDate || tenant.tenancyEndDate,
+        endDate:
+            btn?.dataset?.endDate ||
+            card?.dataset?.endDate ||
+            historyEntry?.endDate ||
+            tenant.tenancyEndRaw ||
+            tenant.tenancyEndDate,
         status: btn?.dataset?.status || card?.dataset?.status || historyEntry?.status || tenant.status,
-        currentRent:
-            btn?.dataset?.currentRent ||
-            card?.dataset?.currentRent ||
-            historyEntry?.currentRent ||
-            historyEntry?.rentAmount ||
-            tenant.currentRent ||
-            tenant.rentAmount,
+        currentRent: pickRentValue(
+            btn?.dataset?.currentRent,
+            card?.dataset?.currentRent,
+            historyEntry?.currentRent,
+            historyEntry?.rentAmount,
+            tenant.currentRent,
+            tenant.rentAmount
+        ),
         rentAmount: historyEntry?.rentAmount,
     };
 
@@ -1035,11 +1062,12 @@ function resolveFallbackTenancyContext(tenant) {
             startDate: fallbackHistory.startDate,
             endDate: fallbackHistory.endDate,
             status: fallbackHistory.status,
-            currentRent:
-                fallbackHistory.currentRent ||
-                fallbackHistory.rentAmount ||
-                tenant.currentRent ||
-                tenant.rentAmount,
+            currentRent: pickRentValue(
+                fallbackHistory.currentRent,
+                fallbackHistory.rentAmount,
+                tenant.currentRent,
+                tenant.rentAmount
+            ),
         };
     }
 
@@ -1048,9 +1076,9 @@ function resolveFallbackTenancyContext(tenant) {
             tenancyId: tenant.tenancyId || tenant.tenancy_id,
             unitLabel: tenant.unitLabel || tenant.unitNumber || tenant.templateData?.unit_number,
             startDate: tenant.tenancyCommencement,
-            endDate: tenant.tenancyEndDate,
+            endDate: tenant.tenancyEndRaw || tenant.tenancyEndDate,
             status: tenant.status,
-            currentRent: tenant.currentRent || tenant.rentAmount,
+            currentRent: pickRentValue(tenant.currentRent, tenant.rentAmount),
         };
     }
 
@@ -1080,12 +1108,13 @@ function openRentHistoryModal(tenancy, tenant) {
     activeRentHistoryContext = {
         ...resolvedTenancy,
         templateData: baseTenant.templateData || {},
-        rentAmount:
-            resolvedTenancy.currentRent ||
-            resolvedTenancy.rentAmount ||
-            baseTenant.currentRent ||
-            baseTenant.rentAmount ||
-            baseTenant.templateData?.rent_amount,
+        rentAmount: pickRentValue(
+            resolvedTenancy.currentRent,
+            resolvedTenancy.rentAmount,
+            baseTenant.currentRent,
+            baseTenant.rentAmount,
+            baseTenant.templateData?.rent_amount
+        ),
     };
     activeRentRevisions = [];
     const baseRent =
@@ -1224,7 +1253,6 @@ function populateTenantModal(tenant, mode = "tenant") {
         tenantModalFloor: tenant.floor || templateData["floor_of_building "] || templateData.floor_of_building || "",
         tenantModalDirection: tenant.direction || templateData.direction_build || "",
         tenantModalMeter: tenant.meterNumber || templateData.meter_number || "",
-        tenantModalRent: tenant.rentAmount || templateData.rent_amount || "",
         tenantModalPayable: normalizeDayValue(
             tenant.payableDate || templateData.payable_date_raw || templateData.payable_date || ""
         ),
@@ -1242,7 +1270,9 @@ function populateTenantModal(tenant, mode = "tenant") {
         tenantModalCommencement: formatDateForInput(
             tenant.tenancyCommencementRaw || templateData.tenancy_comm_raw || ""
         ),
-        tenantModalEndDate: formatDateForInput(tenant.tenancyEndDate || templateData.tenancy_end_raw || ""),
+        tenantModalEndDate: formatDateForInput(
+            tenant.tenancyEndRaw || tenant.tenancyEndDate || templateData.tenancy_end_raw || ""
+        ),
         tenantModalMobile: tenant.tenantMobile || templateData.tenant_mobile || "",
         tenantModalVacateReason: tenant.vacateReason || "",
         tenantModalInitialMeter: "",
@@ -1323,7 +1353,6 @@ async function saveTenantModal() {
         floor: document.getElementById("tenantModalFloor")?.value.trim() || "",
         direction: document.getElementById("tenantModalDirection")?.value || "",
         meterNumber: document.getElementById("tenantModalMeter")?.value || "",
-        rentAmount: document.getElementById("tenantModalRent")?.value || "",
         payableDate:
             payableSelect && payableSelect.value
                 ? toOrdinal(parseInt(payableSelect.value, 10))
