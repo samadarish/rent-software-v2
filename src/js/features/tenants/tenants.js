@@ -1361,7 +1361,7 @@ async function saveTenantModal() {
     const payableSelect = document.getElementById("tenantModalPayable");
     const rentGroup = document.getElementById("tenantModalRentGroup");
     const rentInput = document.getElementById("tenantModalRent");
-    const isNewTenancy = !!activeTenantForModal.isNewTenancy;
+    const isNewTenancy = tenantModalMode === "tenancy" && !!activeTenantForModal.isNewTenancy;
     const rentAmount =
         isNewTenancy && rentGroup && !rentGroup.classList.contains("hidden")
             ? rentInput?.value?.trim() || ""
@@ -1415,7 +1415,7 @@ async function saveTenantModal() {
         const res = await updateTenantRecord({
             tenantId: activeTenantForModal.tenantId,
             tenancyId: activeTenantForModal.tenancyId,
-            previousTenancyId: activeTenantForModal.previousTenancyId,
+            previousTenancyId: isNewTenancy ? activeTenantForModal.previousTenancyId : undefined,
             createNewTenancy: isNewTenancy,
             forceNewTenancyId: isNewTenancy ? activeTenantForModal.tenancyId : undefined,
             keepPreviousActive: isNewTenancy ? !!activeTenantForModal.keepPreviousActive : false,
