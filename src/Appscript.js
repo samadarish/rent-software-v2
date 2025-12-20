@@ -915,8 +915,21 @@ function handleSaveBillingRecord_(payload) {
   const readingRows = [];
   const billRows = [];
   const includedTenancies = [];
+  const payloadChargeByTenancy = {};
 
   tenants.forEach((tenant) => {
+    const rentFromPayload = Number(tenant.rentAmount);
+    const overrideRent =
+      tenant.override_rent !== undefined && tenant.override_rent !== null
+        ? tenant.override_rent
+        : tenant.overrideRent !== undefined && tenant.overrideRent !== null
+          ? tenant.overrideRent
+          : '';
+    const electricityFromPayload = Number(tenant.electricityAmount);
+    const motorFromPayload = Number(tenant.motorShare);
+    const sweepFromPayload = Number(tenant.sweepAmount);
+    const totalFromPayload = Number(tenant.totalAmount);
+
     const grnKey = (tenant.grn || tenant.tenantKey || tenant.tenantName || '').toString().toLowerCase();
     const tenancyFromPayload = tenant.tenancyId && tenancyById[tenant.tenancyId];
     const tenancyOptions = tenancyFromPayload
@@ -953,11 +966,20 @@ function handleSaveBillingRecord_(payload) {
         prev_reading: tenant.prevReading || '',
         new_reading: tenant.newReading || '',
         included,
-        override_rent: tenant.override_rent || '',
+        override_rent: overrideRent,
         notes: tenant.notes || '',
         created_at: new Date(),
       };
       readingRows.push(reading);
+
+      payloadChargeByTenancy[tenancy.tenancy_id] = {
+        rentFromPayload,
+        electricityFromPayload,
+        motorFromPayload,
+        sweepFromPayload,
+        totalFromPayload,
+        overrideRent,
+      };
     });
   });
 
@@ -969,16 +991,30 @@ function handleSaveBillingRecord_(payload) {
   readingRows.forEach((reading) => {
     const tenancy = tenancyById[reading.tenancy_id];
     if (!tenancy) return;
+    const payloadCharges = payloadChargeByTenancy[reading.tenancy_id] || {};
     const effectiveRent = getEffectiveRentForMonth_(tenancy.tenancy_id, monthKey, rentRevisionCache);
-    const rent = reading.override_rent || effectiveRent || 0;
+    const rent = !isNaN(payloadCharges.rentFromPayload)
+      ? payloadCharges.rentFromPayload
+      : reading.override_rent || payloadCharges.overrideRent || effectiveRent || 0;
     const units = Math.max(Number(reading.new_reading || 0) - Number(reading.prev_reading || 0), 0);
-    const electricityAmount = Math.round(units * rate * 100) / 100;
-    const sweepAmount = normalizeBoolean_(reading.included) ? sweep : 0;
-    const motorShare = normalizeBoolean_(reading.included) ? motorPerTenant : 0;
+    const electricityAmount = !isNaN(payloadCharges.electricityFromPayload)
+      ? payloadCharges.electricityFromPayload
+      : Math.round(units * rate * 100) / 100;
+    const sweepAmount = normalizeBoolean_(reading.included)
+      ? !isNaN(payloadCharges.sweepFromPayload)
+        ? payloadCharges.sweepFromPayload
+        : sweep
+      : 0;
+    const motorShare = normalizeBoolean_(reading.included)
+      ? !isNaN(payloadCharges.motorFromPayload)
+        ? payloadCharges.motorFromPayload
+        : motorPerTenant
+      : 0;
     const totalBeforeRound = Number(rent) + electricityAmount + sweepAmount + motorShare;
     const roundedTotal = Math.round(totalBeforeRound);
+    const recomputedTotal = Math.round(roundedTotal * 100) / 100;
     const total = normalizeBoolean_(reading.included)
-      ? Math.round(roundedTotal * 100) / 100
+      ? (!isNaN(payloadCharges.totalFromPayload) ? payloadCharges.totalFromPayload : recomputedTotal)
       : 0;
 
     billRows.push({
