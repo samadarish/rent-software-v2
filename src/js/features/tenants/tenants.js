@@ -900,7 +900,7 @@ function updateSidebarSnapshot() {
                         <div class="flex flex-col gap-1 items-end">
                             <span class="self-end">${statusPill.outerHTML}</span>
                             <div class="flex gap-1">
-                                <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-slate-200 font-semibold tenancy-edit-btn">Edit tenancy</button>
+                                <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-slate-200 font-semibold tenancy-edit-btn">View</button>
                                 <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-indigo-200 text-indigo-700 font-semibold rent-history-btn">Rent history</button>
                             </div>
                         </div>
@@ -1201,7 +1201,7 @@ function populateTenantModal(tenant, mode = "tenant") {
         const unitLabel = tenant.unitNumber || templateData.unit_number || templateData.unitNumber;
         if (mode === "tenancy") {
             if (unitLabel) {
-                title.textContent = `Edit Tenancy — ${unitLabel} (${statusLabel})`;
+                title.textContent = `Tenancy Details — ${unitLabel} (${statusLabel})`;
             } else {
                 title.textContent = `New Tenancy — ${tenant.tenantFullName || "Tenant"}`;
             }

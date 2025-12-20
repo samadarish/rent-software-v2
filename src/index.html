@@ -795,187 +795,213 @@
           </div>
         </div>
 
-        <div class="grid md:grid-cols-3 gap-2.5 tenant-core-fields tenant-section">
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Tenant Full Name</label>
-            <input id="tenantModalFullName" type="text" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Tenant Occupation</label>
-            <input id="tenantModalOccupation" type="text" class="w-full border rounded px-2 py-2 text-[12px]"
-              disabled />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Tenant Aadhaar</label>
-            <input id="tenantModalAadhaar" type="text" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Tenant Mobile</label>
-            <input id="tenantModalMobile" type="text" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
-          </div>
-          <div class="md:col-span-3">
-            <label class="text-[11px] font-semibold block mb-1">Tenant Permanent Address</label>
-            <textarea id="tenantModalAddress" rows="2" class="w-full border rounded px-2 py-2 text-[12px] resize-y"
-              disabled></textarea>
-          </div>
-        </div>
+        <div class="space-y-4">
+          <section class="tenant-core-fields tenant-section">
+            <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-[10px] uppercase text-slate-600 font-semibold">Tenant profile</p>
+                  <p class="text-[10px] text-slate-500">Identity and contact information at a glance.</p>
+                </div>
+              </div>
+              <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div class="lg:col-span-2">
+                  <label class="text-[11px] font-semibold block mb-1">Tenant Full Name</label>
+                  <input id="tenantModalFullName" type="text" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                </div>
+                <div>
+                  <label class="text-[11px] font-semibold block mb-1">Tenant Occupation</label>
+                  <input id="tenantModalOccupation" type="text" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                </div>
+                <div>
+                  <label class="text-[11px] font-semibold block mb-1">Tenant Mobile</label>
+                  <input id="tenantModalMobile" type="text" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                </div>
+                <div>
+                  <label class="text-[11px] font-semibold block mb-1">Tenant Aadhaar</label>
+                  <input id="tenantModalAadhaar" type="text" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                </div>
+                <div class="lg:col-span-4">
+                  <label class="text-[11px] font-semibold block mb-1">Tenant Permanent Address</label>
+                  <textarea id="tenantModalAddress" rows="2" class="w-full border rounded px-3 py-2 text-[12px] resize-y" disabled></textarea>
+                </div>
+              </div>
+            </div>
+          </section>
 
-        <div class="grid md:grid-cols-4 gap-2.5 tenant-core-fields tenancy-section">
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Configured Unit</label>
-            <select id="tenantModalUnit" class="w-full border rounded px-2 py-2 text-[12px] bg-white" disabled>
-              <option value="">Select unit</option>
-            </select>
-            <p class="text-[10px] text-slate-500 mt-1">Selecting a unit auto-fills wing, floor, direction, and meter.</p>
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Wing</label>
-            <input id="tenantModalWing" type="text" class="w-full border rounded px-2 py-2 text-[12px] bg-slate-50 text-slate-700"
-              readonly />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">GRN Number</label>
-            <input id="tenantModalGrn" type="text" class="w-full border rounded px-2 py-2 text-[12px]"
-              placeholder="e.g., GRN-2025-001" disabled />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Flat / Unit</label>
-            <input id="tenantModalUnitNumber" type="text" class="w-full border rounded px-2 py-2 text-[12px] bg-slate-50 text-slate-700"
-              readonly />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Floor</label>
-            <input id="tenantModalFloor" type="text" class="w-full border rounded px-2 py-2 text-[12px] bg-slate-50 text-slate-700"
-              readonly />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Direction</label>
-            <input id="tenantModalDirection" type="text"
-              class="w-full border rounded px-2 py-2 text-[12px] bg-slate-50 text-slate-700" readonly />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Meter #</label>
-            <input id="tenantModalMeter" type="text" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Payable Date</label>
-            <select id="tenantModalPayable" class="w-full border rounded px-2 py-2 text-[12px] bg-white"
-              disabled></select>
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Rent (₹)</label>
-            <input id="tenantModalRent" type="number" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Security Deposit (₹)</label>
-            <input id="tenantModalDeposit" type="number" class="w-full border rounded px-2 py-2 text-[12px]" disabled />
-          </div>
-        </div>
+          <section class="tenant-core-fields tenancy-section space-y-3">
+            <div class="grid lg:grid-cols-2 gap-3">
+              <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-[10px] uppercase text-slate-600 font-semibold">Unit &amp; location</p>
+                    <p class="text-[10px] text-slate-500">Auto-fills wing, floor, and utilities.</p>
+                  </div>
+                </div>
+                <div class="grid md:grid-cols-2 gap-3">
+                  <div class="md:col-span-2">
+                    <label class="text-[11px] font-semibold block mb-1">Configured Unit</label>
+                    <select id="tenantModalUnit" class="w-full border rounded px-3 py-2 text-[12px] bg-white" disabled>
+                      <option value="">Select unit</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Wing</label>
+                    <input id="tenantModalWing" type="text" class="w-full border rounded px-3 py-2 text-[12px] bg-slate-50 text-slate-700" readonly />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Floor</label>
+                    <input id="tenantModalFloor" type="text" class="w-full border rounded px-3 py-2 text-[12px] bg-slate-50 text-slate-700" readonly />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Flat / Unit</label>
+                    <input id="tenantModalUnitNumber" type="text" class="w-full border rounded px-3 py-2 text-[12px] bg-slate-50 text-slate-700" readonly />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Direction</label>
+                    <input id="tenantModalDirection" type="text" class="w-full border rounded px-3 py-2 text-[12px] bg-slate-50 text-slate-700" readonly />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Meter #</label>
+                    <input id="tenantModalMeter" type="text" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">GRN Number</label>
+                    <input id="tenantModalGrn" type="text" class="w-full border rounded px-3 py-2 text-[12px]" placeholder="e.g., GRN-2025-001" disabled />
+                  </div>
+                </div>
+              </div>
 
-        <div class="grid md:grid-cols-4 gap-2.5 tenant-core-fields tenancy-section">
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Agreement Date</label>
-            <input id="tenantModalAgreementDate" type="date" class="w-full border rounded px-2 py-2 text-[12px]"
-              disabled />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Tenancy Commencement</label>
-            <input id="tenantModalCommencement" type="date" class="w-full border rounded px-2 py-2 text-[12px]"
-              disabled />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Tenancy End Date</label>
-            <input id="tenantModalEndDate" type="date" class="w-full border rounded px-2 py-2 text-[12px]"
-              disabled />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Tenant Notice (months)</label>
-            <select id="tenantModalTenantNotice" class="w-full border rounded px-2 py-2 text-[12px] bg-white"
-              disabled></select>
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Landlord Notice (months)</label>
-            <select id="tenantModalLandlordNotice" class="w-full border rounded px-2 py-2 text-[12px] bg-white"
-              disabled></select>
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Late Rent per day (₹)</label>
-            <input id="tenantModalLateRent" type="number" class="w-full border rounded px-2 py-2 text-[12px]"
-              disabled />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Grace Period (days)</label>
-            <input id="tenantModalGracePeriod" type="number" class="w-full border rounded px-2 py-2 text-[12px]"
-              disabled />
-          </div>
-          <div class="md:col-span-4 grid md:grid-cols-3 gap-2">
-            <div>
-              <label class="text-[11px] font-semibold block mb-1">Landlord</label>
-              <select id="tenantModalLandlord" class="w-full border rounded px-2 py-2 text-[12px] bg-white" disabled>
-                <option value="">Select landlord</option>
-              </select>
+              <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+                <div>
+                  <p class="text-[10px] uppercase text-slate-600 font-semibold">Rent &amp; billing</p>
+                  <p class="text-[10px] text-slate-500">Track monthly obligations and billing cadence.</p>
+                </div>
+                <div class="grid md:grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Rent (₹)</label>
+                    <input id="tenantModalRent" type="number" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Security Deposit (₹)</label>
+                    <input id="tenantModalDeposit" type="number" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Payable Date</label>
+                    <select id="tenantModalPayable" class="w-full border rounded px-3 py-2 text-[12px] bg-white" disabled></select>
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Rent revision unit</label>
+                    <select id="tenantModalRentRevisionUnit" class="w-full border rounded px-3 py-2 text-[12px] bg-white" disabled>
+                      <option value="">Select</option>
+                      <option value="MONTH">Months</option>
+                      <option value="YEAR">Years</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Rent revision number</label>
+                    <input id="tenantModalRentRevisionNumber" type="number" class="w-full border rounded px-3 py-2 text-[12px]" placeholder="e.g., 12" disabled />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Late Rent per day (₹)</label>
+                    <input id="tenantModalLateRent" type="number" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Grace Period (days)</label>
+                    <input id="tenantModalGracePeriod" type="number" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <label class="text-[11px] font-semibold block mb-1">Aadhaar</label>
-              <input id="tenantModalLandlordAadhaar" type="text" class="w-full border rounded px-2 py-2 text-[12px]"
-                disabled />
-            </div>
-            <div>
-              <label class="text-[11px] font-semibold block mb-1">Address</label>
-              <input id="tenantModalLandlordAddress" type="text" class="w-full border rounded px-2 py-2 text-[12px]"
-                disabled />
-            </div>
-          </div>
-          <div class="md:col-span-4 grid md:grid-cols-3 gap-2">
-            <div>
-              <label class="text-[11px] font-semibold block mb-1">Rent revision unit</label>
-              <select id="tenantModalRentRevisionUnit" class="w-full border rounded px-2 py-2 text-[12px] bg-white" disabled>
-                <option value="">Select</option>
-                <option value="MONTH">Months</option>
-                <option value="YEAR">Years</option>
-              </select>
-            </div>
-            <div>
-              <label class="text-[11px] font-semibold block mb-1">Rent revision number</label>
-              <input id="tenantModalRentRevisionNumber" type="number" class="w-full border rounded px-2 py-2 text-[12px]"
-                placeholder="e.g., 12" disabled />
-            </div>
-          </div>
-          <div class="md:col-span-4">
-            <label class="text-[11px] font-semibold block mb-1">Pet policy / notes</label>
-            <textarea id="tenantModalPetPolicy" rows="2" class="w-full border rounded px-2 py-2 text-[12px] resize-y" disabled
-              placeholder="Allowed pets, conditions, or other notes"></textarea>
-          </div>
-          <div class="md:col-span-4">
-            <label class="text-[11px] font-semibold block mb-1">Vacate Reason</label>
-            <input id="tenantModalVacateReason" type="text" class="w-full border rounded px-2 py-2 text-[12px]"
-              disabled />
-          </div>
-        </div>
 
-        <div class="space-y-2 tenant-core-fields tenant-section">
-          <div class="flex items-center justify-between">
-            <div>
-              <h4 class="text-[12px] font-semibold">Family</h4>
-              <p class="text-[10px] text-slate-500">Update member info or add new occupants linked to this tenant.</p>
+            <div class="grid lg:grid-cols-2 gap-3">
+              <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+                <div>
+                  <p class="text-[10px] uppercase text-slate-600 font-semibold">Dates &amp; notices</p>
+                  <p class="text-[10px] text-slate-500">Keep track of agreement lifecycle and notice periods.</p>
+                </div>
+                <div class="grid md:grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Agreement Date</label>
+                    <input id="tenantModalAgreementDate" type="date" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Tenancy Commencement</label>
+                    <input id="tenantModalCommencement" type="date" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Tenancy End Date</label>
+                    <input id="tenantModalEndDate" type="date" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Tenant Notice (months)</label>
+                    <select id="tenantModalTenantNotice" class="w-full border rounded px-3 py-2 text-[12px] bg-white" disabled></select>
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Landlord Notice (months)</label>
+                    <select id="tenantModalLandlordNotice" class="w-full border rounded px-3 py-2 text-[12px] bg-white" disabled></select>
+                  </div>
+                  <div class="md:col-span-2">
+                    <label class="text-[11px] font-semibold block mb-1">Vacate Reason</label>
+                    <input id="tenantModalVacateReason" type="text" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                  </div>
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div>
+                  <p class="text-[10px] uppercase text-slate-600 font-semibold">Landlord &amp; policies</p>
+                  <p class="text-[10px] text-slate-500">Attach the right landlord and policy notes.</p>
+                </div>
+                <div class="space-y-3">
+                  <div class="grid md:grid-cols-2 gap-3">
+                    <div class="md:col-span-2">
+                      <label class="text-[11px] font-semibold block mb-1">Landlord</label>
+                      <select id="tenantModalLandlord" class="w-full border rounded px-3 py-2 text-[12px] bg-white" disabled>
+                        <option value="">Select landlord</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="text-[11px] font-semibold block mb-1">Aadhaar</label>
+                      <input id="tenantModalLandlordAadhaar" type="text" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                    </div>
+                    <div>
+                      <label class="text-[11px] font-semibold block mb-1">Address</label>
+                      <input id="tenantModalLandlordAddress" type="text" class="w-full border rounded px-3 py-2 text-[12px]" disabled />
+                    </div>
+                  </div>
+                  <div>
+                    <label class="text-[11px] font-semibold block mb-1">Pet policy / notes</label>
+                    <textarea id="tenantModalPetPolicy" rows="2" class="w-full border rounded px-3 py-2 text-[12px] resize-y" disabled placeholder="Allowed pets, conditions, or other notes"></textarea>
+                  </div>
+                </div>
+              </div>
             </div>
-            <button id="tenantModalAddFamilyBtn" class="text-[11px] px-3 py-1.5 rounded bg-slate-900 text-white"
-              disabled>+ Add member</button>
-          </div>
-          <div class="border rounded-lg overflow-auto">
-            <table class="w-full text-left">
-              <thead class="bg-slate-50 text-[11px] uppercase text-slate-600">
-                <tr>
-                  <th class="px-2 py-2">Name</th>
-                  <th class="px-2 py-2">Relationship</th>
-                  <th class="px-2 py-2">Occupation</th>
-                  <th class="px-2 py-2">Aadhaar</th>
-                  <th class="px-2 py-2">Address</th>
-                  <th class="px-2 py-2"></th>
-                </tr>
-              </thead>
-              <tbody id="tenantFamilyTableBody" class="text-[11px]"></tbody>
-            </table>
+          </section>
+
+          <div class="space-y-2 tenant-core-fields tenant-section">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-[12px] font-semibold">Family</h4>
+                <p class="text-[10px] text-slate-500">Update member info or add new occupants linked to this tenant.</p>
+              </div>
+              <button id="tenantModalAddFamilyBtn" class="text-[11px] px-3 py-1.5 rounded bg-slate-900 text-white" disabled>+ Add member</button>
+            </div>
+            <div class="border rounded-lg overflow-auto">
+              <table class="w-full text-left">
+                <thead class="bg-slate-50 text-[11px] uppercase text-slate-600">
+                  <tr>
+                    <th class="px-2 py-2">Name</th>
+                    <th class="px-2 py-2">Relationship</th>
+                    <th class="px-2 py-2">Occupation</th>
+                    <th class="px-2 py-2">Aadhaar</th>
+                    <th class="px-2 py-2">Address</th>
+                    <th class="px-2 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody id="tenantFamilyTableBody" class="text-[11px]"></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
