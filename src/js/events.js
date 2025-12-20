@@ -151,24 +151,23 @@ function generateNoGrnValue() {
  */
 function toggleNoGrnMode() {
     const input = document.getElementById("grn_number");
-    const btn = document.getElementById("grnNoBtn");
-    if (!input || !btn) return;
+    const checkbox = document.getElementById("grnNoCheckbox");
+    if (!input || !checkbox) return;
 
-    const noGrnActive = input.dataset.noGrn === "1";
+    const noGrnActive = checkbox.checked;
+
     if (noGrnActive) {
-        input.dataset.noGrn = "0";
-        input.disabled = false;
-        input.value = input.dataset.prevGrn || "";
-        delete input.dataset.prevGrn;
-        btn.textContent = "No GRN?";
+        input.dataset.noGrn = "1";
+        input.dataset.prevGrn = input.value;
+        input.disabled = true;
+        input.value = generateNoGrnValue();
         return;
     }
 
-    input.dataset.noGrn = "1";
-    input.dataset.prevGrn = input.value;
-    input.disabled = true;
-    input.value = generateNoGrnValue();
-    btn.textContent = "Manual GRN";
+    input.dataset.noGrn = "0";
+    input.disabled = false;
+    input.value = "";
+    delete input.dataset.prevGrn;
 }
 
 /**
@@ -188,9 +187,9 @@ export function attachEventHandlers() {
         }
     );
 
-    const noGrnBtn = document.getElementById("grnNoBtn");
-    if (noGrnBtn) {
-        noGrnBtn.addEventListener("click", toggleNoGrnMode);
+    const noGrnCheckbox = document.getElementById("grnNoCheckbox");
+    if (noGrnCheckbox) {
+        noGrnCheckbox.addEventListener("change", toggleNoGrnMode);
     }
 
     // Navigation: Create Agreement button
