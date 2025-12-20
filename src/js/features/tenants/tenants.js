@@ -1224,7 +1224,6 @@ function populateTenantModal(tenant, mode = "tenant") {
         tenantModalFloor: tenant.floor || templateData["floor_of_building "] || templateData.floor_of_building || "",
         tenantModalDirection: tenant.direction || templateData.direction_build || "",
         tenantModalMeter: tenant.meterNumber || templateData.meter_number || "",
-        tenantModalRent: tenant.rentAmount || templateData.rent_amount || "",
         tenantModalPayable: normalizeDayValue(
             tenant.payableDate || templateData.payable_date_raw || templateData.payable_date || ""
         ),
@@ -1323,7 +1322,6 @@ async function saveTenantModal() {
         floor: document.getElementById("tenantModalFloor")?.value.trim() || "",
         direction: document.getElementById("tenantModalDirection")?.value || "",
         meterNumber: document.getElementById("tenantModalMeter")?.value || "",
-        rentAmount: document.getElementById("tenantModalRent")?.value || "",
         payableDate:
             payableSelect && payableSelect.value
                 ? toOrdinal(parseInt(payableSelect.value, 10))
