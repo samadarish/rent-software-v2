@@ -30,6 +30,22 @@ const statusClassMap = {
     inactive: "bg-rose-100 text-rose-700 border-rose-200",
 };
 
+function isTenancyActive(entry = {}) {
+    const status = (entry.status || "").toString().trim().toLowerCase();
+    const explicitActive = status === "active" || !!entry.activeTenant;
+    const tenancyId =
+        entry.tenancyId || entry.tenancy_id || entry.templateData?.tenancy_id || entry.templateData?.tenancyId || "";
+
+    if (!tenancyId) return explicitActive;
+
+    const historyForTenancy = Array.isArray(entry.tenancyHistory)
+        ? entry.tenancyHistory.filter((h) => (h.tenancyId || h.tenancy_id)?.toString() === tenancyId.toString())
+        : [];
+    const hasActiveHistory = historyForTenancy.some((h) => (h.status || "").toLowerCase() === "active");
+
+    return explicitActive || hasActiveHistory;
+}
+
 /**
  * Returns all active tenants for a given wing, ensuring duplicates are filtered out.
  * @param {string} wing - Wing identifier from the dropdown.
@@ -43,11 +59,7 @@ export function getActiveTenantsForWing(wing) {
 
     return source.filter((t) => {
         const matchesWing = (t.wing || "").toString().trim().toLowerCase() === normalizedWing;
-        const hasActiveHistory = Array.isArray(t.tenancyHistory)
-            ? t.tenancyHistory.some((h) => (h.status || "").toLowerCase() === "active")
-            : false;
-        const isActive = hasActiveHistory || !!t.activeTenant;
-        return matchesWing && isActive;
+        return matchesWing && isTenancyActive(t);
     });
 }
 
@@ -626,12 +638,7 @@ function applyTenantFilters() {
 
     if (currentStatusFilter !== "all") {
         const shouldBeActive = currentStatusFilter === "active";
-        filtered = filtered.filter((t) => {
-            const activeHistory = Array.isArray(t.tenancyHistory)
-                ? t.tenancyHistory.some((h) => (h.status || "").toLowerCase() === "active")
-                : false;
-            return (activeHistory || !!t.activeTenant) === shouldBeActive;
-        });
+        filtered = filtered.filter((t) => isTenancyActive(t) === shouldBeActive);
     }
 
     if (currentSearch) {
