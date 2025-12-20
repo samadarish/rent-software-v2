@@ -1245,8 +1245,6 @@ function populateTenantModal(tenant, mode = "tenant") {
         tenantModalMobile: tenant.tenantMobile || templateData.tenant_mobile || "",
         tenantModalVacateReason: tenant.vacateReason || "",
         tenantModalInitialMeter: "",
-        tenantModalRentRevisionUnit: tenant.rentRevisionUnit || templateData["rent_rev year_mon"] || "",
-        tenantModalRentRevisionNumber: tenant.rentRevisionNumber || templateData.rent_rev_number || "",
         tenantModalPetPolicy: tenant.petPolicy || templateData.pet_text_area || "",
     };
 
@@ -1342,8 +1340,6 @@ async function saveTenantModal() {
         tenantMobile: document.getElementById("tenantModalMobile")?.value || "",
         vacateReason: document.getElementById("tenantModalVacateReason")?.value || "",
         unitNumber: document.getElementById("tenantModalUnitNumber")?.value || "",
-        rentRevisionUnit: document.getElementById("tenantModalRentRevisionUnit")?.value || "",
-        rentRevisionNumber: document.getElementById("tenantModalRentRevisionNumber")?.value || "",
         petPolicy: document.getElementById("tenantModalPetPolicy")?.value || "",
     };
     const existingGrn = activeTenantForModal.grnNumber || activeTenantForModal.templateData?.["GRN number"] || "";
