@@ -264,6 +264,18 @@ function toggleTenantModalSections(mode) {
 
     tenantSections.forEach((el) => el.classList.toggle("hidden", mode !== "tenant"));
     tenancySections.forEach((el) => el.classList.toggle("hidden", mode !== "tenancy"));
+
+    if (mode !== "tenancy") {
+        toggleNewTenancyOnlyFields(false);
+    }
+}
+
+function toggleNewTenancyOnlyFields(show) {
+    const rentGroup = document.getElementById("tenantModalRentGroup");
+    if (rentGroup) rentGroup.classList.toggle("hidden", !show);
+
+    const newBadge = document.getElementById("tenantModalNewBadge");
+    if (newBadge) newBadge.classList.toggle("hidden", !show);
 }
 
 async function loadRentHistoryForTenancy(tenancyId, baseRent) {
@@ -1202,6 +1214,7 @@ function handleNewTenancyChoice(moveChoice) {
         direction: "",
         meterNumber: "",
         tenancyEndDate: "",
+        rentAmount: "",
         activeTenant: true,
         templateData,
     };
@@ -1218,6 +1231,9 @@ function populateTenantModal(tenant, mode = "tenant") {
     if (!modal) return;
 
     toggleTenantModalSections(mode);
+
+    const showRentField = mode === "tenancy" && !!tenant.isNewTenancy;
+    toggleNewTenancyOnlyFields(showRentField);
 
     const templateData = tenant.templateData || {};
 
@@ -1257,6 +1273,7 @@ function populateTenantModal(tenant, mode = "tenant") {
             tenant.payableDate || templateData.payable_date_raw || templateData.payable_date || ""
         ),
         tenantModalDeposit: tenant.securityDeposit || templateData.secu_depo || "",
+        tenantModalRent: pickRentValue(tenant.rentAmount, templateData.rent_amount, ""),
         tenantModalTenantNotice: tenant.tenantNoticeMonths || templateData.notice_num_t || "",
         tenantModalLandlordNotice: tenant.landlordNoticeMonths || templateData.notice_num_l || "",
         tenantModalLateRent: tenant.lateRentPerDay || templateData.late_rent || "",
@@ -1341,6 +1358,12 @@ async function saveTenantModal() {
     }
 
     const payableSelect = document.getElementById("tenantModalPayable");
+    const rentGroup = document.getElementById("tenantModalRentGroup");
+    const rentInput = document.getElementById("tenantModalRent");
+    const rentAmount =
+        rentGroup && !rentGroup.classList.contains("hidden")
+            ? rentInput?.value?.trim() || ""
+            : undefined;
 
     const updates = {
         tenantFullName: document.getElementById("tenantModalFullName")?.value || "",
@@ -1377,6 +1400,10 @@ async function saveTenantModal() {
         rentRevisionNumber: document.getElementById("tenantModalRentRevisionNumber")?.value || "",
         petPolicy: document.getElementById("tenantModalPetPolicy")?.value || "",
     };
+
+    if (typeof rentAmount !== "undefined") {
+        updates.rentAmount = rentAmount;
+    }
     const existingGrn = activeTenantForModal.grnNumber || activeTenantForModal.templateData?.["GRN number"] || "";
     const submittedGrn = updates.grnNumber || existingGrn;
 
@@ -1416,6 +1443,10 @@ async function saveTenantModal() {
             family: familyMembers,
             isNewTenancy: false,
             previousTenancyId: undefined,
+            rentAmount:
+                typeof updates.rentAmount !== "undefined"
+                    ? updates.rentAmount
+                    : activeTenantForModal.rentAmount,
         };
 
         const historyEntry = {
