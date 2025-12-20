@@ -1225,14 +1225,15 @@ function handleNewTenancyChoice(moveChoice) {
 }
 
 function populateTenantModal(tenant, mode = "tenant") {
-    activeTenantForModal = tenant;
+    const isNewTenancy = mode === "tenancy" && !!tenant.isNewTenancy;
+    activeTenantForModal = { ...tenant, isNewTenancy };
     activeRentRevisions = [];
     const modal = document.getElementById("tenantDetailModal");
     if (!modal) return;
 
     toggleTenantModalSections(mode);
 
-    const showRentField = mode === "tenancy" && !!tenant.isNewTenancy;
+    const showRentField = mode === "tenancy" && isNewTenancy;
     toggleNewTenancyOnlyFields(showRentField);
 
     const templateData = tenant.templateData || {};
@@ -1360,8 +1361,9 @@ async function saveTenantModal() {
     const payableSelect = document.getElementById("tenantModalPayable");
     const rentGroup = document.getElementById("tenantModalRentGroup");
     const rentInput = document.getElementById("tenantModalRent");
+    const isNewTenancy = !!activeTenantForModal.isNewTenancy;
     const rentAmount =
-        rentGroup && !rentGroup.classList.contains("hidden")
+        isNewTenancy && rentGroup && !rentGroup.classList.contains("hidden")
             ? rentInput?.value?.trim() || ""
             : undefined;
 
@@ -1414,9 +1416,9 @@ async function saveTenantModal() {
             tenantId: activeTenantForModal.tenantId,
             tenancyId: activeTenantForModal.tenancyId,
             previousTenancyId: activeTenantForModal.previousTenancyId,
-            createNewTenancy: !!activeTenantForModal.isNewTenancy,
-            forceNewTenancyId: activeTenantForModal.tenancyId,
-            keepPreviousActive: !!activeTenantForModal.keepPreviousActive,
+            createNewTenancy: isNewTenancy,
+            forceNewTenancyId: isNewTenancy ? activeTenantForModal.tenancyId : undefined,
+            keepPreviousActive: isNewTenancy ? !!activeTenantForModal.keepPreviousActive : false,
             unitId: updates.unitId || activeTenantForModal.unitId,
             grn: submittedGrn,
             templateData: activeTenantForModal.templateData,
