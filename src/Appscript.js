@@ -975,8 +975,10 @@ function handleSaveBillingRecord_(payload) {
     const electricityAmount = Math.round(units * rate * 100) / 100;
     const sweepAmount = normalizeBoolean_(reading.included) ? sweep : 0;
     const motorShare = normalizeBoolean_(reading.included) ? motorPerTenant : 0;
+    const totalBeforeRound = Number(rent) + electricityAmount + sweepAmount + motorShare;
+    const roundedTotal = Math.round(totalBeforeRound);
     const total = normalizeBoolean_(reading.included)
-      ? Math.round((Number(rent) + electricityAmount + sweepAmount + motorShare) * 100) / 100
+      ? Math.round(roundedTotal * 100) / 100
       : 0;
 
     billRows.push({
