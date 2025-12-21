@@ -406,9 +406,9 @@ function openAttachmentViewer(url, title = "Receipt") {
                 candidate.hostname.includes("docs.google.com") && candidate.searchParams.get("url")
                     ? decodeURIComponent(candidate.searchParams.get("url"))
                     : viewUrl;
-            return embeddedUrl;
+            return normalizeAttachmentUrl(embeddedUrl);
         } catch (err) {
-            return viewUrl;
+            return normalizeAttachmentUrl(viewUrl);
         }
     })();
     caption.textContent = title || "Receipt";
@@ -462,14 +462,16 @@ async function showAttachmentPreview(name, url) {
     const attachmentName = document.getElementById("paymentAttachmentName");
     const attachmentLink = document.getElementById("paymentAttachmentLink");
     const { previewUrl, viewUrl } = await resolveAttachmentPreview(url);
+    const normalizedPreview = normalizeAttachmentUrl(previewUrl || viewUrl);
+    const normalizedView = normalizeAttachmentUrl(viewUrl || previewUrl);
 
-    paymentsState.attachmentPreviewUrl = previewUrl || "";
-    paymentsState.attachmentViewUrl = viewUrl || "";
+    paymentsState.attachmentPreviewUrl = normalizedPreview || "";
+    paymentsState.attachmentViewUrl = normalizedView || "";
 
     if (attachmentPreview) {
         const img = attachmentPreview.querySelector("img");
-        if (previewUrl) {
-            if (img) img.src = previewUrl;
+        if (normalizedPreview) {
+            if (img) img.src = normalizedPreview;
             attachmentPreview.classList.remove("hidden");
             attachmentPreview.classList.add("cursor-pointer");
         } else {
@@ -484,10 +486,10 @@ async function showAttachmentPreview(name, url) {
     if (attachmentLink) {
         const anchor = attachmentLink.querySelector("a");
         if (anchor) {
-            anchor.href = viewUrl || previewUrl || "#";
+            anchor.href = normalizedView || normalizedPreview || "#";
             anchor.target = "_self";
         }
-        attachmentLink.classList.toggle("hidden", !previewUrl && !viewUrl);
+        attachmentLink.classList.toggle("hidden", !normalizedPreview && !normalizedView);
     }
 }
 
