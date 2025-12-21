@@ -1005,7 +1005,7 @@ function handleSaveBillingRecord_(payload) {
         prev_reading: tenant.prevReading || '',
         new_reading: tenant.newReading || '',
         included,
-        override_rent: tenant.override_rent || '',
+        override_rent: tenant.override_rent || tenant.rentAmount || '',
         notes: tenant.notes || '',
         created_at: new Date(),
       };
@@ -1021,8 +1021,54 @@ function handleSaveBillingRecord_(payload) {
   readingRows.forEach((reading) => {
     const tenancy = tenancyById[reading.tenancy_id];
     if (!tenancy) return;
-    const effectiveRent = getEffectiveRentForMonth_(tenancy.tenancy_id, monthKey, rentRevisionCache);
-    const rent = reading.override_rent || effectiveRent || 0;
+
+    // Get effective rent from revisions
+    let effectiveRent = getEffectiveRentForMonth_(tenancy.tenancy_id, monthKey, rentRevisionCache);
+
+    // If no rent revision exists for this tenancy, create a default one
+    // This handles legacy tenancies that don't have rent revisions yet
+    if (effectiveRent === null || effectiveRent === undefined) {
+      // Try to get a default rent from override_rent if provided
+      const defaultRent = Number(reading.override_rent) || 0;
+
+      if (defaultRent > 0) {
+        // Create a rent revision for this tenancy starting from its commencement date
+        const revisionMonth = normalizeMonthKey_(tenancy.commencement_date || tenancy.agreement_date) ||
+          normalizeMonthKey_(new Date());
+        try {
+          upsertTenancyRentRevision_({
+            tenancyId: tenancy.tenancy_id,
+            effectiveMonth: revisionMonth,
+            rentAmount: defaultRent,
+            note: 'Auto-created during billing'
+          });
+          effectiveRent = defaultRent;
+
+          // Update the cache so subsequent iterations can use it
+          if (!rentRevisionCache[tenancy.tenancy_id]) {
+            rentRevisionCache[tenancy.tenancy_id] = [];
+          }
+          rentRevisionCache[tenancy.tenancy_id].push({
+            tenancy_id: tenancy.tenancy_id,
+            effective_month: revisionMonth,
+            rent_amount: defaultRent,
+            created_at: new Date()
+          });
+          rentRevisionCache[tenancy.tenancy_id].sort((a, b) => {
+            const monthCompare = (b.effective_month || '').localeCompare(a.effective_month || '');
+            if (monthCompare !== 0) return monthCompare;
+            const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return bTime - aTime;
+          });
+        } catch (e) {
+          console.error('Failed to create default rent revision', e);
+        }
+      }
+    }
+
+    // Prioritize override_rent, then effective rent from revisions
+    const rent = reading.override_rent ? Number(reading.override_rent) : (effectiveRent || 0);
     const units = Math.max(Number(reading.new_reading || 0) - Number(reading.prev_reading || 0), 0);
     const electricityAmount = Math.round(units * rate * 100) / 100;
     const sweepAmount = normalizeBoolean_(reading.included) ? sweep : 0;
