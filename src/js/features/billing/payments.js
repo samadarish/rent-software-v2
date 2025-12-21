@@ -399,18 +399,31 @@ function openAttachmentViewer(url, title = "Receipt") {
     if (!modal || !iframe || !image || !caption || !fallback) return;
 
     const viewUrl = url || "";
+    const parsedUrl = (() => {
+        try {
+            const candidate = new URL(viewUrl);
+            const embeddedUrl =
+                candidate.hostname.includes("docs.google.com") && candidate.searchParams.get("url")
+                    ? decodeURIComponent(candidate.searchParams.get("url"))
+                    : viewUrl;
+            return embeddedUrl;
+        } catch (err) {
+            return viewUrl;
+        }
+    })();
     caption.textContent = title || "Receipt";
 
     const isImageLike =
-        viewUrl.startsWith("data:image") || /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(viewUrl) ||
-        viewUrl.includes("export=view");
+        parsedUrl.startsWith("data:image") || /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(parsedUrl) ||
+        parsedUrl.includes("export=view") ||
+        parsedUrl.includes("googleusercontent");
 
     image.classList.add("hidden");
     iframe.classList.add("hidden");
     fallback.classList.add("hidden");
 
     if (isImageLike) {
-        image.src = viewUrl;
+        image.src = parsedUrl;
         image.classList.remove("hidden");
     } else if (viewUrl) {
         const viewerUrl = `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(viewUrl)}`;
