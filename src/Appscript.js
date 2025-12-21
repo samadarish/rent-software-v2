@@ -459,12 +459,12 @@ function mapTenantPayload_(payload) {
 
   const family = Array.isArray(payload.familyMembers)
     ? payload.familyMembers.map((fm) => ({
-        member_id: Utilities.getUuid(),
-        tenant_id: tenantId,
-        name: fm.name || '',
-        relationship: fm.relationship || '',
-        occupation: fm.occupation || '',
-        aadhaar: fm.aadhaar || '',
+      member_id: Utilities.getUuid(),
+      tenant_id: tenantId,
+      name: fm.name || '',
+      relationship: fm.relationship || '',
+      occupation: fm.occupation || '',
+      aadhaar: fm.aadhaar || '',
       address: fm.address || '',
       created_at: now,
     }))
@@ -562,15 +562,25 @@ function handleSaveTenant_(payload) {
     writeTableRows_(FAMILY_SHEET, FAMILY_HEADERS, mapped.family);
   }
 
+  // Only create initial rent revision for new tenancies
   if (mapped.rentAmountValue !== null) {
     const effectiveMonth =
       normalizeMonthKey_(mapped.tenancy.commencement_date || mapped.tenancy.agreement_date) || normalizeMonthKey_(new Date());
     if (effectiveMonth) {
-      upsertTenancyRentRevision_({
-        tenancyId: mapped.tenancy.tenancy_id,
-        effectiveMonth,
-        rentAmount: mapped.rentAmountValue,
-      });
+      // Check if a revision already exists for this tenancy at this effective month
+      const existingRevisions = listTenancyRentRevisions_(mapped.tenancy.tenancy_id);
+      const existingRevisionForMonth = existingRevisions.find(
+        (r) => normalizeMonthKey_(r.effective_month) === effectiveMonth
+      );
+
+      // Only create revision if one doesn't exist yet for this month
+      if (!existingRevisionForMonth) {
+        upsertTenancyRentRevision_({
+          tenancyId: mapped.tenancy.tenancy_id,
+          effectiveMonth,
+          rentAmount: mapped.rentAmountValue,
+        });
+      }
     }
   }
 
@@ -614,15 +624,30 @@ function handleUpdateTenant_(payload) {
     }
   }
 
+  // Only create/update rent revision if rent has actually changed or it's a new tenancy
   if (mapped.rentAmountValue !== null) {
     const effectiveMonth =
       normalizeMonthKey_(mapped.tenancy.commencement_date || mapped.tenancy.agreement_date) || normalizeMonthKey_(new Date());
     if (effectiveMonth) {
-      upsertTenancyRentRevision_({
-        tenancyId: mapped.tenancy.tenancy_id,
-        effectiveMonth,
-        rentAmount: mapped.rentAmountValue,
-      });
+      // Get existing revisions for this tenancy
+      const existingRevisions = listTenancyRentRevisions_(mapped.tenancy.tenancy_id);
+      const existingRevisionForMonth = existingRevisions.find(
+        (r) => normalizeMonthKey_(r.effective_month) === effectiveMonth
+      );
+
+      // Only create/update revision if:
+      // 1. It's a new tenancy (no existing revision for this month), OR
+      // 2. The rent amount has actually changed
+      const shouldCreateRevision = !existingRevisionForMonth ||
+        (Number(existingRevisionForMonth.rent_amount) !== Number(mapped.rentAmountValue));
+
+      if (shouldCreateRevision) {
+        upsertTenancyRentRevision_({
+          tenancyId: mapped.tenancy.tenancy_id,
+          effectiveMonth,
+          rentAmount: mapped.rentAmountValue,
+        });
+      }
     }
   }
 
@@ -923,9 +948,9 @@ function handleSaveBillingRecord_(payload) {
       ? [tenancyFromPayload]
       : tenant.tenantId && tenancyByTenant[tenant.tenantId]
         ? tenancyByTenant[tenant.tenantId]
-      : tenancyByGrn[grnKey]
-        ? tenancyByGrn[grnKey]
-        : [];
+        : tenancyByGrn[grnKey]
+          ? tenancyByGrn[grnKey]
+          : [];
     const tenancyMatchesWing = (t) => {
       const unit = unitById[t.unit_id];
       if (!unit) return false;
@@ -1253,14 +1278,14 @@ function handleSavePayment_(payload = {}) {
   const allocations = Array.isArray(payload.allocations) && payload.allocations.length
     ? payload.allocations
     : [
-        {
-          allocation_id: Utilities.getUuid(),
-          payment_id: paymentId,
-          bill_line_id: billLineId,
-          amount_applied: Number(record.amount) || 0,
-          created_at: new Date(),
-        },
-      ];
+      {
+        allocation_id: Utilities.getUuid(),
+        payment_id: paymentId,
+        bill_line_id: billLineId,
+        amount_applied: Number(record.amount) || 0,
+        created_at: new Date(),
+      },
+    ];
 
   allocations.forEach((alloc) => {
     const allocation = {
