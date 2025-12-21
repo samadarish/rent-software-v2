@@ -666,7 +666,16 @@ function buildTenantDirectory_() {
       effective_month: normalizeMonthKey_(r.effective_month),
       rent_amount: Number(r.rent_amount) || 0,
     }))
-    .sort((a, b) => (a.effective_month || '').localeCompare(b.effective_month || '') * -1);
+    .sort((a, b) => {
+      // Sort by effective_month descending (most recent first)
+      const monthCompare = (b.effective_month || '').localeCompare(a.effective_month || '');
+      if (monthCompare !== 0) return monthCompare;
+
+      // If same month, sort by created_at descending (most recent first)
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTime - aTime;
+    });
 
   const revisionCache = revisions.reduce((m, r) => {
     if (!m[r.tenancy_id]) m[r.tenancy_id] = [];
@@ -816,7 +825,16 @@ function listTenancyRentRevisions_(tenancyId) {
       effective_month: normalizeMonthKey_(r.effective_month),
       rent_amount: Number(r.rent_amount) || 0,
     }))
-    .sort((a, b) => (a.effective_month || '').localeCompare(b.effective_month || '') * -1);
+    .sort((a, b) => {
+      // Sort by effective_month descending (most recent first)
+      const monthCompare = (b.effective_month || '').localeCompare(a.effective_month || '');
+      if (monthCompare !== 0) return monthCompare;
+
+      // If same month, sort by created_at descending (most recent first)
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTime - aTime;
+    });
 }
 
 function upsertTenancyRentRevision_(payload = {}) {
@@ -934,7 +952,16 @@ function handleSaveBillingRecord_(payload) {
     return m;
   }, {});
   Object.values(rentRevisionCache).forEach((list) =>
-    list.sort((a, b) => (a.effective_month || '').localeCompare(b.effective_month || '') * -1)
+    list.sort((a, b) => {
+      // Sort by effective_month descending (most recent first)
+      const monthCompare = (b.effective_month || '').localeCompare(a.effective_month || '');
+      if (monthCompare !== 0) return monthCompare;
+
+      // If same month, sort by created_at descending (most recent first)
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTime - aTime;
+    })
   );
 
   const readingRows = [];
@@ -1064,7 +1091,16 @@ function handleGetBillingRecord_(monthKeyRaw, wingRaw) {
     return m;
   }, {});
   Object.values(rentRevisionCache).forEach((list) =>
-    list.sort((a, b) => (a.effective_month || '').localeCompare(b.effective_month || '') * -1)
+    list.sort((a, b) => {
+      // Sort by effective_month descending (most recent first)
+      const monthCompare = (b.effective_month || '').localeCompare(a.effective_month || '');
+      if (monthCompare !== 0) return monthCompare;
+
+      // If same month, sort by created_at descending (most recent first)
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTime - aTime;
+    })
   );
 
   const unitMap = units.reduce((m, u) => {
