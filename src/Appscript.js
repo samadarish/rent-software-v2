@@ -339,6 +339,41 @@ function ensureDriveFileShareable_(url) {
   }
 }
 
+function extractDriveFileId_(url) {
+  if (!url) return '';
+  const match = url.match(/\/d\/([^/]+)/) || url.match(/[?&]id=([^&#]+)/);
+  return match && match[1] ? match[1] : '';
+}
+
+function handleAttachmentPreview_(attachmentUrl) {
+  const id = extractDriveFileId_(attachmentUrl);
+  if (!id) return jsonResponse({ ok: false, previewUrl: '', attachmentUrl: attachmentUrl || '' });
+  try {
+    const file = DriveApp.getFileById(id);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    const ensured = ensureDriveFileShareable_(file.getUrl());
+    const blob = file.getBlob();
+    const bytes = blob.getBytes();
+    const sizeLimit = 2 * 1024 * 1024;
+    if (bytes.length > sizeLimit) {
+      return jsonResponse({
+        ok: true,
+        previewUrl: '',
+        attachmentUrl: ensured.viewUrl,
+      });
+    }
+    const dataUrl = `data:${blob.getContentType()};base64,${Utilities.base64Encode(bytes)}`;
+    return jsonResponse({
+      ok: true,
+      previewUrl: dataUrl,
+      attachmentUrl: ensured.viewUrl,
+    });
+  } catch (err) {
+    Logger.log('Attachment preview failed: ' + err);
+    return jsonResponse({ ok: false, previewUrl: '', attachmentUrl: attachmentUrl || '' });
+  }
+}
+
 /********* CLAUSES *********/
 function readUnifiedClauses_() {
   const sheet = getSheetWithHeaders_(CLAUSES_SHEET, CLAUSES_HEADERS);
@@ -1469,6 +1504,10 @@ function doGet(e) {
     if (action === 'payments') {
       const payments = handleFetchPayments_();
       return jsonResponse({ ok: true, payments });
+    }
+
+    if (action === 'attachmentpreview') {
+      return handleAttachmentPreview_(e.parameter && e.parameter.attachmentUrl);
     }
 
     return jsonResponse({ ok: true, message: 'GET OK' });

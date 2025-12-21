@@ -163,7 +163,8 @@ function getIncludedTenants() {
 function getLastTwelveMonths() {
     const months = [];
     const now = new Date();
-    for (let i = 12; i >= 1; i -= 1) {
+    // Include the current month and the previous 11 months
+    for (let i = 11; i >= 0; i -= 1) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const monthNumber = `${d.getMonth() + 1}`.padStart(2, "0");
         months.push({
@@ -821,6 +822,26 @@ async function handleSaveBills() {
     const selectedTenants = getIncludedTenants();
     if (!selectedTenants.length) {
         showToast("Select at least one tenant to generate bills", "error");
+        return false;
+    }
+
+    const invalidTenant = selectedTenants.find((t) => {
+        const hasMissing =
+            t.prevReading === "" ||
+            t.prevReading === undefined ||
+            t.newReading === "" ||
+            t.newReading === undefined;
+        const prevVal = Number(t.prevReading);
+        const newVal = Number(t.newReading);
+        const notNumbers = Number.isNaN(prevVal) || Number.isNaN(newVal);
+        const hasRollback = Number.isFinite(prevVal) && Number.isFinite(newVal) && newVal < prevVal;
+        return hasMissing || notNumbers || hasRollback;
+    });
+    if (invalidTenant) {
+        showToast(
+            `Enter valid meter readings for ${invalidTenant.name || "tenant"} (new reading must be >= previous).`,
+            "error"
+        );
         return false;
     }
 

@@ -216,6 +216,7 @@ function resetPaymentForm() {
     const modeSelect = document.getElementById("paymentModeSelect");
     const notesInput = document.getElementById("paymentNotesInput");
     const idField = document.getElementById("paymentRecordId");
+    const amountInput = document.getElementById("paymentAmountInput");
     const billTitle = document.getElementById("paymentBillTitle");
     const billAmount = document.getElementById("paymentBillAmount");
     const billStatus = document.getElementById("paymentBillStatus");
@@ -237,6 +238,12 @@ function resetPaymentForm() {
     if (modeSelect) modeSelect.value = "UPI";
     if (notesInput) notesInput.value = "";
     if (idField) idField.value = "";
+    if (amountInput) amountInput.value = "";
+    if (amountInput) {
+        amountInput.disabled = false;
+        amountInput.max = "";
+        amountInput.placeholder = "Enter amount received";
+    }
 
     if (billTitle) billTitle.textContent = "Select a bill to record";
     if (billAmount) billAmount.textContent = "₹0";
@@ -265,6 +272,7 @@ function setPaymentFormReadOnly(isReadOnly) {
     const dateInput = document.getElementById("paymentDateInput");
     const modeSelect = document.getElementById("paymentModeSelect");
     const notesInput = document.getElementById("paymentNotesInput");
+    const amountInput = document.getElementById("paymentAmountInput");
     const attachmentInput = document.getElementById("paymentAttachmentInput");
     const attachmentClear = document.getElementById("paymentAttachmentClear");
     const saveBtn = document.getElementById("paymentSaveBtn");
@@ -272,6 +280,7 @@ function setPaymentFormReadOnly(isReadOnly) {
     if (dateInput) dateInput.disabled = isReadOnly;
     if (modeSelect) modeSelect.disabled = isReadOnly;
     if (notesInput) notesInput.disabled = isReadOnly;
+    if (amountInput) amountInput.disabled = isReadOnly;
     if (attachmentInput) attachmentInput.disabled = isReadOnly;
     if (attachmentClear) attachmentClear.disabled = isReadOnly;
     if (saveBtn) saveBtn.textContent = isReadOnly ? "Close" : "Save payment";
@@ -288,6 +297,7 @@ function applyBillContext(context = {}) {
     const breakdownElec = document.getElementById("paymentBreakdownElectricity");
     const breakdownMotor = document.getElementById("paymentBreakdownMotor");
     const breakdownSweep = document.getElementById("paymentBreakdownSweep");
+    const amountInput = document.getElementById("paymentAmountInput");
 
     const monthLabel = friendlyMonthLabel(context.monthKey, context.monthLabel);
     const rentAmount = Number(context.rentAmount || 0) || 0;
@@ -306,7 +316,7 @@ function applyBillContext(context = {}) {
         monthKey: context.monthKey || "",
         monthLabel,
         billTotal,
-        amount: remaining,
+        amount: typeof context.amount === "number" ? context.amount : remaining,
         remaining,
         billed: !!context.monthKey,
         tenantName: context.tenantName || "",
@@ -325,7 +335,10 @@ function applyBillContext(context = {}) {
     };
 
     if (billTitle) billTitle.textContent = context.tenantName ? `${context.tenantName}` : "Select a bill to record";
-    if (billAmount) billAmount.textContent = billTotal ? formatCurrency(remaining || billTotal) : "₹0";
+    if (billAmount) {
+        const headlineAmount = typeof remaining === "number" ? remaining : billTotal;
+        billAmount.textContent = billTotal ? formatCurrency(headlineAmount) : "₹0";
+    }
     if (billStatus) {
         const dueLabel = context.payableDate ? ` • Due ${context.payableDate}` : "";
         billStatus.textContent = context.monthKey
@@ -339,6 +352,15 @@ function applyBillContext(context = {}) {
     if (breakdownElec) breakdownElec.textContent = formatCurrency(electricityAmount);
     if (breakdownMotor) breakdownMotor.textContent = formatCurrency(motorAmount);
     if (breakdownSweep) breakdownSweep.textContent = formatCurrency(sweepAmount);
+    if (amountInput) {
+        const defaultAmount =
+            typeof paymentsState.billContext.amount === "number"
+                ? paymentsState.billContext.amount
+                : remaining || billTotal || 0;
+        amountInput.value = defaultAmount ? Number(defaultAmount).toFixed(2) : "";
+        amountInput.max = billTotal || "";
+        amountInput.placeholder = billTotal ? `Up to ${formatCurrency(remaining || billTotal)}` : "Enter amount received";
+    }
 }
 
 function normalizeAttachmentUrl(url = "") {
@@ -346,12 +368,12 @@ function normalizeAttachmentUrl(url = "") {
 
     const driveMatch = url.match(/\/file\/d\/([^/]+)\//);
     if (driveMatch?.[1]) {
-        return `https://drive.google.com/uc?export=view&id=${driveMatch[1]}`;
+        return `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
     }
 
     const idParam = url.match(/[?&]id=([^&#]+)/);
     if (idParam?.[1]) {
-        return `https://drive.google.com/uc?export=view&id=${idParam[1]}`;
+        return `https://drive.google.com/uc?export=download&id=${idParam[1]}`;
     }
 
     return url;
@@ -401,8 +423,12 @@ function openAttachmentViewer(url, title = "Receipt") {
     const viewUrl = url || "";
     caption.textContent = title || "Receipt";
 
+    const nameHint = (paymentsState.attachmentName || "").toLowerCase();
+    const nameIsImage = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(nameHint);
     const isImageLike =
-        viewUrl.startsWith("data:image") || /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(viewUrl) ||
+        nameIsImage ||
+        viewUrl.startsWith("data:image") ||
+        /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(viewUrl) ||
         viewUrl.includes("export=view");
 
     image.classList.add("hidden");
@@ -410,6 +436,7 @@ function openAttachmentViewer(url, title = "Receipt") {
     fallback.classList.add("hidden");
 
     if (isImageLike) {
+        image.referrerPolicy = "no-referrer";
         image.src = viewUrl;
         image.classList.remove("hidden");
     } else if (viewUrl) {
@@ -456,7 +483,10 @@ async function showAttachmentPreview(name, url) {
     if (attachmentPreview) {
         const img = attachmentPreview.querySelector("img");
         if (previewUrl) {
-            if (img) img.src = previewUrl;
+            if (img) {
+                img.referrerPolicy = "no-referrer";
+                img.src = previewUrl;
+            }
             attachmentPreview.classList.remove("hidden");
             attachmentPreview.classList.add("cursor-pointer");
         } else {
@@ -519,6 +549,7 @@ async function openPaymentModal(payment = null, billContext = null) {
 
         context = {
             ...context,
+            amount: payment.amount ?? context.amount,
             rentAmount: payment.rentAmount ?? context.rentAmount,
             electricityAmount: payment.electricityAmount ?? context.electricityAmount,
             motorShare: payment.motorShare ?? context.motorShare,
@@ -712,11 +743,21 @@ async function loadGeneratedBills() {
     const loader = document.getElementById("generatedBillsLoader");
     if (loader) loader.classList.remove("hidden");
 
-    const { bills } = await fetchGeneratedBills();
-    paymentsState.generatedBills = Array.isArray(bills) ? bills : [];
-    paymentsState.billsLoaded = true;
-    setBillsTab(paymentsState.activeBillTab || "pending");
-    renderGeneratedBills();
+    try {
+        const { bills } = await fetchGeneratedBills();
+        paymentsState.generatedBills = Array.isArray(bills) ? bills : [];
+        paymentsState.billsLoaded = true;
+        setBillsTab(paymentsState.activeBillTab || "pending");
+        renderGeneratedBills();
+    } catch (err) {
+        console.error("Failed to load generated bills", err);
+        paymentsState.generatedBills = [];
+        paymentsState.billsLoaded = false;
+        renderGeneratedBills();
+        showToast("Unable to load generated bills right now.", "error");
+    } finally {
+        if (loader) loader.classList.add("hidden");
+    }
 }
 
 async function handleSavePayment() {
@@ -724,6 +765,7 @@ async function handleSavePayment() {
     const modeSelect = document.getElementById("paymentModeSelect");
     const notesInput = document.getElementById("paymentNotesInput");
     const idField = document.getElementById("paymentRecordId");
+    const amountInput = document.getElementById("paymentAmountInput");
     const context = paymentsState.billContext || {};
 
     if (paymentsState.viewOnly) {
@@ -737,7 +779,23 @@ async function handleSavePayment() {
     }
 
     const dateValue = dateInput?.value || new Date().toISOString().slice(0, 10);
-    const amountVal = Number(typeof context.remaining === "number" ? context.remaining : context.billTotal || 0);
+    const rawAmount = amountInput?.value || "";
+    const amountVal = Number(rawAmount);
+    const pendingAmount =
+        typeof context.remaining === "number"
+            ? context.remaining
+            : typeof context.billTotal === "number"
+            ? context.billTotal
+            : 0;
+
+    if (!Number.isFinite(amountVal) || amountVal <= 0) {
+        showToast("Enter a payment amount greater than 0", "error");
+        return;
+    }
+    if (pendingAmount > 0 && amountVal - pendingAmount > 0.005) {
+        showToast(`Amount cannot exceed ${formatCurrency(pendingAmount)} pending`, "error");
+        return;
+    }
 
     const payload = {
         id: idField?.value || paymentsState.editingId || "",

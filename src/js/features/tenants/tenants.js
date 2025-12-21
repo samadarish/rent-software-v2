@@ -683,33 +683,42 @@ export async function loadTenantDirectory(forceReload = false) {
     }
 
     setTenantListLoading(true);
-    const [unitData, landlordData, data] = await Promise.all([
-        fetchUnitsFromSheet(),
-        fetchLandlordsFromSheet(),
-        fetchTenantDirectory(),
-    ]);
-    unitCache = Array.isArray(unitData.units)
-        ? unitData.units.map((u) => ({
-              ...u,
-              is_occupied:
-                  u.is_occupied === true ||
-                  (typeof u.is_occupied === "string" && u.is_occupied.toLowerCase() === "true"),
-          }))
-        : [];
-    landlordCache = Array.isArray(landlordData.landlords) ? landlordData.landlords : [];
-    const normalizedTenants = Array.isArray(data.tenants)
-        ? data.tenants.map((t) => ({
-              ...t,
-              tenancyHistory: Array.isArray(t.tenancyHistory) ? t.tenancyHistory : [],
-              family: Array.isArray(t.family) ? t.family : [],
-          }))
-        : [];
-    tenantRowsCache = normalizedTenants;
-    tenantCache = collapseTenantRows(normalizedTenants);
-    document.dispatchEvent(new CustomEvent("landlords:updated", { detail: landlordCache }));
-    hasLoadedTenants = true;
-    setTenantListLoading(false);
-    applyTenantFilters();
+    try {
+        const [unitData, landlordData, data] = await Promise.all([
+            fetchUnitsFromSheet(),
+            fetchLandlordsFromSheet(),
+            fetchTenantDirectory(),
+        ]);
+        unitCache = Array.isArray(unitData.units)
+            ? unitData.units.map((u) => ({
+                  ...u,
+                  is_occupied:
+                      u.is_occupied === true ||
+                      (typeof u.is_occupied === "string" && u.is_occupied.toLowerCase() === "true"),
+              }))
+            : [];
+        landlordCache = Array.isArray(landlordData.landlords) ? landlordData.landlords : [];
+        const normalizedTenants = Array.isArray(data.tenants)
+            ? data.tenants.map((t) => ({
+                  ...t,
+                  tenancyHistory: Array.isArray(t.tenancyHistory) ? t.tenancyHistory : [],
+                  family: Array.isArray(t.family) ? t.family : [],
+              }))
+            : [];
+        tenantRowsCache = normalizedTenants;
+        tenantCache = collapseTenantRows(normalizedTenants);
+        document.dispatchEvent(new CustomEvent("landlords:updated", { detail: landlordCache }));
+        hasLoadedTenants = true;
+        applyTenantFilters();
+    } catch (err) {
+        console.error("Failed to load tenant directory", err);
+        tenantRowsCache = [];
+        tenantCache = [];
+        applyTenantFilters();
+        showToast("Could not load tenants. Check your connection and Apps Script URL.", "error");
+    } finally {
+        setTenantListLoading(false);
+    }
 
     if (tenantCache.length) {
         const match = tenantCache.find((t) => t.grnNumber === previousSelectedGrn);

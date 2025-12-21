@@ -1518,7 +1518,7 @@
           </div>
         </div>
 
-        <div class="grid sm:grid-cols-2 gap-2">
+        <div class="grid sm:grid-cols-3 gap-2">
           <div class="space-y-1">
             <label class="text-[11px] font-semibold block">Payment mode</label>
             <select id="paymentModeSelect"
@@ -1534,6 +1534,13 @@
             <label class="text-[11px] font-semibold block">Payment date</label>
             <input id="paymentDateInput" type="date"
               class="w-full border border-slate-200 rounded-lg px-3 py-2 text-[12px] bg-white" />
+          </div>
+          <div class="space-y-1">
+            <label class="text-[11px] font-semibold block">Payment amount</label>
+            <input id="paymentAmountInput" type="number" inputmode="decimal" step="0.01" min="0"
+              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-[12px] bg-white"
+              placeholder="Enter amount received" />
+            <p class="text-[10px] text-slate-500">Cannot exceed the pending amount.</p>
           </div>
         </div>
 
