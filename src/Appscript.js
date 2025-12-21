@@ -177,12 +177,7 @@ const ATTACHMENT_HEADERS = [
   'uploaded_at',
 ];
 
-const LEGACY_CLAUSE_SHEETS = {
-  tenant: 'TenantClauses',
-  landlord: 'LandlordClauses',
-  penalties: 'PenaltyClauses',
-  misc: 'MiscClauses',
-};
+
 
 const driveShareCache = {};
 
@@ -360,25 +355,7 @@ function readUnifiedClauses_() {
   return sections;
 }
 
-function readLegacyClauses_() {
-  const result = { tenant: [], landlord: [], penalties: [], misc: [] };
-  Object.keys(LEGACY_CLAUSE_SHEETS).forEach((key) => {
-    const sheetName = LEGACY_CLAUSE_SHEETS[key];
-    const ss = getMasterSpreadsheet_();
-    const sheet = ss.getSheetByName(sheetName);
-    if (!sheet) return;
-    ensureHeaderRow_(sheet, ['SortOrder', 'Enabled', 'ClauseHtml']);
-    const lastRow = sheet.getLastRow();
-    if (lastRow <= 1) return;
-    const values = sheet.getRange(2, 1, lastRow - 1, CLAUSES_HEADERS.length - 1).getValues();
-    result[key] = values.map((row, idx) => ({
-      sortOrder: Number(row[0]) || idx + 1,
-      enabled: normalizeBoolean_(row[1]),
-      html: row[2] || '',
-    }));
-  });
-  return result;
-}
+
 
 function writeUnifiedClauses_(payload) {
   const sheet = getSheetWithHeaders_(CLAUSES_SHEET, CLAUSES_HEADERS);
@@ -1337,8 +1314,18 @@ function getOrCreateFolder_(name) {
 function handleSavePayment_(payload = {}) {
   const paymentId = payload.id || Utilities.getUuid();
   const paymentDate = parseIsoDate_(payload.date) || new Date();
-  const billLineId = payload.billLineId || '';
+  let billLineId = payload.billLineId || '';
   const tenantId = payload.tenantId || '';
+
+  // Fallback: If billLineId is missing but we have tenancy+month, find the bill
+  if (!billLineId && payload.tenancyId && payload.monthKey) {
+    const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
+    const match = bills.find(b =>
+      b.tenancy_id === payload.tenancyId &&
+      normalizeMonthKey_(b.month_key) === normalizeMonthKey_(payload.monthKey)
+    );
+    if (match) billLineId = match.bill_line_id;
+  }
   const attachment = payload.attachmentDataUrl
     ? savePaymentAttachment_(payload.attachmentDataUrl, paymentId, payload.attachmentName || '')
     : { attachment_id: payload.attachmentId || '', attachmentName: payload.attachmentName || '', attachmentUrl: payload.attachmentUrl || '' };

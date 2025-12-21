@@ -296,9 +296,9 @@ function applyBillContext(context = {}) {
     const sweepAmount = Number(context.sweepAmount || 0) || 0;
     const billTotal = Number(
         context.totalAmount ||
-            context.billTotal ||
-            context.amount ||
-            rentAmount + electricityAmount + motorAmount + sweepAmount
+        context.billTotal ||
+        context.amount ||
+        rentAmount + electricityAmount + motorAmount + sweepAmount
     ) || 0;
     const remaining = typeof context.remaining === "number" ? context.remaining : Number(context.amount || billTotal);
 
@@ -320,6 +320,8 @@ function applyBillContext(context = {}) {
         prevReading: context.prevReading || "",
         newReading: context.newReading || "",
         payableDate: context.payableDate || "",
+        tenancyId: context.tenancyId || "",
+        billLineId: context.billLineId || "",
     };
 
     if (billTitle) billTitle.textContent = context.tenantName ? `${context.tenantName}` : "Select a bill to record";
@@ -759,6 +761,8 @@ async function handleSavePayment() {
         attachmentDataUrl: paymentsState.attachmentDataUrl,
         attachmentName: paymentsState.attachmentName,
         attachmentUrl: paymentsState.attachmentUrl,
+        tenancyId: context.tenancyId,
+        billLineId: context.billLineId,
     };
 
     const { ok, payment } = await savePaymentRecord(payload);
