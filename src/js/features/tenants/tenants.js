@@ -238,13 +238,11 @@ function renderRentHistory(baseRent) {
     }
 
     if (currentRentEl) {
-        const today = new Date();
-        const monthKey = `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}`;
-        const effective = getEffectiveRentFromRevisions(revisions, monthKey, baseRent);
+        const latest = getLatestRentFromRevisions(revisions, baseRent);
         currentRentEl.textContent =
-            effective === null || typeof effective === "undefined"
+            latest === null || typeof latest === "undefined"
                 ? "-"
-                : `₹${(Number(effective) || 0).toLocaleString("en-IN")}`;
+                : `₹${(Number(latest) || 0).toLocaleString("en-IN")}`;
     }
 }
 
@@ -357,6 +355,17 @@ function getEffectiveRentFromRevisions(revisions, monthKey, baseRent) {
         }
     }
     return baseRent ?? null;
+}
+
+function getLatestRentFromRevisions(revisions, baseRent) {
+    const ordered = [...(revisions || [])].sort(
+        (a, b) => (normalizeMonthKey(b.effective_month) || "").localeCompare(normalizeMonthKey(a.effective_month) || "")
+    );
+    const latestRevision = ordered.find((rev) => Boolean(normalizeMonthKey(rev.effective_month)));
+    if (!latestRevision) return baseRent ?? null;
+
+    const amount = Number(latestRevision.rent_amount);
+    return isNaN(amount) ? baseRent ?? null : amount;
 }
 
 /**
