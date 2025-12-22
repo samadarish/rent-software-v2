@@ -1391,9 +1391,9 @@
         <div class="flex items-start justify-between gap-3">
           <div>
             <h3 id="paymentModalTitle" class="text-base font-semibold">New receipt</h3>
-            <p id="paymentBillStatus" class="text-[11px] text-slate-500">Select a bill to link this receipt.</p>
+            <p id="paymentBillStatus" class="text-[11px] text-slate-500 hidden">Select a bill to link this receipt.</p>
           </div>
-          <button id="paymentModalClose" class="text-slate-500 hover:text-slate-800">✕</button>
+          <button id="paymentModalClose" class="text-slate-500 hover:text-slate-800">X</button>
         </div>
 
         <div class="rounded-lg border border-slate-200 p-3 space-y-3 bg-slate-50">
@@ -1402,20 +1402,54 @@
               <p class="text-[10px] uppercase font-semibold text-slate-600">Bill</p>
               <h4 id="paymentBillTitle" class="text-sm font-semibold text-slate-900">Select a bill to record</h4>
               <div class="flex items-center gap-2 text-[10px] text-slate-500">
-                <span class="px-2 py-0.5 rounded-full bg-white text-slate-700 border" id="paymentTenantWing">Wing •
-                  -</span>
-                <span class="px-2 py-0.5 rounded-full bg-white text-slate-700 border" id="paymentBillMonth">Month •
-                  -</span>
+                <span class="px-2 py-0.5 rounded-full bg-white text-slate-700 border" id="paymentTenantWing">Wing -</span>
+                <span class="px-2 py-0.5 rounded-full bg-white text-slate-700 border" id="paymentBillMonth">Month -</span>
               </div>
             </div>
-            <div class="text-right space-y-1">
+            <div id="paymentAmountDueWrap" class="text-right space-y-1">
               <p class="text-[10px] uppercase text-slate-500 font-semibold">Amount due</p>
-              <p id="paymentBillAmount" class="text-lg font-semibold text-slate-900">₹0</p>
+              <p id="paymentBillAmount" class="text-lg font-semibold text-slate-900">Rs 0</p>
             </div>
           </div>
         </div>
 
-        <div class="grid sm:grid-cols-3 gap-2">
+        <div id="paymentBreakdown" class="rounded-lg border border-slate-200 p-3 bg-white space-y-2">
+          <div class="flex items-center justify-between text-[11px] font-semibold text-slate-700">
+            <span>Rent breakup</span>
+            <span id="paymentBreakdownTotal" class="text-slate-900">Rs 0</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-700">
+            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
+              <span>Rent</span>
+              <span id="paymentBreakdownRent">Rs 0</span>
+            </div>
+            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
+              <span>Electricity</span>
+              <span id="paymentBreakdownElectricity">Rs 0</span>
+            </div>
+            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
+              <span>Motor</span>
+              <span id="paymentBreakdownMotor">Rs 0</span>
+            </div>
+            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
+              <span>Sweeping</span>
+              <span id="paymentBreakdownSweep">Rs 0</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="paymentHistoryContainer" class="hidden rounded-lg border border-slate-200 p-3 bg-white space-y-2">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-[10px] uppercase font-semibold text-slate-600">Payment history</p>
+              <p id="paymentHistorySummary" class="text-[10px] text-slate-500">Bill receipts will appear here.</p>
+            </div>
+          </div>
+          <div id="paymentHistoryList" class="space-y-2"></div>
+          <p id="paymentHistoryEmpty" class="text-[11px] text-slate-500 hidden">No payments recorded for this bill yet.</p>
+        </div>
+
+        <div id="paymentFormFields" class="grid sm:grid-cols-3 gap-2">
           <div class="space-y-1">
             <label class="text-[11px] font-semibold block">Payment mode</label>
             <select id="paymentModeSelect"
@@ -1441,39 +1475,14 @@
           </div>
         </div>
 
-        <div id="paymentBreakdown" class="rounded-lg border border-slate-200 p-3 bg-white space-y-2">
-          <div class="flex items-center justify-between text-[11px] font-semibold text-slate-700">
-            <span>Rent breakup</span>
-            <span id="paymentBreakdownTotal" class="text-slate-900">₹0</span>
-          </div>
-          <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-700">
-            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
-              <span>Rent</span>
-              <span id="paymentBreakdownRent">₹0</span>
-            </div>
-            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
-              <span>Electricity</span>
-              <span id="paymentBreakdownElectricity">₹0</span>
-            </div>
-            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
-              <span>Motor</span>
-              <span id="paymentBreakdownMotor">₹0</span>
-            </div>
-            <div class="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded">
-              <span>Sweeping</span>
-              <span id="paymentBreakdownSweep">₹0</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="space-y-2">
+        <div id="paymentNotesSection" class="space-y-2">
           <label class="text-[11px] font-semibold block">Notes (optional)</label>
           <textarea id="paymentNotesInput" rows="2"
             class="w-full border border-slate-200 rounded-lg px-3 py-2 text-[12px] bg-white resize-none"
             placeholder="Short note for this receipt"></textarea>
         </div>
 
-        <div class="space-y-2">
+        <div id="paymentAttachmentWrapper" class="space-y-2">
           <div class="flex items-center justify-between">
             <label class="text-[11px] font-semibold">Receipt image</label>
             <span class="text-[10px] text-slate-500">PNG/JPG up to 2 MB</span>
@@ -1517,8 +1526,7 @@
         <input type="hidden" id="paymentRecordId" />
       </div>
     </div>
-
-    <!-- ATTACHMENT VIEWER -->
+<!-- ATTACHMENT VIEWER -->
     <div id="attachmentViewerModal"
       class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4 fade-overlay">
       <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden modal-panel">

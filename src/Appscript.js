@@ -212,6 +212,13 @@ function formatDateIso_(value) {
   return Utilities.formatDate(d, Session.getScriptTimeZone() || 'Asia/Kolkata', 'yyyy-MM-dd');
 }
 
+function formatDateTime_(value) {
+  if (!value) return '';
+  const d = value instanceof Date ? value : parseIsoDate_(value);
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
+  return Utilities.formatDate(d, Session.getScriptTimeZone() || 'Asia/Kolkata', 'yyyy-MM-dd HH:mm:ss');
+}
+
 function formatMonthLabelForDisplay_(monthKey) {
   const normalized = normalizeMonthKey_(monthKey || '');
   const match = normalized.match(/^(\d{4})-(\d{2})$/);
@@ -1443,14 +1450,15 @@ function mapPaymentRow_(record) {
     prevReading: '',
     newReading: '',
     payableDate: bill.payable_date || '',
+    createdAt: formatDateTime_(record.created_at),
   };
 }
 
 function handleFetchPayments_() {
   const payments = readTable_(PAYMENTS_SHEET, PAYMENT_HEADERS);
   return payments.map((p) => mapPaymentRow_(p)).sort((a, b) => {
-    const aTime = a.date ? new Date(a.date).getTime() : 0;
-    const bTime = b.date ? new Date(b.date).getTime() : 0;
+    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : (a.date ? new Date(a.date).getTime() : 0);
+    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : (b.date ? new Date(b.date).getTime() : 0);
     return bTime - aTime;
   });
 }

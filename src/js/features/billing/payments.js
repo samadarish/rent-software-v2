@@ -222,6 +222,7 @@ function resetPaymentForm() {
     const billStatus = document.getElementById("paymentBillStatus");
     const billMonth = document.getElementById("paymentBillMonth");
     const wingBadge = document.getElementById("paymentTenantWing");
+    const dueWrap = document.getElementById("paymentAmountDueWrap");
     const breakdownTotal = document.getElementById("paymentBreakdownTotal");
     const breakdownRent = document.getElementById("paymentBreakdownRent");
     const breakdownElec = document.getElementById("paymentBreakdownElectricity");
@@ -233,6 +234,9 @@ function resetPaymentForm() {
     const attachmentInput = document.getElementById("paymentAttachmentInput");
     const attachmentClear = document.getElementById("paymentAttachmentClear");
     const saveBtn = document.getElementById("paymentSaveBtn");
+    const formFields = document.getElementById("paymentFormFields");
+    const notesSection = document.getElementById("paymentNotesSection");
+    const attachmentWrapper = document.getElementById("paymentAttachmentWrapper");
 
     if (dateInput) dateInput.value = todayIso;
     if (modeSelect) modeSelect.value = "UPI";
@@ -266,6 +270,18 @@ function resetPaymentForm() {
     if (attachmentInput) attachmentInput.disabled = false;
     if (attachmentClear) attachmentClear.disabled = false;
     if (saveBtn) saveBtn.textContent = "Save payment";
+    if (formFields) formFields.classList.remove("hidden");
+    if (notesSection) notesSection.classList.remove("hidden");
+    if (attachmentWrapper) attachmentWrapper.classList.remove("hidden");
+    if (dueWrap) dueWrap.classList.remove("hidden");
+    const historyContainer = document.getElementById("paymentHistoryContainer");
+    const historyList = document.getElementById("paymentHistoryList");
+    const historySummary = document.getElementById("paymentHistorySummary");
+    const historyEmpty = document.getElementById("paymentHistoryEmpty");
+    if (historyContainer) historyContainer.classList.add("hidden");
+    if (historyList) historyList.innerHTML = "";
+    if (historySummary) historySummary.textContent = "Bill receipts will appear here.";
+    if (historyEmpty) historyEmpty.classList.add("hidden");
 }
 
 function setPaymentFormReadOnly(isReadOnly) {
@@ -276,6 +292,9 @@ function setPaymentFormReadOnly(isReadOnly) {
     const attachmentInput = document.getElementById("paymentAttachmentInput");
     const attachmentClear = document.getElementById("paymentAttachmentClear");
     const saveBtn = document.getElementById("paymentSaveBtn");
+    const formFields = document.getElementById("paymentFormFields");
+    const notesSection = document.getElementById("paymentNotesSection");
+    const attachmentWrapper = document.getElementById("paymentAttachmentWrapper");
 
     if (dateInput) dateInput.disabled = isReadOnly;
     if (modeSelect) modeSelect.disabled = isReadOnly;
@@ -284,6 +303,120 @@ function setPaymentFormReadOnly(isReadOnly) {
     if (attachmentInput) attachmentInput.disabled = isReadOnly;
     if (attachmentClear) attachmentClear.disabled = isReadOnly;
     if (saveBtn) saveBtn.textContent = isReadOnly ? "Close" : "Save payment";
+    if (formFields) formFields.classList.toggle("hidden", isReadOnly);
+    if (notesSection) notesSection.classList.toggle("hidden", isReadOnly);
+    if (attachmentWrapper) attachmentWrapper.classList.toggle("hidden", isReadOnly);
+}
+
+function renderPaymentHistory(context = {}) {
+    const container = document.getElementById("paymentHistoryContainer");
+    const list = document.getElementById("paymentHistoryList");
+    const empty = document.getElementById("paymentHistoryEmpty");
+    const summary = document.getElementById("paymentHistorySummary");
+    if (!container || !list) return;
+
+    list.innerHTML = "";
+    if (empty) empty.classList.add("hidden");
+
+    if (!context.monthKey || !context.tenantName) {
+        container.classList.add("hidden");
+        return;
+    }
+
+    const { matches } = getPaymentsForBill(context);
+    if (!matches.length) {
+        container.classList.remove("hidden");
+        if (summary) summary.textContent = "No payments recorded yet for this bill.";
+        if (empty) empty.classList.remove("hidden");
+        return;
+    }
+
+    const sorted = [...matches].sort((a, b) => {
+        const aTime = new Date(a.createdAt || a.date || 0).getTime();
+        const bTime = new Date(b.createdAt || b.date || 0).getTime();
+        return bTime - aTime;
+    });
+
+    sorted.forEach((p) => {
+        const card = document.createElement("div");
+        card.className = "border border-slate-200 rounded-lg p-3 bg-white shadow-sm";
+
+        const amountLabel = formatCurrency(p.amount);
+        const dateLabel = p.createdAt || p.date || "";
+        const modeLabel = p.mode || "Mode";
+        const notesLabel = p.notes || "";
+        const rawUrl = p.attachmentUrl || "";
+        const thumbUrl = rawUrl ? normalizeAttachmentUrl(rawUrl) : "";
+
+        card.innerHTML = `
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 space-y-1">
+                    <div class="flex flex-wrap items-center gap-1 text-[11px] font-semibold text-slate-800">
+                        <span class="text-slate-900">${amountLabel}</span>
+                        ${modeLabel ? `<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${modeLabel}</span>` : ""}
+                        ${dateLabel ? `<span class="text-[10px] text-slate-500">${dateLabel}</span>` : ""}
+                    </div>
+                    ${notesLabel ? `<p class="text-[10px] text-slate-600 max-w-[260px]">${notesLabel}</p>` : ""}
+                </div>
+                ${thumbUrl ? `<div class="shrink-0"><img class="receipt-thumb hidden w-14 h-14 rounded-lg border object-cover bg-slate-100 cursor-pointer" alt="Receipt preview" /></div>` : ""}
+            </div>
+        `;
+
+        const thumbContainer = card.querySelector('.shrink-0');
+        const img = card.querySelector('.receipt-thumb');
+        let targetUrl = thumbUrl;
+
+        const openTarget = () => {
+            const href = targetUrl || rawUrl || thumbUrl;
+            if (href) openAttachmentViewer(href, p.attachmentName || "Receipt");
+        };
+
+        const addFallback = () => {
+            if (!thumbContainer || !thumbUrl) return;
+            const btn = document.createElement("button");
+            btn.className = "text-[10px] text-indigo-700 underline";
+            btn.type = "button";
+            btn.textContent = "Open proof";
+            btn.addEventListener("click", openTarget);
+            thumbContainer.appendChild(btn);
+        };
+
+        if (img && thumbUrl) {
+            img.referrerPolicy = 'no-referrer';
+            img.src = thumbUrl;
+            img.classList.remove("hidden");
+            img.classList.add("cursor-pointer");
+            img.addEventListener("click", openTarget);
+
+            resolveAttachmentPreview(thumbUrl)
+                .then(({ previewUrl, viewUrl }) => {
+                    const src = previewUrl || viewUrl || thumbUrl;
+                    if (src) img.src = src;
+                    targetUrl = previewUrl || viewUrl || thumbUrl;
+                })
+                .catch(() => {
+                    targetUrl = thumbUrl || rawUrl;
+                })
+                .finally(() => {
+                    if (!targetUrl) {
+                        img.remove();
+                        addFallback();
+                    }
+                });
+        } else if (thumbUrl) {
+            targetUrl = thumbUrl;
+            addFallback();
+        }
+
+        list.appendChild(card);
+    });
+
+    if (summary) {
+        const totalPaid = sorted.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        summary.textContent = `Showing ${sorted.length} partial payment${sorted.length === 1 ? "" : "s"} • Total recorded ${formatCurrency(totalPaid)}`;
+    }
+
+    container.classList.remove("hidden");
 }
 
 function applyBillContext(context = {}) {
@@ -292,6 +425,7 @@ function applyBillContext(context = {}) {
     const billStatus = document.getElementById("paymentBillStatus");
     const billMonth = document.getElementById("paymentBillMonth");
     const wingBadge = document.getElementById("paymentTenantWing");
+    const dueWrap = document.getElementById("paymentAmountDueWrap");
     const breakdownTotal = document.getElementById("paymentBreakdownTotal");
     const breakdownRent = document.getElementById("paymentBreakdownRent");
     const breakdownElec = document.getElementById("paymentBreakdownElectricity");
@@ -339,11 +473,10 @@ function applyBillContext(context = {}) {
         const headlineAmount = typeof remaining === "number" ? remaining : billTotal;
         billAmount.textContent = billTotal ? formatCurrency(headlineAmount) : "₹0";
     }
+    if (dueWrap) dueWrap.classList.toggle("hidden", typeof remaining === "number" && remaining <= 0);
     if (billStatus) {
         const dueLabel = context.payableDate ? ` • Due ${context.payableDate}` : "";
-        billStatus.textContent = context.monthKey
-            ? `${monthLabel}${context.wing ? ` • ${context.wing}` : ""}${dueLabel}`
-            : "Open this modal from a bill row to link automatically.";
+        billStatus.textContent = "";
     }
     if (billMonth) billMonth.textContent = `Month • ${monthLabel || "-"}`;
     if (wingBadge) wingBadge.textContent = `Wing • ${context.wing || "-"}`;
@@ -361,6 +494,8 @@ function applyBillContext(context = {}) {
         amountInput.max = billTotal || "";
         amountInput.placeholder = billTotal ? `Up to ${formatCurrency(remaining || billTotal)}` : "Enter amount received";
     }
+
+    renderPaymentHistory(paymentsState.billContext);
 }
 
 function normalizeAttachmentUrl(url = "") {
@@ -420,7 +555,7 @@ function openAttachmentViewer(url, title = "Receipt") {
 
     if (!modal || !iframe || !image || !caption || !fallback) return;
 
-    const viewUrl = url || "";
+    const viewUrl = normalizeAttachmentUrl(url || "");
     caption.textContent = title || "Receipt";
 
     const nameHint = (paymentsState.attachmentName || "").toLowerCase();
@@ -435,7 +570,7 @@ function openAttachmentViewer(url, title = "Receipt") {
     iframe.classList.add("hidden");
     fallback.classList.add("hidden");
 
-    if (isImageLike) {
+    if (isImageLike && viewUrl) {
         image.referrerPolicy = "no-referrer";
         image.src = viewUrl;
         image.classList.remove("hidden");
