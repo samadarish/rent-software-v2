@@ -8,6 +8,7 @@ import {
 } from "../../api/sheets.js";
 import { toOrdinal } from "../../utils/formatters.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
+import { createFamilyRow as buildFamilyRow } from "./family.js";
 
 let tenantCache = [];
 let tenantRowsCache = [];
@@ -696,29 +697,17 @@ export async function loadTenantDirectory(forceReload = false) {
 }
 
 function createFamilyRow(member = {}) {
-    const tr = document.createElement("tr");
-    tr.className = "border-b last:border-0";
-
-    tr.innerHTML = `
-        <td class="px-2 py-1.5 text-xs"><input type="text" class="w-full border rounded px-2 py-1 text-xs" value="${member.name || ""}" /></td>
-        <td class="px-2 py-1.5 text-xs"><input type="text" class="w-full border rounded px-2 py-1 text-xs" value="${member.relationship || ""}" /></td>
-        <td class="px-2 py-1.5 text-xs"><input type="text" class="w-full border rounded px-2 py-1 text-xs" value="${member.occupation || ""}" /></td>
-        <td class="px-2 py-1.5 text-xs"><input type="text" class="w-full border rounded px-2 py-1 text-xs" value="${member.aadhaar || ""}" /></td>
-        <td class="px-2 py-1.5 text-xs"><input type="text" class="w-full border rounded px-2 py-1 text-xs" value="${member.address || ""}" /></td>
-        <td class="px-2 py-1.5 text-xs text-right">
-            <button class="text-rose-600 text-[11px] underline tenant-family-remove">Remove</button>
-        </td>
-    `;
+    const tr = buildFamilyRow(member);
+    tr.classList.add("border-b", "last:border-0");
 
     const removeBtn = tr.querySelector("button");
     if (removeBtn) {
-        removeBtn.addEventListener("click", () => {
-            tr.remove();
-        });
+        removeBtn.textContent = "Remove";
+        removeBtn.className = "text-rose-600 text-[11px] underline tenant-family-remove";
+        removeBtn.addEventListener("click", () => tr.remove());
     }
 
     setTenantModalEditable(tenantModalEditable);
-
     return tr;
 }
 
@@ -1260,7 +1249,7 @@ function collectFamilyRows() {
 
     const members = [];
     tbody.querySelectorAll("tr").forEach((tr) => {
-        const inputs = tr.querySelectorAll("input");
+        const inputs = tr.querySelectorAll("input, textarea");
         if (inputs.length < 5) return;
         const [name, relationship, occupation, aadhaar, address] = inputs;
         if (!name.value && !relationship.value && !occupation.value && !aadhaar.value && !address.value) return;

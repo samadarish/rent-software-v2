@@ -716,32 +716,6 @@ export async function saveRentRevision(payload) {
     }
 }
 
-export async function deleteRentRevision(revisionId) {
-    const url = ensureAppScriptUrl({
-        promptForConfig: true,
-        onMissing: () => {
-            alert("Please configure the Apps Script URL first.");
-            updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Set Apps Script URL");
-        },
-    });
-    if (!url) return { ok: false };
-
-    try {
-        const data = await callAppScript({
-            url,
-            action: "deleteRentRevision",
-            method: "POST",
-            payload: { revisionId },
-        });
-        if (data?.ok) showToast("Rent revision removed", "success");
-        return data;
-    } catch (e) {
-        console.error("deleteRentRevision error", e);
-        showToast("Failed to delete rent revision", "error");
-        return { ok: false };
-    }
-}
-
 /**
  * Saves tenant data to Google Sheets database
  */
