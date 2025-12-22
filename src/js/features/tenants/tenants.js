@@ -20,7 +20,6 @@ let activeTenantForModal = null;
 let activeRentRevisions = [];
 let activeRentHistoryContext = null;
 let selectedTenantForSidebar = null;
-let pendingVacateTenant = null;
 let pendingNewTenancyTenant = null;
 let tenantModalEditable = false;
 let tenantModalMode = "tenant"; // tenant | tenancy
@@ -49,13 +48,6 @@ export function getActiveTenantsForWing(wing) {
 }
 
 /**
- * Returns a shallow copy of the current tenant cache for read-only usage.
- */
-export function getTenantDirectorySnapshot() {
-    return [...tenantCache];
-}
-
-/**
  * Formats the rent amount for display in the tenant list.
  * @param {number|string} amount
  * @returns {string}
@@ -65,17 +57,6 @@ function formatRent(amount) {
     const numeric = parseInt(amount, 10);
     if (isNaN(numeric)) return `₹${amount}`;
     return `₹${numeric.toLocaleString("en-IN")}`;
-}
-
-/**
- * Combines wing and floor data into a concise badge label for UI chips.
- * @param {object} tenant
- * @returns {string}
- */
-function formatWingFloor(tenant) {
-    const wing = tenant.wing || "-";
-    const floor = tenant.floor || "-";
-    return `${wing} / ${floor}`;
 }
 
 /**
@@ -472,21 +453,6 @@ function buildUnitLabel(unit) {
     if (!unit) return "";
     const parts = [unit.wing, unit.unit_number].filter(Boolean);
     return parts.join(" - ") || unit.unit_id || "";
-}
-
-/**
- * Updates cached unit occupancy to keep dropdowns in sync without refetching.
- * @param {string} unitId
- * @param {boolean} occupied
- * @param {string} tenancyId
- */
-function markUnitOccupancy(unitId, occupied, tenancyId) {
-    if (!unitId) return;
-    const target = unitCache.find((u) => u.unit_id === unitId);
-    if (target) {
-        target.is_occupied = occupied;
-        target.current_tenancy_id = occupied ? tenancyId : "";
-    }
 }
 
 /**
@@ -1459,157 +1425,6 @@ export function openTenantModal(tenant) {
     populateTenantModal(tenant, "tenant");
 }
 
-function closeTenantInsightsModal() {
-    const modal = document.getElementById("tenantInsightsModal");
-    if (modal) hideModal(modal);
-}
-
-function openTenantInsightsModal(tenant) {
-    const t = tenant || selectedTenantForSidebar;
-    if (!t) {
-        showToast("Select a tenant to view insights", "warning");
-        return;
-    }
-
-    const rent = parseInt(t.rentAmount, 10) || 0;
-    const familyCount = Array.isArray(t.family) ? t.family.length : 0;
-    const activeMonths = t.activeTenant ? 12 : 6;
-    const collected = rent * Math.max(1, Math.min(activeMonths, 12));
-    const projectedNextQuarter = rent * 3;
-
-    const setBarWidth = (id, percent) => {
-        const el = document.getElementById(id);
-        if (el) el.style.width = `${Math.min(100, Math.max(5, percent))}%`;
-    };
-
-    const occupancyLabel = t.activeTenant ? "Occupied" : "Inactive";
-    const tenureNote = t.tenancyEndDate
-        ? `Ends ${formatTenancyEndDate(t.tenancyEndDate)}`
-        : "No end date set";
-
-    const highlights = [
-        `Rent set at ${formatRent(t.rentAmount)} for ${formatWingFloor(t)}.`,
-        `Status: ${getStatusLabel(t.activeTenant)}${t.vacateReason ? ` (Reason: ${t.vacateReason})` : ""}.`,
-        `Family linked: ${familyCount} member${familyCount === 1 ? "" : "s"}.`,
-    ];
-    if (t.grnNumber) highlights.push(`GRN ${t.grnNumber} recorded in directory.`);
-    if (t.meterNumber) highlights.push(`Meter ${t.meterNumber} noted for utilities.`);
-
-    const quarterPercent = rent ? Math.min(100, Math.max(10, Math.round((rent * 3) / (rent * 4) * 100))) : 25;
-    const collectedPercent = rent ? Math.min(100, Math.max(15, Math.round((collected / (rent * 12)) * 100))) : 40;
-
-    const modal = document.getElementById("tenantInsightsModal");
-    if (!modal) return;
-
-    const title = document.getElementById("tenantInsightsTitle");
-    if (title) title.textContent = `Insights – ${t.tenantFullName || "Tenant"}`;
-    const rentEl = document.getElementById("insightRent");
-    if (rentEl) rentEl.textContent = formatRent(t.rentAmount);
-    const statusEl = document.getElementById("insightStatus");
-    if (statusEl) statusEl.textContent = `Status: ${getStatusLabel(t.activeTenant)}`;
-    const collectedEl = document.getElementById("insightCollected");
-    if (collectedEl) collectedEl.textContent = formatRent(collected);
-    const occupancyEl = document.getElementById("insightOccupancy");
-    if (occupancyEl) occupancyEl.textContent = occupancyLabel;
-    const tenureEl = document.getElementById("insightTenure");
-    if (tenureEl) tenureEl.textContent = tenureNote;
-    const quarterEl = document.getElementById("insightQuarter");
-    if (quarterEl) quarterEl.textContent = formatRent(rent * 3);
-    const nextQuarterEl = document.getElementById("insightNextQuarter");
-    if (nextQuarterEl) nextQuarterEl.textContent = formatRent(projectedNextQuarter);
-
-    setBarWidth("insightCollectedBar", collectedPercent);
-    setBarWidth("insightQuarterBar", quarterPercent);
-    setBarWidth("insightNextQuarterBar", Math.min(100, quarterPercent + 10));
-
-    const highlightsList = document.getElementById("insightHighlights");
-    if (highlightsList) {
-        highlightsList.innerHTML = "";
-        highlights.slice(0, 5).forEach((line) => {
-            const li = document.createElement("li");
-            li.textContent = line;
-            highlightsList.appendChild(li);
-        });
-    }
-
-    showModal(modal);
-}
-
-function closeVacateModal() {
-    const modal = document.getElementById("vacateModal");
-    if (modal) hideModal(modal);
-    pendingVacateTenant = null;
-}
-
-function openVacateModal(tenant) {
-    pendingVacateTenant = tenant;
-    setSidebarSelection(tenant);
-
-    const modal = document.getElementById("vacateModal");
-    const title = document.getElementById("vacateModalTitle");
-    const reasonInput = document.getElementById("vacateReasonInput");
-    const endDateInput = document.getElementById("vacateEndDateInput");
-
-    if (title) title.textContent = `Vacate – ${tenant.tenantFullName || "Tenant"}`;
-    if (reasonInput) reasonInput.value = tenant.vacateReason || "";
-    if (endDateInput) {
-        if (tenant.tenancyEndDate) {
-            endDateInput.value = formatDateForInput(tenant.tenancyEndDate);
-        } else {
-            endDateInput.value = "";
-        }
-    }
-
-    if (modal) showModal(modal);
-}
-
-async function saveVacateModal() {
-    if (!pendingVacateTenant) return;
-
-    const reasonInput = document.getElementById("vacateReasonInput");
-    const endDateInput = document.getElementById("vacateEndDateInput");
-
-    const vacateReason = reasonInput?.value?.trim() || "";
-    const tenancyEndRaw = endDateInput?.value || "";
-
-    if (!tenancyEndRaw) {
-        showToast("Please add a tenancy end date", "warning");
-        return;
-    }
-
-    const updates = {
-        activeTenant: false,
-        vacateReason,
-        tenancyEndRaw,
-    };
-
-    try {
-        await updateTenantRecord({
-            tenantId: pendingVacateTenant.tenantId,
-            tenancyId: pendingVacateTenant.tenancyId,
-            grn: pendingVacateTenant.grnNumber,
-            templateData: pendingVacateTenant.templateData,
-            updates,
-            familyMembers: pendingVacateTenant.family || [],
-        });
-
-        Object.assign(pendingVacateTenant, {
-            ...updates,
-            tenancyEndDate: tenancyEndRaw,
-        });
-
-        applyTenantFilters();
-        if (selectedTenantForSidebar && selectedTenantForSidebar.grnNumber === pendingVacateTenant.grnNumber) {
-            Object.assign(selectedTenantForSidebar, pendingVacateTenant);
-            updateSidebarSnapshot();
-        }
-        closeVacateModal();
-        showToast("Tenant marked inactive", "success");
-    } catch (e) {
-        console.error("Failed to mark tenant inactive", e);
-    }
-}
-
 export function initTenantDirectory() {
     syncTenantModalPicklists();
 
@@ -1704,17 +1519,6 @@ export function initTenantDirectory() {
     }
 
     document.querySelectorAll(".rent-history-close").forEach((btn) => btn.addEventListener("click", closeRentHistoryModal));
-
-    const insightsCloseBtns = document.querySelectorAll(".tenant-insights-close");
-    insightsCloseBtns.forEach((btn) => btn.addEventListener("click", closeTenantInsightsModal));
-
-    const vacateCloseBtns = document.querySelectorAll(".vacate-modal-close");
-    vacateCloseBtns.forEach((btn) => btn.addEventListener("click", closeVacateModal));
-
-    const vacateSaveBtn = document.getElementById("vacateSaveBtn");
-    if (vacateSaveBtn) {
-        vacateSaveBtn.addEventListener("click", saveVacateModal);
-    }
 
     const sidebarHistory = document.getElementById("sidebarUnitHistory");
     if (sidebarHistory) {

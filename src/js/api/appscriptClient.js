@@ -7,6 +7,29 @@ import { getAppScriptUrl } from "./config.js";
 import { showModal } from "../utils/ui.js";
 
 const inflightGets = new Map();
+const timingBuffer = globalThis.__appscriptTimings || [];
+globalThis.__appscriptTimings = timingBuffer;
+const TIMING_LIMIT = 50;
+
+function recordTiming({ action, method, url, ok, durationMs }) {
+    try {
+        timingBuffer.unshift({
+            action,
+            method,
+            url,
+            ok,
+            durationMs,
+            at: new Date().toISOString(),
+        });
+        if (timingBuffer.length > TIMING_LIMIT) {
+            timingBuffer.length = TIMING_LIMIT;
+        }
+        const label = ok ? "ok" : "fail";
+        console.debug(`[AppsScript] ${method} ${action} ${label} in ${durationMs.toFixed(1)}ms`);
+    } catch (err) {
+        console.warn("Unable to record Apps Script timing", err);
+    }
+}
 
 /**
  * Builds a deterministic cache key for GET calls so repeated requests can be deduped.
@@ -54,6 +77,7 @@ export function ensureAppScriptUrl({ onMissing, promptForConfig = false } = {}) 
 export async function callAppScript({ url, action, method = "GET", params = {}, payload }) {
     if (!url) return null;
 
+    const start = (performance && performance.now && performance.now()) || Date.now();
     const search = new URLSearchParams({ action, ...params });
     const target = method === "GET" ? `${url}?${search.toString()}` : url;
     const options = {
@@ -84,10 +108,21 @@ export async function callAppScript({ url, action, method = "GET", params = {}, 
         return inflightGets.get(cacheKey);
     }
 
-    const fetchPromise = fetch(target, options).then(async (res) => {
-        if (!res.ok) throw new Error(`Non-200: ${res.status}`);
-        return res.json();
-    });
+    const fetchPromise = fetch(target, options)
+        .then(async (res) => {
+            if (!res.ok) throw new Error(`Non-200: ${res.status}`);
+            return res.json();
+        })
+        .then((data) => {
+            const durationMs = ((performance && performance.now && performance.now()) || Date.now()) - start;
+            recordTiming({ action, method, url: target, ok: true, durationMs });
+            return data;
+        })
+        .catch((err) => {
+            const durationMs = ((performance && performance.now && performance.now()) || Date.now()) - start;
+            recordTiming({ action, method, url: target, ok: false, durationMs });
+            throw err;
+        });
 
     if (isCacheableGet) inflightGets.set(cacheKey, fetchPromise);
 

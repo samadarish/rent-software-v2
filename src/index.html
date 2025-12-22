@@ -1019,76 +1019,6 @@
     </div>
 
 
-    <!-- TENANT INSIGHTS MODAL -->
-    <div id="tenantInsightsModal"
-      class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
-      <div class="bg-white rounded-xl shadow-lg w-full max-w-4xl p-4 md:p-6 space-y-4 modal-panel">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <p class="text-[10px] uppercase text-slate-500 font-semibold">Insights</p>
-            <h3 id="tenantInsightsTitle" class="text-base font-semibold">Tenant Insights</h3>
-            <p class="text-[10px] text-slate-500">Performance, collection health, and occupancy signals.</p>
-          </div>
-          <button class="tenant-insights-close text-slate-500 hover:text-slate-800">✕</button>
-        </div>
-
-        <div class="grid md:grid-cols-3 gap-3">
-          <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-3 space-y-1">
-            <p class="text-[10px] uppercase text-indigo-700 font-semibold">Monthly rent</p>
-            <p id="insightRent" class="text-xl font-bold text-indigo-900">₹0</p>
-            <p id="insightStatus" class="text-[10px] text-indigo-700">Status: -</p>
-          </div>
-          <div class="bg-emerald-50 border border-emerald-100 rounded-lg p-3 space-y-1">
-            <p class="text-[10px] uppercase text-emerald-700 font-semibold">Est. collected</p>
-            <p id="insightCollected" class="text-xl font-bold text-emerald-900">₹0</p>
-            <div class="w-full bg-emerald-100 rounded-full h-2">
-              <div id="insightCollectedBar" class="bg-emerald-500 h-2 rounded-full" style="width: 30%"></div>
-            </div>
-          </div>
-          <div class="bg-amber-50 border border-amber-100 rounded-lg p-3 space-y-1">
-            <p class="text-[10px] uppercase text-amber-700 font-semibold">Occupancy</p>
-            <p id="insightOccupancy" class="text-xl font-bold text-amber-900">-</p>
-            <p id="insightTenure" class="text-[10px] text-amber-700">Tenure signal</p>
-          </div>
-        </div>
-
-        <div class="grid md:grid-cols-2 gap-3">
-          <div class="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
-            <div class="flex items-center justify-between">
-              <h4 class="text-sm font-semibold">Collection trend</h4>
-              <span class="text-[10px] text-slate-500">Projected</span>
-            </div>
-            <div class="space-y-1 text-[11px] text-slate-600">
-              <div class="flex items-center justify-between">
-                <span>This quarter</span>
-                <span id="insightQuarter" class="font-semibold">₹0</span>
-              </div>
-              <div class="w-full bg-slate-100 rounded-full h-2">
-                <div id="insightQuarterBar" class="bg-slate-500 h-2 rounded-full" style="width: 45%"></div>
-              </div>
-              <div class="flex items-center justify-between">
-                <span>Next quarter (projected)</span>
-                <span id="insightNextQuarter" class="font-semibold">₹0</span>
-              </div>
-              <div class="w-full bg-slate-100 rounded-full h-2">
-                <div id="insightNextQuarterBar" class="bg-indigo-500 h-2 rounded-full" style="width: 55%"></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
-            <div class="flex items-center justify-between">
-              <h4 class="text-sm font-semibold">Highlights</h4>
-              <span class="text-[10px] text-slate-500">Auto-generated</span>
-            </div>
-            <ul id="insightHighlights" class="list-disc list-inside text-[11px] text-slate-700 space-y-1">
-              <li>Rent collection highlights will appear here.</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- NEW TENANCY CONFIRM MODAL -->
     <div id="newTenancyConfirmModal"
       class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
@@ -1116,39 +1046,6 @@
         </div>
       </div>
     </div>
-
-    <!-- VACATE MODAL -->
-    <div id="vacateModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
-      <div class="bg-white rounded-xl shadow-lg w-full max-w-lg p-4 md:p-5 space-y-4 modal-panel">
-        <div class="flex items-start justify-between">
-          <div>
-            <p class="text-[10px] uppercase text-slate-500 font-semibold">Vacate tenant</p>
-            <h3 id="vacateModalTitle" class="text-base font-semibold">Confirm vacate</h3>
-          </div>
-          <button class="vacate-modal-close text-slate-500 hover:text-slate-800">✕</button>
-        </div>
-
-        <div class="space-y-3">
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Vacate reason</label>
-            <input id="vacateReasonInput" type="text" class="w-full border rounded px-3 py-2 text-[12px]"
-              placeholder="Moved to new location, non-payment, etc." />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold block mb-1">Tenancy end date</label>
-            <input id="vacateEndDateInput" type="date" class="w-full border rounded px-3 py-2 text-[12px]" />
-          </div>
-          <p class="text-[10px] text-slate-500">Saving will mark the tenant as inactive and store the vacate reason.</p>
-        </div>
-
-        <div class="flex justify-end gap-2 pt-2">
-          <button class="vacate-modal-close px-3 py-2 rounded border border-slate-400 text-[11px]">Cancel</button>
-          <button id="vacateSaveBtn" class="px-3 py-2 rounded bg-rose-600 text-white text-[11px] font-semibold">Save
-            &amp; mark inactive</button>
-        </div>
-      </div>
-    </div>
-
 
     <!-- BILLING WING MODAL -->
     <div id="billingWingModal"

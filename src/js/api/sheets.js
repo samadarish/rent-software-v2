@@ -9,6 +9,36 @@ import { currentFlow } from "../state.js";
 import { showToast, updateConnectionIndicator } from "../utils/ui.js";
 import { callAppScript, ensureAppScriptUrl } from "./appscriptClient.js";
 
+const CACHE_KEYS = {
+    wings: "cache.wings",
+    landlords: "cache.landlords",
+    units: "cache.units",
+    clauses: "cache.clauses",
+};
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+function readCache(key, ttl = CACHE_TTL_MS) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") return null;
+        if (ttl && parsed.ts && Date.now() - parsed.ts > ttl) return null;
+        return parsed;
+    } catch (err) {
+        console.warn("Cache read failed", err);
+        return null;
+    }
+}
+
+function writeCache(key, data) {
+    try {
+        localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
+    } catch (err) {
+        console.warn("Cache write failed", err);
+    }
+}
+
 // Detect accidental double-loading so we can surface clearer diagnostics
 if (globalThis.__sheetsApiLoaded) {
     console.warn(
@@ -21,7 +51,34 @@ if (globalThis.__sheetsApiLoaded) {
 /**
  * Fetches available wings from Google Sheets and populates the dropdown
  */
-export async function fetchWingsFromSheet() {
+function applyWingOptions(wings = []) {
+    const sel = document.getElementById("wing");
+    if (sel) {
+        sel.innerHTML = '<option value="">Select wing</option>';
+        wings.forEach((w) => {
+            const opt = document.createElement("option");
+            opt.value = w;
+            opt.textContent = w;
+            sel.appendChild(opt);
+        });
+
+        const billingSel = document.getElementById("billingWingSelect");
+        if (billingSel) {
+            billingSel.innerHTML = sel.innerHTML;
+        }
+        document.dispatchEvent(new CustomEvent("wings:updated", { detail: wings }));
+    }
+}
+
+export async function fetchWingsFromSheet(force = false) {
+    const cached = readCache(CACHE_KEYS.wings);
+    if (cached && Array.isArray(cached.data?.wings)) {
+        applyWingOptions(cached.data.wings);
+        if (!force && cached.ts && Date.now() - cached.ts < CACHE_TTL_MS) {
+            return cached;
+        }
+    }
+
     const url = ensureAppScriptUrl({
         onMissing: () =>
             updateConnectionIndicator(
@@ -35,23 +92,8 @@ export async function fetchWingsFromSheet() {
         const data = await callAppScript({ url, action: "wings" });
         if (!Array.isArray(data.wings)) return;
         updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Internet online");
-
-        const sel = document.getElementById("wing");
-        if (sel) {
-            sel.innerHTML = '<option value="">Select wing</option>';
-            data.wings.forEach((w) => {
-                const opt = document.createElement("option");
-                opt.value = w;
-                opt.textContent = w;
-                sel.appendChild(opt);
-            });
-
-            const billingSel = document.getElementById("billingWingSelect");
-            if (billingSel) {
-                billingSel.innerHTML = sel.innerHTML;
-            }
-            document.dispatchEvent(new CustomEvent("wings:updated"));
-        }
+        applyWingOptions(data.wings);
+        writeCache(CACHE_KEYS.wings, data);
     } catch (e) {
         console.warn("Could not fetch wings", e);
         updateConnectionIndicator(navigator.onLine ? "online" : "offline", navigator.onLine ? "Wing sync failed" : "Offline");
@@ -139,7 +181,15 @@ export async function removeWingFromSheet(wing) {
  * Retrieves saved landlord profiles from Google Sheets.
  * @returns {Promise<{landlords: Array}>} Fetched landlord collection (empty on failure).
  */
-export async function fetchLandlordsFromSheet() {
+export async function fetchLandlordsFromSheet(force = false) {
+    const cached = readCache(CACHE_KEYS.landlords);
+    if (cached && Array.isArray(cached.data?.landlords)) {
+        document.dispatchEvent(new CustomEvent("landlords:updated", { detail: cached.data.landlords }));
+        if (!force && cached.ts && Date.now() - cached.ts < CACHE_TTL_MS) {
+            return cached.data;
+        }
+    }
+
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view landlords", "warning"),
     });
@@ -150,6 +200,7 @@ export async function fetchLandlordsFromSheet() {
         if (Array.isArray(data.landlords)) {
             document.dispatchEvent(new CustomEvent("landlords:updated", { detail: data.landlords }));
         }
+        writeCache(CACHE_KEYS.landlords, data);
         return data;
     } catch (e) {
         console.error("fetchLandlordsFromSheet error", e);
@@ -259,14 +310,23 @@ export async function fetchBillingRecord(monthKey, wing) {
  * Fetches all configured units from Google Sheets for selector population.
  * @returns {Promise<{units: Array}>} Unit list payload (empty on failure).
  */
-export async function fetchUnitsFromSheet() {
+export async function fetchUnitsFromSheet(force = false) {
+    const cached = readCache(CACHE_KEYS.units);
+    if (cached && Array.isArray(cached.data?.units)) {
+        if (!force && cached.ts && Date.now() - cached.ts < CACHE_TTL_MS) {
+            return cached.data;
+        }
+    }
+
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view units", "warning"),
     });
     if (!url) return { units: [] };
 
     try {
-        return await callAppScript({ url, action: "units" });
+        const data = await callAppScript({ url, action: "units" });
+        writeCache(CACHE_KEYS.units, data);
+        return data;
     } catch (e) {
         console.error("fetchUnitsFromSheet error", e);
         showToast("Could not fetch units", "error");
@@ -438,15 +498,28 @@ export async function savePaymentRecord(payload) {
  * Loads clauses from Google Sheets and updates the UI
  * @param {boolean} showNotification - Whether to show a toast notification
  */
-export async function loadClausesFromSheet(showNotification = false) {
+export async function loadClausesFromSheet(showNotification = false, force = false) {
+    const { normalizeClauseSections, renderClausesUI, setClausesDirty } =
+        await import("../features/agreements/clauses.js");
+
+    const cached = readCache(CACHE_KEYS.clauses);
+    if (cached?.data) {
+        clauseSections.tenant.items = Array.isArray(cached.data.tenant) ? cached.data.tenant : [];
+        clauseSections.landlord.items = Array.isArray(cached.data.landlord) ? cached.data.landlord : [];
+        clauseSections.penalties.items = Array.isArray(cached.data.penalties) ? cached.data.penalties : [];
+        clauseSections.misc.items = Array.isArray(cached.data.misc) ? cached.data.misc : [];
+        normalizeClauseSections();
+        renderClausesUI();
+        setClausesDirty(false);
+        if (!force && cached.ts && Date.now() - cached.ts < CACHE_TTL_MS) {
+            return;
+        }
+    }
+
     const url = ensureAppScriptUrl({
         onMissing: () =>
             updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Set Apps Script URL"),
     });
-
-    // Import the clauses module functions
-    const { normalizeClauseSections, renderClausesUI, setClausesDirty } =
-        await import("../features/agreements/clauses.js");
 
     if (!url) {
         normalizeClauseSections();
@@ -467,6 +540,12 @@ export async function loadClausesFromSheet(showNotification = false) {
         renderClausesUI();
         setClausesDirty(false);
         updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Internet online");
+        writeCache(CACHE_KEYS.clauses, {
+            tenant: clauseSections.tenant.items,
+            landlord: clauseSections.landlord.items,
+            penalties: clauseSections.penalties.items,
+            misc: clauseSections.misc.items,
+        });
 
         if (showNotification) {
             showToast("Latest clauses loaded from Google Sheets", "info");
@@ -517,6 +596,7 @@ export async function saveClausesToSheet() {
             (data && data.message) || "Clauses saved to Google Sheets",
             "success"
         );
+        writeCache(CACHE_KEYS.clauses, payload);
         setClausesDirty(false);
     } catch (e) {
         console.error("saveClausesToSheet error", e);

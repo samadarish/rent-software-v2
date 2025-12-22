@@ -824,23 +824,38 @@ async function handleSavePayment() {
     };
 
     const { ok, payment } = await savePaymentRecord(payload);
-    if (!ok || !payment) return;
+    if (!ok) return;
 
-    const existingIdx = paymentsState.items.findIndex((p) => p.id === payment.id);
+    const savedPayment = {
+        ...payload,
+        ...(payment || {}),
+    };
+    savedPayment.id = savedPayment.id || paymentsState.editingId || `payment-${Date.now()}`;
+    savedPayment.amount = Number(savedPayment.amount) || 0;
+    savedPayment.monthKey = normalizeMonthKey(savedPayment.monthKey);
+    savedPayment.tenantKey = normalizeKey(savedPayment.tenantKey || savedPayment.tenantName);
+
+    const existingIdx = paymentsState.items.findIndex((p) => p.id === savedPayment.id);
     if (existingIdx >= 0) {
-        paymentsState.items[existingIdx] = payment;
+        paymentsState.items[existingIdx] = savedPayment;
     } else {
-        paymentsState.items.unshift(payment);
+        paymentsState.items.unshift(savedPayment);
     }
 
     paymentsState.paymentIndex = buildPaymentIndex(paymentsState.items);
 
-    paymentsState.editingId = payment.id;
+    paymentsState.editingId = savedPayment.id;
     paymentsState.attachmentDataUrl = "";
-    paymentsState.attachmentName = payment.attachmentName || "";
-    paymentsState.attachmentUrl = normalizeAttachmentUrl(payment.attachmentUrl || "");
+    paymentsState.attachmentName = savedPayment.attachmentName || "";
+    paymentsState.attachmentUrl = normalizeAttachmentUrl(savedPayment.attachmentUrl || "");
 
-    renderGeneratedBills();
+    const remainingAfter =
+        Math.max(
+            0,
+            (Number(context.remaining) || Number(context.billTotal) || 0) - (Number(savedPayment.amount) || 0)
+        ) || 0;
+
+    setBillsTab(remainingAfter <= 0 ? "paid" : paymentsState.activeBillTab || "pending");
     closePaymentModal();
 }
 

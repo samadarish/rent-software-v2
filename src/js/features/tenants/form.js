@@ -8,7 +8,7 @@
  */
 
 import { floorOptions } from "../../constants.js";
-import { toOrdinal, formatDateForDoc, numberToIndianWords } from "../../utils/formatters.js";
+import { toOrdinal, formatDateForDoc } from "../../utils/formatters.js";
 import { htmlToMarkedText } from "../../utils/htmlUtils.js";
 import { getSelectedClauses } from "../agreements/clauses.js";
 import { getFamilyMembersFromTable } from "./family.js";
@@ -137,7 +137,7 @@ export async function refreshUnitOptions(force = false) {
         return unitCache;
     }
 
-    const data = await fetchUnitsFromSheet();
+    const data = await fetchUnitsFromSheet(force);
     unitCache = Array.isArray(data.units)
         ? data.units.map((u) => ({
               ...u,
@@ -156,7 +156,7 @@ export async function refreshLandlordOptions(force = false) {
         return landlordCache;
     }
 
-    const data = await fetchLandlordsFromSheet();
+    const data = await fetchLandlordsFromSheet(force);
     landlordCache = Array.isArray(data.landlords)
         ? data.landlords.map((l) => ({ ...l }))
         : [];

@@ -131,7 +131,7 @@ function syncWingList() {
         pill.className = "px-2 py-1 rounded-full bg-white border text-[11px] flex items-center gap-1";
         pill.addEventListener("click", async () => {
             await removeWingFromSheet(opt.value);
-            fetchWingsFromSheet();
+            fetchWingsFromSheet(true);
         });
         list.appendChild(pill);
     });
@@ -356,7 +356,7 @@ export function attachEventHandlers() {
             const landlordId = document.getElementById("landlordExistingSelect")?.value || "";
             await saveLandlordConfig({ landlordId, name, aadhaar, address });
             saveLandlordDefaults();
-            fetchLandlordsFromSheet();
+            fetchLandlordsFromSheet(true);
         });
     }
 
@@ -378,7 +378,7 @@ export function attachEventHandlers() {
             const selected = document.getElementById("landlordExistingSelect")?.value;
             if (!selected) return;
             await deleteLandlordConfig(selected);
-            fetchLandlordsFromSheet();
+            fetchLandlordsFromSheet(true);
         });
     }
 
@@ -393,7 +393,7 @@ export function attachEventHandlers() {
             const wing = document.getElementById("landlordDefaultWing")?.value || "";
             if (!wing) return;
             await removeWingFromSheet(wing);
-            fetchWingsFromSheet();
+            fetchWingsFromSheet(true);
         });
     }
 
@@ -472,7 +472,7 @@ export function attachEventHandlers() {
     const reloadClausesBtn = document.getElementById("reloadClausesBtn");
     if (reloadClausesBtn) {
         reloadClausesBtn.addEventListener("click", () => {
-            loadClausesFromSheet(true);
+            loadClausesFromSheet(true, true);
         });
     }
 

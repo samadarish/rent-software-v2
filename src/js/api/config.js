@@ -68,8 +68,8 @@ export function saveAppScriptUrl() {
 
     // Refresh data after URL is saved
     import("./sheets.js").then(({ fetchWingsFromSheet, loadClausesFromSheet }) => {
-        fetchWingsFromSheet();
-        loadClausesFromSheet(true);
+        fetchWingsFromSheet(true);
+        loadClausesFromSheet(true, true);
     });
 }
 
@@ -185,6 +185,6 @@ export async function saveWingFromLandlordConfig() {
     const result = await addWingToSheet(wing);
     if (result && result.ok !== false) {
         wingInput.value = "";
-        fetchWingsFromSheet();
+        fetchWingsFromSheet(true);
     }
 }
