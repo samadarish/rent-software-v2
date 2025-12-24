@@ -27,9 +27,9 @@ import {
     deleteLandlordConfig,
 } from "./api/sheets.js";
 import { exportDocxFromTemplate } from "./features/agreements/docx.js";
-import { numberToIndianWords } from "./utils/formatters.js";
+import { buildUnitLabel, numberToIndianWords } from "./utils/formatters.js";
 import { clearAllDrafts, promptAndSaveDraft } from "./features/shared/drafts.js";
-import { hideModal, showModal } from "./utils/ui.js";
+import { cloneSelectOptions, hideModal, showModal } from "./utils/ui.js";
 
 let unitConfigCache = [];
 let landlordConfigCache = [];
@@ -38,10 +38,7 @@ let landlordConfigCache = [];
  * Copies the wing dropdown options into the unit configuration modal selectors.
  */
 function syncUnitConfigWingOptions() {
-    const wingSource = document.getElementById("wing");
-    const unitWing = document.getElementById("unitConfigWing");
-    if (!wingSource || !unitWing) return;
-    unitWing.innerHTML = wingSource.innerHTML;
+    cloneSelectOptions("wing", "unitConfigWing", { preserveSelection: false });
 }
 
 /**
@@ -57,7 +54,7 @@ function syncUnitConfigList(units) {
     unitConfigCache.forEach((u) => {
         const opt = document.createElement("option");
         opt.value = u.unit_id;
-        opt.textContent = [u.wing, u.unit_number].filter(Boolean).join(" - ") || u.unit_id;
+        opt.textContent = buildUnitLabel(u);
         select.appendChild(opt);
     });
     if (previous && Array.from(select.options).some((o) => o.value === previous)) select.value = previous;
@@ -69,9 +66,8 @@ function syncUnitConfigList(units) {
             const row = document.createElement("div");
             row.className = "flex items-center justify-between border border-slate-200 rounded px-2 py-1 bg-white";
             const label = document.createElement("div");
-            label.textContent = `${[u.wing, u.unit_number].filter(Boolean).join(" - ") || u.unit_id} • ${u.floor || ""} ${
-                u.direction || ""
-            }`;
+            const unitLabel = buildUnitLabel(u);
+            label.textContent = `${unitLabel} • ${u.floor || ""} ${u.direction || ""}`.trim();
             const actions = document.createElement("div");
             actions.className = "flex gap-2";
             const loadBtn = document.createElement("button");
@@ -168,6 +164,18 @@ function toggleNoGrnMode() {
     input.disabled = false;
     input.value = "";
     delete input.dataset.prevGrn;
+}
+
+function wireAmountToWords(inputId, outputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+
+    input.addEventListener("input", () => {
+        const val = parseInt(input.value, 10);
+        const out = document.getElementById(outputId);
+        if (!out) return;
+        out.value = isNaN(val) || val <= 0 ? "" : `${numberToIndianWords(val)} only`;
+    });
 }
 
 /**
@@ -269,42 +277,9 @@ export function attachEventHandlers() {
     }
 
     // Amount to words converters
-
-    // Rent amount → words
-    const rentAmountEl = document.getElementById("rent_amount");
-    if (rentAmountEl) {
-        rentAmountEl.addEventListener("input", () => {
-            const val = parseInt(rentAmountEl.value, 10);
-            const out = document.getElementById("rent_amount_words");
-            if (!out) return;
-            out.value =
-                isNaN(val) || val <= 0 ? "" : numberToIndianWords(val) + " only";
-        });
-    }
-
-    // Security deposit amount → words
-    const secuEl = document.getElementById("secu_depo");
-    if (secuEl) {
-        secuEl.addEventListener("input", () => {
-            const val = parseInt(secuEl.value, 10);
-            const out = document.getElementById("secu_amount_words");
-            if (!out) return;
-            out.value =
-                isNaN(val) || val <= 0 ? "" : numberToIndianWords(val) + " only";
-        });
-    }
-
-    // Rent increase amount → words
-    const incEl = document.getElementById("rent_inc");
-    if (incEl) {
-        incEl.addEventListener("input", () => {
-            const out = document.getElementById("increase_amount_word");
-            if (!out) return;
-            const val = parseInt(incEl.value, 10);
-            out.value =
-                isNaN(val) || val <= 0 ? "" : numberToIndianWords(val) + " only";
-        });
-    }
+    wireAmountToWords("rent_amount", "rent_amount_words");
+    wireAmountToWords("secu_depo", "secu_amount_words");
+    wireAmountToWords("rent_inc", "increase_amount_word");
 
     // Add family row button
     const addFamilyRowBtn = document.getElementById("addFamilyRowBtn");
@@ -482,18 +457,8 @@ export function attachEventHandlers() {
 
     // Action buttons (class-based selectors for multiple instances)
 
-    // Save tenant (Agreement mode)
-    document.querySelectorAll(".btn-save-agreement").forEach(btn => {
-        btn.addEventListener("click", saveTenantToDb);
-    });
-
-    // Create new tenant (Active)
-    document.querySelectorAll(".btn-create-new").forEach(btn => {
-        btn.addEventListener("click", saveTenantToDb);
-    });
-
-    // Save past tenant
-    document.querySelectorAll(".btn-save-past").forEach(btn => {
+    // Save tenant
+    document.querySelectorAll(".btn-save-agreement, .btn-create-new, .btn-save-past").forEach((btn) => {
         btn.addEventListener("click", saveTenantToDb);
     });
 
@@ -512,6 +477,5 @@ export function attachEventHandlers() {
         btn.addEventListener("click", exportDocxFromTemplate);
     });
 
-    document.addEventListener("wings:updated", syncUnitConfigWingOptions);
     document.addEventListener("units:updated", (e) => syncUnitConfigList(e.detail));
 }

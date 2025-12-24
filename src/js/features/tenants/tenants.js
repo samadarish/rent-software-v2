@@ -6,8 +6,8 @@ import {
     saveRentRevision,
     updateTenantRecord,
 } from "../../api/sheets.js";
-import { toOrdinal } from "../../utils/formatters.js";
-import { hideModal, showModal, showToast } from "../../utils/ui.js";
+import { buildUnitLabel, formatCurrency, normalizeMonthKey, toOrdinal } from "../../utils/formatters.js";
+import { cloneSelectOptions, hideModal, showModal, showToast } from "../../utils/ui.js";
 import { createFamilyRow as buildFamilyRow } from "./family.js";
 
 let tenantCache = [];
@@ -55,9 +55,13 @@ export function getActiveTenantsForWing(wing) {
  */
 function formatRent(amount) {
     if (!amount) return "-";
-    const numeric = parseInt(amount, 10);
-    if (isNaN(numeric)) return `₹${amount}`;
-    return `₹${numeric.toLocaleString("en-IN")}`;
+    return formatCurrency(amount, {
+        parseMode: "int",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+        useGrouping: true,
+        rawOnInvalid: true,
+    });
 }
 
 /**
@@ -306,16 +310,6 @@ async function handleRentRevisionSave() {
     }
 }
 
-function normalizeMonthKey(raw) {
-    if (!raw) return "";
-    const str = raw.toString().trim();
-    const match = str.match(/^(\d{4})-(\d{1,2})/);
-    if (match) return `${match[1]}-${match[2].padStart(2, "0")}`;
-    const compact = str.match(/^(\d{4})(\d{2})$/);
-    if (compact) return `${compact[1]}-${compact[2]}`;
-    return str;
-}
-
 function formatMonthLabel(monthKey) {
     const normalized = normalizeMonthKey(monthKey);
     if (!normalized) return "";
@@ -339,29 +333,6 @@ function getEffectiveRentFromRevisions(revisions, monthKey, baseRent) {
         }
     }
     return baseRent ?? null;
-}
-
-/**
- * Clones option elements from one select to another while preserving selection.
- * @param {string} sourceId
- * @param {string} targetId
- */
-function cloneSelectOptions(sourceId, targetId) {
-    const source = document.getElementById(sourceId);
-    const target = document.getElementById(targetId);
-    if (!source || !target) return;
-    if (!source.options || !target.options) return;
-
-    const previous = target.value;
-    target.innerHTML = "";
-    Array.from(source.options).forEach((opt) => {
-        const clone = opt.cloneNode(true);
-        target.appendChild(clone);
-    });
-
-    if (previous && Array.from(target.options).some((o) => o.value === previous)) {
-        target.value = previous;
-    }
 }
 
 /**
@@ -393,8 +364,7 @@ function populateUnitDropdown(selectedUnitId, tenancyId) {
     available.forEach((u) => {
         const opt = document.createElement("option");
         opt.value = u.unit_id;
-        const labelParts = [u.wing, u.unit_number].filter(Boolean).join(" - ");
-        opt.textContent = labelParts || u.unit_id;
+        opt.textContent = buildUnitLabel(u);
         opt.dataset.wing = u.wing || "";
         opt.dataset.floor = u.floor || "";
         opt.dataset.direction = u.direction || "";
@@ -443,17 +413,6 @@ function applyLandlordSelectionToModal(landlordId) {
     const address = document.getElementById("tenantModalLandlordAddress");
     if (aadhaar) aadhaar.value = landlord?.aadhaar || "";
     if (address) address.value = landlord?.address || "";
-}
-
-/**
- * Builds a concise label for a unit for dropdown and table usage.
- * @param {object} unit
- * @returns {string}
- */
-function buildUnitLabel(unit) {
-    if (!unit) return "";
-    const parts = [unit.wing, unit.unit_number].filter(Boolean);
-    return parts.join(" - ") || unit.unit_id || "";
 }
 
 /**

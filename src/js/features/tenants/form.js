@@ -8,7 +8,7 @@
  */
 
 import { floorOptions } from "../../constants.js";
-import { toOrdinal, formatDateForDoc } from "../../utils/formatters.js";
+import { buildUnitLabel, formatDateForDoc, toOrdinal } from "../../utils/formatters.js";
 import { htmlToMarkedText } from "../../utils/htmlUtils.js";
 import { getSelectedClauses } from "../agreements/clauses.js";
 import { getFamilyMembersFromTable } from "./family.js";
@@ -96,8 +96,7 @@ function populateUnitSelectForFlow() {
     available.forEach((u) => {
         const opt = document.createElement("option");
         opt.value = u.unit_id;
-        const labelParts = [u.wing, u.unit_number].filter(Boolean).join(" - ");
-        opt.textContent = labelParts || u.unit_id;
+        opt.textContent = buildUnitLabel(u);
         opt.dataset.wing = u.wing || "";
         opt.dataset.floor = u.floor || "";
         opt.dataset.direction = u.direction || "";

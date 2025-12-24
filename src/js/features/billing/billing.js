@@ -6,8 +6,8 @@
  * state, parses tenant/unit data, and wires modal interactions.
  */
 
-import { numberToIndianWords } from "../../utils/formatters.js";
-import { hideModal, showModal, showToast, smoothToggle } from "../../utils/ui.js";
+import { formatCurrency as formatCurrencyBase, normalizeMonthKey, numberToIndianWords } from "../../utils/formatters.js";
+import { cloneSelectOptions, hideModal, showModal, showToast, smoothToggle } from "../../utils/ui.js";
 import { ensureTenantDirectoryLoaded, getActiveTenantsForWing } from "../tenants/tenants.js";
 import { fetchBillingRecord, fetchGeneratedBills, saveBillingRecord } from "../../api/sheets.js";
 
@@ -33,6 +33,15 @@ const billingState = {
 };
 
 const billingRecordCache = new Map();
+const formatCurrency = (amount) =>
+    formatCurrencyBase(amount, {
+        useGrouping: false,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+        coerceEmptyToZero: true,
+        roundTo: 2,
+        invalidValue: "\u20B90.00",
+    });
 
 function getBillingCacheKey(monthKey, wing) {
     const normalizedMonth = normalizeMonthKey(monthKey);
@@ -46,74 +55,6 @@ function getWingVariants(rawWing) {
     if (!canonical) return [];
     if (canonical.toLowerCase() === normalized) return [canonical];
     return [canonical, normalized];
-}
-
-function normalizeMonthKey(value) {
-    if (!value) return "";
-
-    if (value instanceof Date && !Number.isNaN(value)) {
-        const month = `${value.getUTCMonth() + 1}`.padStart(2, "0");
-        return `${value.getUTCFullYear()}-${month}`;
-    }
-
-    const str = value.toString().trim();
-    if (!str) return "";
-
-    // Excel / Sheets serial numbers (roughly covers 1990-2150 ranges)
-    const numericValue = Number(str);
-    if (!Number.isNaN(numericValue) && /^\d+(?:\.0+)?$/.test(str) && numericValue > 30000) {
-        const excelEpoch = Date.UTC(1899, 11, 30);
-        const utcDate = new Date(excelEpoch + numericValue * 24 * 60 * 60 * 1000);
-        if (!Number.isNaN(utcDate)) {
-            const month = `${utcDate.getUTCMonth() + 1}`.padStart(2, "0");
-            return `${utcDate.getUTCFullYear()}-${month}`;
-        }
-    }
-
-    const compact = str.match(/^(\d{4})(\d{2})$/);
-    if (compact) {
-        return `${compact[1]}-${compact[2]}`;
-    }
-
-    const ymd = str.match(/^(\d{4})[-/.](\d{1,2})/);
-    if (ymd) {
-        const month = `${ymd[2]}`.padStart(2, "0");
-        return `${ymd[1]}-${month}`;
-    }
-
-    const my = str.match(/^(\d{1,2})[-/.](\d{4})$/);
-    if (my) {
-        const month = `${my[1]}`.padStart(2, "0");
-        return `${my[2]}-${month}`;
-    }
-
-    const mdy = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
-    if (mdy) {
-        const rawYear = mdy[3].length === 2 ? `20${mdy[3]}` : mdy[3];
-        const first = parseInt(mdy[1], 10);
-        const second = parseInt(mdy[2], 10);
-        const monthNum = first > 12 && second <= 12 ? second : first;
-        const month = `${monthNum}`.padStart(2, "0");
-        return `${rawYear}-${month}`;
-    }
-
-    const monthName = str.match(/^([A-Za-z]{3,})\s+(\d{2,4})$/);
-    if (monthName) {
-        const monthIdx = new Date(`${monthName[1]} 1, 2000`).getMonth();
-        if (!Number.isNaN(monthIdx)) {
-            const month = `${monthIdx + 1}`.padStart(2, "0");
-            const year = monthName[2].length === 2 ? `20${monthName[2]}` : monthName[2];
-            return `${year}-${month}`;
-        }
-    }
-
-    const parsedDate = new Date(str);
-    if (!Number.isNaN(parsedDate)) {
-        const month = `${parsedDate.getUTCMonth() + 1}`.padStart(2, "0");
-        return `${parsedDate.getUTCFullYear()}-${month}`;
-    }
-
-    return str;
 }
 
 function normalizeWing(value) {
@@ -243,11 +184,7 @@ function roundToNearest(val) {
     return roundToTwo(Math.round(num));
 }
 
-function formatCurrency(amount) {
-    const numeric = roundToTwo(amount || 0);
-    if (Number.isNaN(numeric)) return "₹0";
-    return `₹${numeric.toFixed(2)}`;
-}
+
 
 function updateSelectionChips() {
     const monthChip = document.getElementById("billingSelectedMonth");
@@ -1172,35 +1109,18 @@ function setupModalEvents() {
     applyMetaListeners();
 }
 
-function cloneWingOptions(targetId) {
-    const source = document.getElementById("wing");
-    const target = document.getElementById(targetId);
-    if (!source || !target) return;
-
-    const previousValue = target.value;
-    target.innerHTML = "";
-    Array.from(source.options).forEach((opt) => {
-        const clone = opt.cloneNode(true);
-        target.appendChild(clone);
-    });
-
-    if (previousValue && Array.from(target.options).some((o) => o.value === previousValue)) {
-        target.value = previousValue;
-    }
-}
-
 /**
  * Initializes the Billing tab by loading cached data, wiring events,
  * and rendering the default view state.
  */
 export function initBillingFeature() {
     renderBillingCalendar();
-    cloneWingOptions("billingWingSelect");
+    cloneSelectOptions("wing", "billingWingSelect");
     setupModalEvents();
     refreshBillingCalendarCoverage();
 
     document.addEventListener("wings:updated", () => {
-        cloneWingOptions("billingWingSelect");
+        cloneSelectOptions("wing", "billingWingSelect");
         billingState.availableWings = getAvailableWings();
         renderBillingCalendar();
     });

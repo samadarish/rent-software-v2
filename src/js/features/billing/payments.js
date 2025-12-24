@@ -13,6 +13,7 @@ import {
     savePaymentRecord,
 } from "../../api/sheets.js";
 import { ensureTenantDirectoryLoaded } from "../tenants/tenants.js";
+import { formatCurrency as formatCurrencyBase, normalizeMonthKey as normalizeMonthKeyBase } from "../../utils/formatters.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
 const paymentsState = {
@@ -132,9 +133,14 @@ function getPaymentsForBill(bill, paymentIndex = paymentsState.paymentIndex) {
 }
 
 function formatCurrency(amount) {
-    const num = Number(amount);
-    if (isNaN(num)) return amount || "-";
-    return `₹${num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const invalidValue = typeof amount === "string" && amount ? amount : "-";
+    return formatCurrencyBase(amount, {
+        emptyValue: "-",
+        invalidValue,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+        useGrouping: true,
+    });
 }
 
 function normalizeBooleanValue(value) {
@@ -257,24 +263,7 @@ function normalizeKey(value) {
 }
 
 function normalizeMonthKey(value) {
-    if (!value) return "";
-
-    const str = value.toString().trim();
-    if (!str) return "";
-
-    const compactMatch = str.match(/^(\d{4})(\d{2})$/);
-    if (compactMatch) {
-        const month = compactMatch[2].padStart(2, "0");
-        return `${compactMatch[1]}-${month}`.toLowerCase();
-    }
-
-    const match = str.match(/^(\d{4})[-/.](\d{1,2})/);
-    if (match) {
-        const month = match[2].padStart(2, "0");
-        return `${match[1]}-${month}`.toLowerCase();
-    }
-
-    return str.toLowerCase();
+    return normalizeMonthKeyBase(value, { lowercase: true });
 }
 
 function togglePaymentModal(show) {

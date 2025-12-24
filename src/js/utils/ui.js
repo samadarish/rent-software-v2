@@ -83,6 +83,31 @@ export function updateConnectionIndicator(status = "checking", message = "") {
     if (label) label.textContent = message || variant.label;
 }
 
+/**
+ * Clones option elements from one select to another while preserving selection.
+ * @param {string} sourceId
+ * @param {string} targetId
+ * @param {{ preserveSelection?: boolean }} options
+ */
+export function cloneSelectOptions(sourceId, targetId, options = {}) {
+    const { preserveSelection = true } = options;
+    const source = document.getElementById(sourceId);
+    const target = document.getElementById(targetId);
+    if (!source || !target) return;
+    if (!source.options || !target.options) return;
+
+    const previous = preserveSelection ? target.value : "";
+    target.innerHTML = "";
+    Array.from(source.options).forEach((opt) => {
+        const clone = opt.cloneNode(true);
+        target.appendChild(clone);
+    });
+
+    if (preserveSelection && previous && Array.from(target.options).some((o) => o.value === previous)) {
+        target.value = previous;
+    }
+}
+
 const DEFAULT_ANIM_MS = 200;
 
 /**
