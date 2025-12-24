@@ -58,13 +58,16 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     const isGenerateBill = mode === "generateBill";
     const isPayments = mode === "payments";
     const isViewTenants = mode === "viewTenants";
+    const isFormFlow = mode === "agreement" || mode === "createTenantNew" || mode === "addPastTenant";
+    const toggleSection = (element, show) =>
+        smoothToggle(element, show, show ? {} : { duration: 0 });
 
-    smoothToggle(dashboardSection, isDashboard);
-    smoothToggle(formSection, !(isDashboard || isGenerateBill || isPayments || isViewTenants));
+    toggleSection(dashboardSection, isDashboard);
+    toggleSection(formSection, isFormFlow);
     smoothToggle(formRightSection, true);
-    smoothToggle(tenantListSection, isViewTenants);
-    smoothToggle(generateBillSection, isGenerateBill);
-    smoothToggle(paymentsSection, isPayments);
+    toggleSection(tenantListSection, isViewTenants);
+    toggleSection(generateBillSection, isGenerateBill);
+    toggleSection(paymentsSection, isPayments);
 
     // Update navigation button active states
     const dashboardBtn = document.getElementById("navDashboardBtn");
@@ -184,10 +187,10 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
         const showTenantSidebar = mode === "createTenantNew" || mode === "addPastTenant";
         const showUtilitySidebar = isDashboard || isGenerateBill || isPayments;
 
-        smoothToggle(clausesAgreementContent, showClauses);
-        smoothToggle(directorySidebarContent, showDirectory);
-        smoothToggle(clausesPlaceholderContent, showTenantSidebar);
-        smoothToggle(utilitySidebarContent, showUtilitySidebar);
+        toggleSection(clausesAgreementContent, showClauses);
+        toggleSection(directorySidebarContent, showDirectory);
+        toggleSection(clausesPlaceholderContent, showTenantSidebar);
+        toggleSection(utilitySidebarContent, showUtilitySidebar);
     }
 
     if (grnInput && noGrnCheckbox) {
@@ -219,66 +222,22 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     // Show actions card only in agreement mode
     const actionsCard = document.getElementById("actionsCard");
     if (actionsCard) {
-        smoothToggle(actionsCard, mode === "agreement");
-    }
-
-    if (mode === "dashboard") {
-        if (dashboardSection) dashboardSection.classList.remove("hidden");
-        if (formSection) formSection.classList.add("hidden");
-        if (tenantListSection) tenantListSection.classList.add("hidden");
-        if (generateBillSection) generateBillSection.classList.add("hidden");
-        if (paymentsSection) paymentsSection.classList.add("hidden");
-        if (formRightSection) formRightSection.classList.remove("hidden");
-        if (appLayout) {
-            appLayout.classList.remove("layout-agreement");
-            appLayout.classList.add("layout-directory");
-        }
-        return;
-    }
-
-    if (mode === "generateBill") {
-        if (formSection) formSection.classList.add("hidden");
-        if (tenantListSection) tenantListSection.classList.add("hidden");
-        if (generateBillSection) generateBillSection.classList.remove("hidden");
-        if (formRightSection) formRightSection.classList.remove("hidden");
-        if (appLayout) {
-            appLayout.classList.remove("layout-agreement");
-            appLayout.classList.add("layout-directory");
-        }
-
-        return;
+        toggleSection(actionsCard, mode === "agreement");
     }
 
     if (mode === "payments") {
-        if (formSection) formSection.classList.add("hidden");
-        if (tenantListSection) tenantListSection.classList.add("hidden");
-        if (generateBillSection) generateBillSection.classList.add("hidden");
-        if (paymentsSection) paymentsSection.classList.remove("hidden");
-        if (formRightSection) formRightSection.classList.remove("hidden");
-        if (appLayout) {
-            appLayout.classList.remove("layout-agreement");
-            appLayout.classList.add("layout-directory");
-        }
         refreshPaymentsIfNeeded();
-        return;
     }
 
     if (mode === "viewTenants") {
-        if (formSection) formSection.classList.add("hidden");
-        if (formRightSection) formRightSection.classList.remove("hidden");
-        if (tenantListSection) tenantListSection.classList.remove("hidden");
-        if (appLayout) {
-            appLayout.classList.remove("layout-agreement");
-            appLayout.classList.add("layout-directory");
-        }
-
         loadTenantDirectory();
-        return;
     }
 
-    // Load draft data specific to this mode
-    syncDraftUiForFlow(mode);
-    loadDraftForFlow(mode);
+    if (isFormFlow) {
+        // Load draft data specific to this mode
+        syncDraftUiForFlow(mode);
+        loadDraftForFlow(mode);
+    }
 
     if (mode !== "viewTenants") {
         applyLandlordDefaultsToForm();

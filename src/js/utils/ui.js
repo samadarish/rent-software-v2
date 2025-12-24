@@ -140,6 +140,12 @@ export function smoothToggle(element, show, options = {}) {
 
     element.classList.add(baseClass);
 
+    if (!show && duration <= 0) {
+        element.classList.remove(activeClass, hidingClass);
+        element.classList.add(hiddenClass);
+        return;
+    }
+
     if (show) {
         element.classList.remove(hiddenClass, hidingClass);
         requestAnimationFrame(() => element.classList.add(activeClass));

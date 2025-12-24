@@ -10,6 +10,11 @@
   <meta charset="UTF-8" />
   <title>Khurshid Tenant Software</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    .hidden {
+      display: none !important;
+    }
+  </style>
 
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -54,7 +59,7 @@
     <!-- MAIN CONTENT -->
     <main class="flex-1 overflow-y-auto p-2 md:p-4">
       <!-- 3-column app layout: nav (left), main view (middle), sidebar (right) -->
-      <div id="appLayout" class="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)] gap-3">
+      <div id="appLayout" class="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)] gap-3 layout-directory">
 
         <!-- LEFT: NAVIGATION COLUMN -->
         <aside
@@ -67,7 +72,7 @@
 
           <!-- Dashboard -->
           <button id="navDashboardBtn"
-            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700">
+            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg bg-slate-900 text-white shadow-sm">
             <span>Dashboard</span>
             <span class="text-[9px] text-slate-400">Coming soon</span>
           </button>
@@ -102,7 +107,7 @@
 
           <!-- Create Agreement (current) -->
           <button id="navCreateAgreementBtn"
-            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg bg-slate-900 text-white shadow-sm">
+            class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700">
             <span>Create Agreement</span>
             <span class="text-[9px] text-slate-200">Current</span>
           </button>
@@ -601,12 +606,12 @@
         </section>
 
         <!-- RIGHT COLUMN: FORM SIDEBAR (clauses + actions) -->
-        <section id="formRightSection" class="space-y-3 min-w-0">
+        <section id="formRightSection" class="space-y-3 min-w-0 fade-section is-visible">
           <!-- CLAUSES CARD -->
           <div id="clausesCard" class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-2.5">
 
             <!-- AGREEMENT MODE CONTENT -->
-            <div id="clausesAgreementContent">
+            <div id="clausesAgreementContent" class="hidden fade-section">
               <div class="flex items-center justify-between">
                 <h3 class="text-xs font-semibold">Clauses (for Preview / Reference)</h3>
                 <div class="flex items-center gap-2">
@@ -637,7 +642,7 @@
             </div>
 
             <!-- NON-AGREEMENT PLACEHOLDER (Create Tenant / Past Tenant) -->
-            <div id="clausesPlaceholderContent" class="hidden">
+            <div id="clausesPlaceholderContent" class="hidden fade-section">
               <h3 class="text-xs font-semibold mb-1.5">Sidebar</h3>
               <p class="text-[10px] text-slate-500">
                 Recent payments coming soon.
@@ -645,7 +650,7 @@
             </div>
 
             <!-- GENERAL UTILITIES (Dashboard / Billing / Payments) -->
-            <div id="utilitySidebarContent" class="hidden space-y-2">
+            <div id="utilitySidebarContent" class="space-y-2 fade-section is-visible">
               <h3 class="text-xs font-semibold mb-1.5">Quick utilities</h3>
               <p class="text-[10px] text-slate-500">
                 Columns stay fixed; content updates as you move across dashboard, billing, and payments.
@@ -658,7 +663,7 @@
             </div>
 
             <!-- DIRECTORY MODE SIDEBAR (Tenant details + history) -->
-            <div id="directorySidebarContent" class="hidden space-y-3">
+            <div id="directorySidebarContent" class="hidden space-y-3 fade-section">
               <div id="sidebarSnapshotEmpty" class="text-[11px] text-slate-500 border rounded-lg p-4 bg-slate-50">Pick any
                 tenant row to see details.</div>
 
@@ -725,7 +730,7 @@
             </div>
 
           <!-- ACTION BUTTONS REMOVED FROM SIDEBAR -->
-          <div id="actionsCard" class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-2">
+          <div id="actionsCard" class="hidden fade-section bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-2">
             <h3 class="text-xs font-semibold mb-1.5">Info</h3>
             <p class="text-[10px] text-slate-500">
               Drafts are saved locally per view. Switch between Agreement, Active, and Past tenants to work on separate
