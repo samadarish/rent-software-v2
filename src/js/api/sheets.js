@@ -269,18 +269,69 @@ export async function deleteLandlordConfig(landlordId) {
  * Loads the list of previously generated bills for quick access in the UI.
  * @returns {Promise<{bills: Array}>} Generated bill summaries or empty list on error.
  */
-export async function fetchGeneratedBills() {
+export async function fetchBillsMinimal(status = "pending") {
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view generated bills", "warning"),
     });
     if (!url) return { bills: [] };
 
+    const normalized = (status || "pending").toString().trim().toLowerCase();
+    const params = normalized ? { status: normalized } : undefined;
+
     try {
-        return await callAppScript({ url, action: "generatedbills" });
+        return await callAppScript({ url, action: "billsminimal", params });
+    } catch (e) {
+        console.error("fetchBillsMinimal error", e);
+        showToast("Could not fetch bills", "error");
+        return { bills: [] };
+    }
+}
+
+export async function fetchPendingBillsMinimal() {
+    return fetchBillsMinimal("pending");
+}
+
+export async function fetchGeneratedBills(options = {}) {
+    const url = ensureAppScriptUrl({
+        onMissing: () => showToast("Configure Apps Script URL to view generated bills", "warning"),
+    });
+    if (!url) return { bills: [] };
+
+    const status =
+        typeof options === "string"
+            ? options
+            : (options && typeof options === "object" ? options.status : "");
+    const params = status ? { status } : undefined;
+
+    try {
+        return await callAppScript({ url, action: "generatedbills", params });
     } catch (e) {
         console.error("fetchGeneratedBills error", e);
         showToast("Could not fetch generated bills", "error");
         return { bills: [] };
+    }
+}
+
+/**
+ * Fetches full bill details for a single bill line.
+ * @param {string} billLineId - Bill line identifier.
+ * @returns {Promise<{ok: boolean, bill?: object}>} Full bill details payload.
+ */
+export async function fetchBillDetails(billLineId) {
+    const url = ensureAppScriptUrl({
+        onMissing: () => showToast("Configure Apps Script URL to view bill details", "warning"),
+    });
+    if (!url) return { ok: false };
+
+    const cleaned = (billLineId || "").toString().trim();
+    if (!cleaned) return { ok: false };
+
+    try {
+        return await callAppScript({ url, action: "billdetails", params: { billLineId: cleaned } });
+    } catch (e) {
+        console.error("fetchBillDetails error", e);
+        showToast("Could not fetch bill details", "error");
+        return { ok: false };
     }
 }
 

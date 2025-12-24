@@ -5,15 +5,27 @@
  * payments to generated bills and tenant directory context.
  */
 
-import { fetchAttachmentPreview, fetchGeneratedBills, fetchPayments, savePaymentRecord } from "../../api/sheets.js";
+import {
+    fetchAttachmentPreview,
+    fetchBillDetails,
+    fetchBillsMinimal,
+    fetchPayments,
+    savePaymentRecord,
+} from "../../api/sheets.js";
 import { ensureTenantDirectoryLoaded } from "../tenants/tenants.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
 const paymentsState = {
     items: [],
     loaded: false,
-    generatedBills: [],
-    billsLoaded: false,
+    generatedBills: {
+        pending: [],
+        paid: [],
+    },
+    billsLoaded: {
+        pending: false,
+        paid: false,
+    },
     paymentIndex: createPaymentIndex(),
     activeBillTab: "pending",
     billContext: {
@@ -44,6 +56,34 @@ const paymentsState = {
 };
 
 const attachmentPreviewCache = new Map();
+let paymentHistoryLoading = false;
+
+function getBillsForStatus(status = "pending") {
+    return status === "paid" ? paymentsState.generatedBills.paid : paymentsState.generatedBills.pending;
+}
+
+function setBillsForStatus(status = "pending", bills = []) {
+    if (status === "paid") {
+        paymentsState.generatedBills.paid = bills;
+        return;
+    }
+    paymentsState.generatedBills.pending = bills;
+}
+
+function isBillsLoaded(status = "pending") {
+    return !!paymentsState.billsLoaded?.[status];
+}
+
+function setBillsLoaded(status = "pending", loaded) {
+    if (!paymentsState.billsLoaded) {
+        paymentsState.billsLoaded = { pending: false, paid: false };
+    }
+    paymentsState.billsLoaded[status] = !!loaded;
+}
+
+function getAllGeneratedBills() {
+    return [...getBillsForStatus("pending"), ...getBillsForStatus("paid")];
+}
 
 function createPaymentIndex() {
     return {
@@ -97,17 +137,78 @@ function formatCurrency(amount) {
     return `₹${num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function normalizeBooleanValue(value) {
+    if (value === true || value === false) return value;
+    if (typeof value === "string") {
+        return value.toLowerCase() !== "false" && value !== "";
+    }
+    return !!value;
+}
+
 function summarizeBillPayments(bill) {
+    const totalAmount = Number(bill?.totalAmount ?? bill?.total_amount) || 0;
+    const remainingRaw = bill?.remainingAmount ?? bill?.remaining_amount;
+    const amountPaidRaw = bill?.amountPaid ?? bill?.amount_paid;
+    const isPaidRaw = bill?.isPaid ?? bill?.is_paid;
+    const hasRemaining = remainingRaw !== null && remainingRaw !== undefined && remainingRaw !== "";
+    const hasAmountPaid = amountPaidRaw !== null && amountPaidRaw !== undefined && amountPaidRaw !== "";
+    const hasIsPaid = isPaidRaw !== null && isPaidRaw !== undefined && isPaidRaw !== "";
+
+    if (hasRemaining || hasAmountPaid || hasIsPaid) {
+        const remaining = hasRemaining
+            ? Math.max(0, Number(remainingRaw) || 0)
+            : hasIsPaid && normalizeBooleanValue(isPaidRaw)
+            ? 0
+            : Math.max(0, totalAmount - (Number(amountPaidRaw) || 0));
+        const paidAmount = hasAmountPaid ? Number(amountPaidRaw) || 0 : Math.max(0, totalAmount - remaining);
+        return {
+            paidAmount,
+            remaining,
+            receiptCount: 0,
+        };
+    }
+
     const { matches } = getPaymentsForBill(bill);
 
     const paidAmount = matches.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    const remaining = Math.max(0, (Number(bill.totalAmount) || 0) - paidAmount);
+    const remaining = Math.max(0, (Number(bill.totalAmount ?? bill.total_amount) || 0) - paidAmount);
 
     return {
         paidAmount,
         remaining,
         receiptCount: matches.length,
     };
+}
+
+function billHasStoredStatus(bill) {
+    const remainingRaw = bill?.remainingAmount ?? bill?.remaining_amount;
+    const amountPaidRaw = bill?.amountPaid ?? bill?.amount_paid;
+    const isPaidRaw = bill?.isPaid ?? bill?.is_paid;
+    return [remainingRaw, amountPaidRaw, isPaidRaw].some((value) => value !== null && value !== undefined && value !== "");
+}
+
+function billsHaveStoredStatus(bills = []) {
+    if (!bills.length) return true;
+    return bills.every((bill) => billHasStoredStatus(bill));
+}
+
+async function getBillDetailsForModal(bill) {
+    if (!bill || !bill.billLineId) return bill;
+    if (typeof bill.prevReading !== "undefined" || typeof bill.electricityRate !== "undefined") {
+        return bill;
+    }
+
+    try {
+        const res = await fetchBillDetails(bill.billLineId);
+        if (res && res.ok && res.bill) {
+            return { ...bill, ...res.bill };
+        }
+    } catch (err) {
+        console.error("Failed to load bill details", err);
+        showToast("Unable to load full bill details", "error");
+    }
+
+    return bill;
 }
 
 function findPaymentForBill(bill) {
@@ -320,6 +421,26 @@ function renderPaymentHistory(context = {}) {
 
     if (!context.monthKey || !context.tenantName) {
         container.classList.add("hidden");
+        return;
+    }
+
+    if (!paymentsState.loaded) {
+        container.classList.remove("hidden");
+        if (summary) summary.textContent = "Loading payment history...";
+        if (empty) empty.classList.add("hidden");
+        if (!paymentHistoryLoading) {
+            paymentHistoryLoading = true;
+            loadPayments()
+                .then(() => renderPaymentHistory(context))
+                .catch((err) => {
+                    console.error("Failed to load payments for history", err);
+                    if (summary) summary.textContent = "Unable to load payment history.";
+                    if (empty) empty.classList.remove("hidden");
+                })
+                .finally(() => {
+                    paymentHistoryLoading = false;
+                });
+        }
         return;
     }
 
@@ -668,16 +789,17 @@ async function openPaymentModal(payment = null, billContext = null) {
             amount: payment.amount,
         };
 
-        const matchingBill = (paymentsState.generatedBills || []).find(
+        const matchingBill = getAllGeneratedBills().find(
             (bill) => normalizeKey(bill.tenantKey || bill.tenantName) === normalizeKey(payment.tenantKey || payment.tenantName)
                 && normalizeMonthKey(bill.monthKey) === normalizeMonthKey(payment.monthKey)
                 && (bill.wing || '').toLowerCase() === (payment.wing || '').toLowerCase()
         );
 
         if (matchingBill) {
-            const status = summarizeBillPayments(matchingBill);
+            const detailedBill = await getBillDetailsForModal(matchingBill);
+            const status = summarizeBillPayments(detailedBill);
             context = {
-                ...matchingBill,
+                ...detailedBill,
                 remaining: status.remaining,
             };
         }
@@ -698,8 +820,9 @@ async function openPaymentModal(payment = null, billContext = null) {
         };
     }
 
-    if (!context && paymentsState.generatedBills.length) {
-        const firstBill = paymentsState.generatedBills[0];
+    const allBills = getAllGeneratedBills();
+    if (!context && allBills.length) {
+        const firstBill = allBills[0];
         const summary = summarizeBillPayments(firstBill);
         context = { ...firstBill, remaining: summary.remaining };
     }
@@ -739,13 +862,14 @@ async function openPaymentModal(payment = null, billContext = null) {
     togglePaymentModal(true);
 }
 
-function openPaymentModalFromBill(bill) {
+async function openPaymentModalFromBill(bill) {
     const status = summarizeBillPayments(bill);
     const context = {
         ...bill,
         remaining: status.remaining,
     };
-    openPaymentModal(null, context);
+    const detailed = await getBillDetailsForModal(context);
+    openPaymentModal(null, detailed);
 }
 
 function closePaymentModal() {
@@ -753,7 +877,7 @@ function closePaymentModal() {
     resetPaymentForm();
 }
 
-function setBillsTab(tab) {
+function setBillsTab(tab, options = {}) {
     paymentsState.activeBillTab = tab;
     const pendingTab = document.getElementById("billsPendingTab");
     const paidTab = document.getElementById("billsPaidTab");
@@ -765,8 +889,18 @@ function setBillsTab(tab) {
         paidTab.classList.toggle("bg-white", tab === "paid");
         paidTab.classList.toggle("text-slate-800", tab === "paid");
     }
-    if (paymentsState.billsLoaded) {
+    if (options.forceLoad) {
+        loadGeneratedBills(tab, true);
+        return;
+    }
+    if (options.skipLoad) {
         renderGeneratedBills();
+        return;
+    }
+    if (isBillsLoaded(tab)) {
+        renderGeneratedBills();
+    } else {
+        loadGeneratedBills(tab);
     }
 }
 
@@ -781,8 +915,9 @@ function renderGeneratedBills() {
     pendingBody.innerHTML = "";
     paidBody.innerHTML = "";
 
-    const bills = paymentsState.generatedBills || [];
-    if (!bills.length) {
+    const pendingBills = getBillsForStatus("pending");
+    const paidBills = getBillsForStatus("paid");
+    if (!pendingBills.length && !paidBills.length) {
         if (emptyState) emptyState.classList.remove("hidden");
         return;
     }
@@ -792,10 +927,13 @@ function renderGeneratedBills() {
     const pending = [];
     const paid = [];
 
-    bills.forEach((bill) => {
+    pendingBills.forEach((bill) => {
         const status = summarizeBillPayments(bill);
-        const bucket = status.remaining > 0 ? pending : paid;
-        bucket.push({ bill, status });
+        pending.push({ bill, status });
+    });
+    paidBills.forEach((bill) => {
+        const status = summarizeBillPayments(bill);
+        paid.push({ bill, status });
     });
 
     const makeRow = (targetBody, { bill, status }, isPaid) => {
@@ -804,7 +942,7 @@ function renderGeneratedBills() {
 
         const monthLabel = friendlyMonthLabel(bill.monthKey, bill.monthLabel);
         const remainingLabel = status.remaining > 0 ? `${formatCurrency(status.remaining)} due` : "Paid";
-        const totalLabel = formatCurrency(bill.totalAmount);
+        const totalLabel = formatCurrency(bill.totalAmount ?? bill.total_amount);
         const dueInfo = getDueInfo(bill);
         const dueBadge = bill.payableDate
             ? `<div class="text-[10px] ${dueInfo.overdue && !isPaid ? "text-rose-700" : "text-slate-500"}">${dueInfo.label}</div>`
@@ -830,9 +968,17 @@ function renderGeneratedBills() {
                 viewBtn.className =
                     "px-3 py-1.5 rounded-lg bg-slate-200 text-slate-800 text-[11px] font-semibold hover:bg-slate-300";
                 viewBtn.textContent = "View details";
-                viewBtn.addEventListener("click", () => {
+                viewBtn.addEventListener("click", async () => {
+                    if (!paymentsState.loaded) {
+                        try {
+                            await loadPayments();
+                        } catch (err) {
+                            console.error("Failed to load payments for details", err);
+                        }
+                    }
                     const payment = findPaymentForBill(bill);
-                    openPaymentModal(payment || null, { ...bill, remaining: status.remaining });
+                    const detailed = await getBillDetailsForModal({ ...bill, remaining: status.remaining });
+                    openPaymentModal(payment || null, detailed);
                 });
                 actionCell.appendChild(viewBtn);
             } else {
@@ -874,20 +1020,26 @@ async function loadPayments() {
     renderGeneratedBills();
 }
 
-async function loadGeneratedBills() {
+async function loadGeneratedBills(status = paymentsState.activeBillTab || "pending", force = false) {
+    const bucket = status === "paid" ? "paid" : "pending";
+    if (!force && isBillsLoaded(bucket)) {
+        renderGeneratedBills();
+        return;
+    }
+
     const loader = document.getElementById("generatedBillsLoader");
     if (loader) loader.classList.remove("hidden");
 
     try {
-        const { bills } = await fetchGeneratedBills();
-        paymentsState.generatedBills = Array.isArray(bills) ? bills : [];
-        paymentsState.billsLoaded = true;
-        setBillsTab(paymentsState.activeBillTab || "pending");
+        const payload = await fetchBillsMinimal(bucket);
+        const bills = payload && payload.bills;
+        setBillsForStatus(bucket, Array.isArray(bills) ? bills : []);
+        setBillsLoaded(bucket, true);
         renderGeneratedBills();
     } catch (err) {
         console.error("Failed to load generated bills", err);
-        paymentsState.generatedBills = [];
-        paymentsState.billsLoaded = false;
+        setBillsForStatus(bucket, []);
+        setBillsLoaded(bucket, false);
         renderGeneratedBills();
         showToast("Unable to load generated bills right now.", "error");
     } finally {
@@ -990,8 +1142,10 @@ async function handleSavePayment() {
             (Number(context.remaining) || Number(context.billTotal) || 0) - (Number(savedPayment.amount) || 0)
         ) || 0;
 
-    setBillsTab(remainingAfter <= 0 ? "paid" : paymentsState.activeBillTab || "pending");
+    const targetTab = remainingAfter <= 0 ? "paid" : paymentsState.activeBillTab || "pending";
+    setBillsTab(targetTab, { skipLoad: true });
     closePaymentModal();
+    await loadGeneratedBills(targetTab, true);
 }
 
 function isPaymentModalVisible() {
@@ -1165,15 +1319,18 @@ export function initPaymentsFeature() {
 }
 
 export async function refreshPaymentsIfNeeded(force = false) {
-    const shouldLoad = force || !paymentsState.loaded;
-    const shouldLoadBills = force || !paymentsState.billsLoaded;
-
-    if (!shouldLoad) {
+    const activeTab = paymentsState.activeBillTab || "pending";
+    const shouldLoadBills = force || !isBillsLoaded(activeTab);
+    if (shouldLoadBills) {
+        await loadGeneratedBills(activeTab, force);
+    } else {
         renderGeneratedBills();
     }
 
-    const tasks = [];
-    if (shouldLoad) tasks.push(loadPayments());
-    if (shouldLoadBills) tasks.push(loadGeneratedBills());
-    await Promise.all(tasks);
+    const allBills = getAllGeneratedBills();
+    const shouldLoadPayments =
+        force || (!paymentsState.loaded && !billsHaveStoredStatus(allBills));
+    if (shouldLoadPayments) {
+        await loadPayments();
+    }
 }

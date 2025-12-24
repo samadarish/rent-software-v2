@@ -147,6 +147,8 @@ const BILL_LINE_HEADERS = [
   'total_amount',
   'payable_date',
   'generated_at',
+  'amount_paid',
+  'is_paid',
 ];
 
 const PAYMENT_HEADERS = [
@@ -1108,6 +1110,8 @@ function handleSaveBillingRecord_(payload) {
       total_amount: total,
       payable_date: payableDate(tenancy),
       generated_at: new Date(),
+      amount_paid: 0,
+      is_paid: total <= 0,
     });
   });
 
@@ -1253,7 +1257,151 @@ function persistUniqueByKeys_(sheetName, headers, keys, records) {
   if (rows.length) sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
 }
 
-function handleFetchGeneratedBills_() {
+function deriveBillPaymentState_(bill) {
+  const totalAmount = Number(bill.total_amount) || 0;
+  const amountPaidRaw = bill.amount_paid;
+  const isPaidRaw = bill.is_paid;
+  const hasAmountPaid = amountPaidRaw !== '' && amountPaidRaw !== null && typeof amountPaidRaw !== 'undefined';
+  const hasIsPaid = isPaidRaw !== '' && isPaidRaw !== null && typeof isPaidRaw !== 'undefined';
+  const amountPaid = hasAmountPaid ? Number(amountPaidRaw) || 0 : null;
+  const isPaid = hasIsPaid ? normalizeBoolean_(isPaidRaw) : null;
+  const paidByTotal = totalAmount <= 0;
+  const paidByAmount = amountPaid !== null && amountPaid + 0.005 >= totalAmount;
+  let derivedIsPaid = isPaid;
+  if (derivedIsPaid === null) {
+    if (amountPaid !== null) {
+      derivedIsPaid = paidByTotal || paidByAmount;
+    } else if (paidByTotal) {
+      derivedIsPaid = true;
+    }
+  }
+  return { totalAmount, amountPaid, isPaid: derivedIsPaid };
+}
+
+function handleFetchBillsMinimal_(statusRaw) {
+  const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
+  const tenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
+  const tenants = readTable_(TENANTS_SHEET, TENANTS_HEADERS);
+  const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
+
+  const tenancyMap = tenancies.reduce((m, t) => {
+    m[t.tenancy_id] = t;
+    return m;
+  }, {});
+  const tenantMap = tenants.reduce((m, t) => {
+    m[t.tenant_id] = t;
+    return m;
+  }, {});
+  const unitMap = units.reduce((m, u) => {
+    m[u.unit_id] = u;
+    return m;
+  }, {});
+
+  const status = (statusRaw || '').toString().trim().toLowerCase();
+  const filteredBills = status === 'pending' || status === 'paid'
+    ? bills.filter((bill) => {
+      const state = deriveBillPaymentState_(bill);
+      return status === 'paid' ? state.isPaid === true : state.isPaid !== true;
+    })
+    : bills;
+
+  const billPayload = filteredBills.map((bill) => {
+    const tenancy = tenancyMap[bill.tenancy_id] || {};
+    const tenant = tenantMap[tenancy.tenant_id] || {};
+    const unit = unitMap[tenancy.unit_id] || {};
+    const paymentState = deriveBillPaymentState_(bill);
+    const totalAmount = paymentState.totalAmount;
+    const amountPaid = paymentState.amountPaid;
+    const isPaid = paymentState.isPaid;
+    const remainingAmount = amountPaid !== null
+      ? Math.max(0, totalAmount - amountPaid)
+      : (isPaid === true ? 0 : null);
+
+    return {
+      monthKey: bill.month_key,
+      monthLabel: formatMonthLabelForDisplay_(bill.month_key),
+      wing: unit.wing || '',
+      tenantKey: tenancy.grn_number || tenant.full_name || '',
+      tenantName: tenant.full_name || '',
+      totalAmount,
+      amountPaid,
+      remainingAmount,
+      isPaid,
+      payableDate: bill.payable_date || '',
+      billLineId: bill.bill_line_id,
+      tenancyId: bill.tenancy_id,
+    };
+  });
+
+  return { bills: billPayload };
+}
+
+function handleFetchBillDetails_(billLineIdRaw) {
+  const billLineId = (billLineIdRaw || '').toString().trim();
+  if (!billLineId) return { ok: false, error: 'Missing billLineId' };
+
+  const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
+  const bill = bills.find((b) => b.bill_line_id === billLineId);
+  if (!bill) return { ok: false, error: 'Bill not found' };
+
+  const tenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
+  const tenants = readTable_(TENANTS_SHEET, TENANTS_HEADERS);
+  const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
+  const readings = readTable_(TENANT_READINGS_SHEET, TENANT_READING_HEADERS);
+  const config = readTable_(WING_MONTHLY_SHEET, WING_MONTHLY_HEADERS);
+
+  const tenancy = tenancies.find((t) => t.tenancy_id === bill.tenancy_id) || {};
+  const tenant = tenants.find((t) => t.tenant_id === tenancy.tenant_id) || {};
+  const unit = units.find((u) => u.unit_id === tenancy.unit_id) || {};
+
+  const normalizedMonth = normalizeMonthKey_(bill.month_key);
+  const reading = readings.find((r) =>
+    r.tenancy_id === bill.tenancy_id && normalizeMonthKey_(r.month_key) === normalizedMonth
+  ) || {};
+  const cfg = config.find((c) =>
+    normalizeMonthKey_(c.month_key) === normalizedMonth &&
+    (c.wing || '').toString().trim().toLowerCase() === (unit.wing || '').toString().trim().toLowerCase()
+  ) || {};
+
+  const paymentState = deriveBillPaymentState_(bill);
+  const totalAmount = paymentState.totalAmount;
+  const amountPaid = paymentState.amountPaid;
+  const isPaid = paymentState.isPaid;
+  const remainingAmount = amountPaid !== null
+    ? Math.max(0, totalAmount - amountPaid)
+    : (isPaid === true ? 0 : null);
+
+  return {
+    ok: true,
+    bill: {
+      monthKey: bill.month_key,
+      monthLabel: formatMonthLabelForDisplay_(bill.month_key),
+      wing: unit.wing || '',
+      tenantKey: tenancy.grn_number || tenant.full_name || '',
+      tenantName: tenant.full_name || '',
+      rentAmount: Number(bill.rent_amount) || 0,
+      electricityAmount: Number(bill.electricity_amount) || 0,
+      motorShare: Number(bill.motor_share_amount) || 0,
+      sweepAmount: Number(bill.sweep_amount) || 0,
+      totalAmount,
+      amountPaid,
+      remainingAmount,
+      isPaid,
+      included: normalizeBoolean_(reading.included),
+      payableDate: bill.payable_date || '',
+      prevReading: reading.prev_reading || '',
+      newReading: reading.new_reading || '',
+      electricityRate: cfg.electricity_rate || '',
+      sweepingPerFlat: cfg.sweeping_per_flat || '',
+      motorPrev: cfg.motor_prev || '',
+      motorNew: cfg.motor_new || '',
+      billLineId: bill.bill_line_id,
+      tenancyId: bill.tenancy_id,
+    },
+  };
+}
+
+function handleFetchGeneratedBills_(statusRaw) {
   const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
   const tenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
   const tenants = readTable_(TENANTS_SHEET, TENANTS_HEADERS);
@@ -1289,13 +1437,28 @@ function handleFetchGeneratedBills_() {
     }))
     .filter((c) => c.monthKey && c.wing);
 
-  const billPayload = bills.map((bill) => {
+  const status = (statusRaw || '').toString().trim().toLowerCase();
+  const filteredBills = status === 'pending' || status === 'paid'
+    ? bills.filter((bill) => {
+      const state = deriveBillPaymentState_(bill);
+      return status === 'paid' ? state.isPaid === true : state.isPaid !== true;
+    })
+    : bills;
+
+  const billPayload = filteredBills.map((bill) => {
     const tenancy = tenancyMap[bill.tenancy_id] || {};
     const tenant = tenantMap[tenancy.tenant_id] || {};
     const unit = unitMap[tenancy.unit_id] || {};
     const reading = readingMap[`${bill.month_key}__${bill.tenancy_id}`] || {};
     const cfg = configMap[`${bill.month_key}__${unit.wing || ''}`] || {};
     const monthLabel = formatMonthLabelForDisplay_(bill.month_key);
+    const paymentState = deriveBillPaymentState_(bill);
+    const totalAmount = paymentState.totalAmount;
+    const amountPaid = paymentState.amountPaid;
+    const isPaid = paymentState.isPaid;
+    const remainingAmount = amountPaid !== null
+      ? Math.max(0, totalAmount - amountPaid)
+      : (isPaid === true ? 0 : null);
     return {
       monthKey: bill.month_key,
       monthLabel,
@@ -1306,7 +1469,10 @@ function handleFetchGeneratedBills_() {
       electricityAmount: Number(bill.electricity_amount) || 0,
       motorShare: Number(bill.motor_share_amount) || 0,
       sweepAmount: Number(bill.sweep_amount) || 0,
-      totalAmount: Number(bill.total_amount) || 0,
+      totalAmount,
+      amountPaid,
+      remainingAmount,
+      isPaid,
       included: normalizeBoolean_(reading.included),
       payableDate: bill.payable_date || '',
       prevReading: reading.prev_reading || '',
@@ -1351,6 +1517,42 @@ function getOrCreateFolder_(name) {
   const existing = DriveApp.getFoldersByName(name);
   if (existing.hasNext()) return existing.next();
   return DriveApp.createFolder(name);
+}
+
+function updateBillPaymentStatus_(billLineIds) {
+  const list = Array.isArray(billLineIds) ? billLineIds : [billLineIds];
+  const ids = list
+    .map((id) => (id || '').toString().trim())
+    .filter(Boolean);
+  if (!ids.length) return;
+
+  const idSet = ids.reduce((m, id) => {
+    m[id] = true;
+    return m;
+  }, {});
+  const totals = ids.reduce((m, id) => {
+    m[id] = 0;
+    return m;
+  }, {});
+
+  const allocations = readTable_(PAYMENT_ALLOCATIONS_SHEET, PAYMENT_ALLOCATION_HEADERS);
+  allocations.forEach((alloc) => {
+    const id = alloc.bill_line_id;
+    if (!idSet[id]) return;
+    totals[id] += Number(alloc.amount_applied) || 0;
+  });
+
+  const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
+  bills.forEach((bill) => {
+    const id = bill.bill_line_id;
+    if (!idSet[id]) return;
+    const total = Number(bill.total_amount) || 0;
+    const paid = Math.round((totals[id] || 0) * 100) / 100;
+    const isPaid = total <= 0 || paid + 0.005 >= total;
+    bill.amount_paid = paid;
+    bill.is_paid = isPaid;
+    upsertUnique_(BILL_LINES_SHEET, BILL_LINE_HEADERS, ['bill_line_id'], bill);
+  });
 }
 
 function handleSavePayment_(payload = {}) {
@@ -1398,16 +1600,24 @@ function handleSavePayment_(payload = {}) {
       },
     ];
 
+  const affectedBillLineIds = new Set();
+
   allocations.forEach((alloc) => {
+    const allocationBillLineId = alloc.bill_line_id || billLineId;
     const allocation = {
       allocation_id: alloc.allocation_id || Utilities.getUuid(),
       payment_id: paymentId,
-      bill_line_id: alloc.bill_line_id || billLineId,
+      bill_line_id: allocationBillLineId,
       amount_applied: Number(alloc.amount_applied || alloc.amount || record.amount) || 0,
       created_at: alloc.created_at || new Date(),
     };
     upsertUnique_(PAYMENT_ALLOCATIONS_SHEET, PAYMENT_ALLOCATION_HEADERS, ['allocation_id'], allocation);
+    if (allocationBillLineId) affectedBillLineIds.add(allocationBillLineId);
   });
+
+  if (affectedBillLineIds.size) {
+    updateBillPaymentStatus_(Array.from(affectedBillLineIds));
+  }
 
   return { ok: true, payment: mapPaymentRow_(record) };
 }
@@ -1500,9 +1710,19 @@ function doGet(e) {
       return jsonResponse({ ok: true, landlords });
     }
 
+    if (action === 'billsminimal') {
+      const { bills } = handleFetchBillsMinimal_(e.parameter && e.parameter.status);
+      return jsonResponse({ ok: true, bills });
+    }
+
     if (action === 'generatedbills') {
-      const { bills, coverage } = handleFetchGeneratedBills_();
+      const { bills, coverage } = handleFetchGeneratedBills_(e.parameter && e.parameter.status);
       return jsonResponse({ ok: true, bills, coverage });
+    }
+
+    if (action === 'billdetails') {
+      const result = handleFetchBillDetails_(e.parameter && e.parameter.billLineId);
+      return jsonResponse(result);
     }
 
     if (action === 'getbillingrecord') {
