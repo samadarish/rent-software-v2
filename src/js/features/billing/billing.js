@@ -397,6 +397,7 @@ function renderTenantTable() {
             <td class="px-2 py-2 text-xs">
                 <div class="font-semibold text-[12px] leading-tight">${tenant.name}</div>
             </td>
+            <td class="px-2 py-2 text-xs">${tenant.unitNumber || "-"}</td>
             <td class="px-2 py-2 text-xs font-semibold">${formatCurrency(tenant.rentAmount)}</td>
             <td class="px-2 py-2 text-xs"><input type="number" inputmode="numeric" step="1" min="0" pattern="[0-9]*" class="w-full border rounded px-2 py-1 text-xs tenant-prev input-no-spinner ${invalidReading ? "border-rose-500 bg-rose-50 text-rose-700" : "border-slate-200"}" value="${tenant.prevReading ?? ""}" /></td>
             <td class="px-2 py-2 text-xs"><input type="number" inputmode="numeric" step="1" min="0" pattern="[0-9]*" class="w-full border rounded px-2 py-1 text-xs tenant-new input-no-spinner ${invalidReading ? "border-rose-500 bg-rose-50 text-rose-700" : "border-slate-200"}" value="${tenant.newReading ?? ""}" /></td>
@@ -609,6 +610,14 @@ function mergeTenantData(activeTenants, savedEntries = [], previousEntries = [])
             name: tenant.tenantFullName || tenant.name || "Unnamed",
             tenancyId: tenant.tenancyId || "",
             unitId: tenant.unitId || "",
+            unitNumber:
+                tenant.unitNumber ||
+                tenant.unit_number ||
+                saved?.unitNumber ||
+                saved?.unit_number ||
+                previous?.unitNumber ||
+                previous?.unit_number ||
+                "",
             rentAmount: tenant.rentAmount || saved?.rentAmount || saved?.rent_amount || 0,
             mobile: tenant.tenantMobile || tenant.mobile || tenant.phone || "",
             prevReading:

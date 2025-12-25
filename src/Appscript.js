@@ -23,7 +23,6 @@ const WING_MONTHLY_SHEET = 'WingMonthlyConfig';
 const TENANT_READINGS_SHEET = 'TenantMonthlyReadings';
 const BILL_LINES_SHEET = 'BillLines';
 const PAYMENTS_SHEET = 'Payments';
-const PAYMENT_ALLOCATIONS_SHEET = 'PaymentAllocations';
 const ATTACHMENTS_SHEET = 'Attachments';
 const INDEX_SHEET = 'Index';
 const TENANCY_RENT_REVISIONS_SHEET = 'TenancyRentRevisions';
@@ -165,14 +164,6 @@ const PAYMENT_HEADERS = [
   'created_at',
 ];
 
-const PAYMENT_ALLOCATION_HEADERS = [
-  'allocation_id',
-  'payment_id',
-  'bill_line_id',
-  'amount_applied',
-  'created_at',
-];
-
 const ATTACHMENT_HEADERS = [
   'attachment_id',
   'file_name',
@@ -183,6 +174,7 @@ const ATTACHMENT_HEADERS = [
 
 
 const driveShareCache = {};
+const LOOKUP_CACHE_TTL_SECONDS = 300;
 
 /********* COMMON HELPERS *********/
 function parseIsoDate_(iso) {
@@ -315,6 +307,91 @@ function readTable_(sheetName, headers) {
       return record;
     })
     .filter((r) => Object.values(r).some((v) => v !== ''));
+}
+
+function readTableColumns_(sheetName, headers, columns) {
+  const sheet = getSheetWithHeaders_(sheetName, headers);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+  const headerIndex = buildHeaderIndex_(headers);
+  const requested = (Array.isArray(columns) ? columns : []).filter(Boolean);
+  const indices = requested.map((key) => headerIndex[key]).filter((idx) => idx !== undefined);
+  if (!indices.length) return [];
+  const maxIndex = Math.max.apply(null, indices);
+  const values = sheet.getRange(2, 1, lastRow - 1, maxIndex + 1).getValues();
+  return values
+    .map((row) => {
+      const record = {};
+      requested.forEach((key) => {
+        const idx = headerIndex[key];
+        record[key] = idx !== undefined ? row[idx] : '';
+      });
+      return record;
+    })
+    .filter((r) => Object.values(r).some((v) => v !== ''));
+}
+
+function getScriptCache_() {
+  return CacheService.getScriptCache();
+}
+
+function getCachedJson_(key) {
+  if (!key) return null;
+  try {
+    const cache = getScriptCache_();
+    const payload = cache.get(key);
+    if (!payload) return null;
+    return JSON.parse(payload);
+  } catch (err) {
+    return null;
+  }
+}
+
+function setCachedJson_(key, value, ttlSeconds) {
+  if (!key) return;
+  try {
+    const cache = getScriptCache_();
+    cache.put(key, JSON.stringify(value), ttlSeconds || LOOKUP_CACHE_TTL_SECONDS);
+  } catch (err) {
+    // Ignore cache write failures.
+  }
+}
+
+function getCachedLookup_(key, buildFn, ttlSeconds) {
+  const cached = getCachedJson_(key);
+  if (cached) return cached;
+  if (typeof buildFn !== 'function') return {};
+  const built = buildFn() || {};
+  setCachedJson_(key, built, ttlSeconds);
+  return built;
+}
+
+function buildLookupByKey_(rows, keyField) {
+  const map = {};
+  rows.forEach((row) => {
+    const key = row && row[keyField];
+    if (key !== undefined && key !== null && key !== '') {
+      map[key] = row;
+    }
+  });
+  return map;
+}
+
+function getMonthIndex_(monthKey) {
+  const normalized = normalizeMonthKey_(monthKey || '');
+  const match = normalized.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return null;
+  return Number(match[1]) * 12 + (Number(match[2]) - 1);
+}
+
+function isWithinRecentMonths_(monthKey, monthsBack) {
+  const limit = Number(monthsBack) || 0;
+  if (!limit || limit <= 0) return true;
+  const idx = getMonthIndex_(monthKey);
+  if (idx === null) return true;
+  const now = new Date();
+  const currentIdx = now.getFullYear() * 12 + now.getMonth();
+  return idx >= currentIdx - (limit - 1);
 }
 
 function writeTableRows_(sheetName, headers, rows) {
@@ -956,6 +1033,18 @@ function computeMotorShare_(config, includedCount) {
   return Math.round(((motorUnits * rate) / includedCount) * 100) / 100;
 }
 
+function roundToTwo_(value) {
+  const num = Number(value || 0);
+  if (isNaN(num)) return 0;
+  return Math.round(num * 100) / 100;
+}
+
+function roundToNearest_(value) {
+  const num = Number(value || 0);
+  if (isNaN(num)) return 0;
+  return roundToTwo_(Math.round(num));
+}
+
 function handleSaveBillingRecord_(payload) {
   const monthKey = normalizeMonthKey_(payload.monthKey || '');
   const wing = (payload.wing || '').toString().trim();
@@ -1084,12 +1173,11 @@ function handleSaveBillingRecord_(payload) {
     // Prioritize override_rent, then latest rent from revisions
     const rent = reading.override_rent ? Number(reading.override_rent) : (latestRent || 0);
     const units = Math.max(Number(reading.new_reading || 0) - Number(reading.prev_reading || 0), 0);
-    const electricityAmount = Math.round(units * rate * 100) / 100;
-    const sweepAmount = normalizeBoolean_(reading.included) ? sweep : 0;
-    const motorShare = normalizeBoolean_(reading.included) ? motorPerTenant : 0;
-    const total = normalizeBoolean_(reading.included)
-      ? Math.round((Number(rent) + electricityAmount + sweepAmount + motorShare) * 100) / 100
-      : 0;
+    const electricityAmount = roundToTwo_(units * rate);
+    const sweepAmount = normalizeBoolean_(reading.included) ? roundToTwo_(sweep) : 0;
+    const motorShare = normalizeBoolean_(reading.included) ? roundToTwo_(motorPerTenant) : 0;
+    const totalBeforeRound = Number(rent) + electricityAmount + sweepAmount + motorShare;
+    const total = normalizeBoolean_(reading.included) ? roundToNearest_(totalBeforeRound) : 0;
 
     billRows.push({
       bill_line_id: Utilities.getUuid(),
@@ -1271,32 +1359,49 @@ function deriveBillPaymentState_(bill) {
   return { totalAmount, amountPaid, isPaid: derivedIsPaid };
 }
 
-function handleFetchBillsMinimal_(statusRaw) {
-  const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
-  const tenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
-  const tenants = readTable_(TENANTS_SHEET, TENANTS_HEADERS);
-  const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
-
-  const tenancyMap = tenancies.reduce((m, t) => {
-    m[t.tenancy_id] = t;
-    return m;
-  }, {});
-  const tenantMap = tenants.reduce((m, t) => {
-    m[t.tenant_id] = t;
-    return m;
-  }, {});
-  const unitMap = units.reduce((m, u) => {
-    m[u.unit_id] = u;
-    return m;
-  }, {});
-
+function handleFetchBillsMinimal_(statusRaw, monthsBackRaw) {
   const status = (statusRaw || '').toString().trim().toLowerCase();
-  const filteredBills = status === 'pending' || status === 'paid'
+  const monthsBack = Number(monthsBackRaw) || 0;
+  const billColumns = [
+    'bill_line_id',
+    'month_key',
+    'tenancy_id',
+    'total_amount',
+    'amount_paid',
+    'is_paid',
+    'payable_date',
+  ];
+  const bills = readTableColumns_(BILL_LINES_SHEET, BILL_LINE_HEADERS, billColumns);
+  const filteredBills = (status === 'pending' || status === 'paid'
     ? bills.filter((bill) => {
       const state = deriveBillPaymentState_(bill);
       return status === 'paid' ? state.isPaid === true : state.isPaid !== true;
     })
-    : bills;
+    : bills).filter((bill) => isWithinRecentMonths_(bill.month_key, monthsBack));
+
+  if (!filteredBills.length) {
+    return { bills: [] };
+  }
+
+  const tenancyColumns = ['tenancy_id', 'tenant_id', 'unit_id', 'grn_number'];
+  const tenantColumns = ['tenant_id', 'full_name'];
+  const unitColumns = ['unit_id', 'wing', 'unit_number'];
+
+  const tenancyMap = getCachedLookup_(
+    `lookup:tenancies:${tenancyColumns.join(',')}`,
+    () => buildLookupByKey_(readTableColumns_(TENANCIES_SHEET, TENANCIES_HEADERS, tenancyColumns), 'tenancy_id'),
+    LOOKUP_CACHE_TTL_SECONDS
+  );
+  const tenantMap = getCachedLookup_(
+    `lookup:tenants:${tenantColumns.join(',')}`,
+    () => buildLookupByKey_(readTableColumns_(TENANTS_SHEET, TENANTS_HEADERS, tenantColumns), 'tenant_id'),
+    LOOKUP_CACHE_TTL_SECONDS
+  );
+  const unitMap = getCachedLookup_(
+    `lookup:units:${unitColumns.join(',')}`,
+    () => buildLookupByKey_(readTableColumns_(UNITS_SHEET, UNITS_HEADERS, unitColumns), 'unit_id'),
+    LOOKUP_CACHE_TTL_SECONDS
+  );
 
   const billPayload = filteredBills.map((bill) => {
     const tenancy = tenancyMap[bill.tenancy_id] || {};
@@ -1314,6 +1419,7 @@ function handleFetchBillsMinimal_(statusRaw) {
       monthKey: bill.month_key,
       monthLabel: formatMonthLabelForDisplay_(bill.month_key),
       wing: unit.wing || '',
+      unitNumber: unit.unit_number || '',
       tenantKey: tenancy.grn_number || tenant.full_name || '',
       tenantName: tenant.full_name || '',
       totalAmount,
@@ -1456,6 +1562,7 @@ function handleFetchGeneratedBills_(statusRaw) {
       monthKey: bill.month_key,
       monthLabel,
       wing: unit.wing || '',
+      unitNumber: unit.unit_number || '',
       tenantKey: tenancy.grn_number || tenant.full_name || '',
       tenantName: tenant.full_name || '',
       rentAmount: Number(bill.rent_amount) || 0,
@@ -1528,24 +1635,33 @@ function updateBillPaymentStatus_(billLineIds) {
     return m;
   }, {});
 
-  const allocations = readTable_(PAYMENT_ALLOCATIONS_SHEET, PAYMENT_ALLOCATION_HEADERS);
-  allocations.forEach((alloc) => {
-    const id = alloc.bill_line_id;
+  const payments = readTableColumns_(PAYMENTS_SHEET, PAYMENT_HEADERS, ['bill_line_id', 'amount']);
+  payments.forEach((payment) => {
+    const id = payment.bill_line_id;
     if (!idSet[id]) return;
-    totals[id] += Number(alloc.amount_applied) || 0;
+    totals[id] += Number(payment.amount) || 0;
   });
 
-  const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
-  bills.forEach((bill) => {
-    const id = bill.bill_line_id;
-    if (!idSet[id]) return;
-    const total = Number(bill.total_amount) || 0;
+  const sheet = getSheetWithHeaders_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return;
+  const headerIndex = buildHeaderIndex_(BILL_LINE_HEADERS);
+  const idCol = headerIndex.bill_line_id + 1;
+  const totalCol = headerIndex.total_amount + 1;
+  const amountPaidCol = headerIndex.amount_paid + 1;
+  const isPaidCol = headerIndex.is_paid + 1;
+  const rowCount = lastRow - 1;
+  const idValues = sheet.getRange(2, idCol, rowCount, 1).getValues();
+  const totalValues = sheet.getRange(2, totalCol, rowCount, 1).getValues();
+
+  for (let i = 0; i < rowCount; i += 1) {
+    const id = idValues[i][0];
+    if (!idSet[id]) continue;
+    const total = Number(totalValues[i][0]) || 0;
     const paid = Math.round((totals[id] || 0) * 100) / 100;
     const isPaid = total <= 0 || paid + 0.005 >= total;
-    bill.amount_paid = paid;
-    bill.is_paid = isPaid;
-    upsertUnique_(BILL_LINES_SHEET, BILL_LINE_HEADERS, ['bill_line_id'], bill);
-  });
+    sheet.getRange(i + 2, amountPaidCol, 1, 2).setValues([[paid, isPaid]]);
+  }
 }
 
 function handleSavePayment_(payload = {}) {
@@ -1581,35 +1697,8 @@ function handleSavePayment_(payload = {}) {
   };
 
   upsertUnique_(PAYMENTS_SHEET, PAYMENT_HEADERS, ['payment_id'], record);
-  const allocations = Array.isArray(payload.allocations) && payload.allocations.length
-    ? payload.allocations
-    : [
-      {
-        allocation_id: Utilities.getUuid(),
-        payment_id: paymentId,
-        bill_line_id: billLineId,
-        amount_applied: Number(record.amount) || 0,
-        created_at: new Date(),
-      },
-    ];
-
-  const affectedBillLineIds = new Set();
-
-  allocations.forEach((alloc) => {
-    const allocationBillLineId = alloc.bill_line_id || billLineId;
-    const allocation = {
-      allocation_id: alloc.allocation_id || Utilities.getUuid(),
-      payment_id: paymentId,
-      bill_line_id: allocationBillLineId,
-      amount_applied: Number(alloc.amount_applied || alloc.amount || record.amount) || 0,
-      created_at: alloc.created_at || new Date(),
-    };
-    upsertUnique_(PAYMENT_ALLOCATIONS_SHEET, PAYMENT_ALLOCATION_HEADERS, ['allocation_id'], allocation);
-    if (allocationBillLineId) affectedBillLineIds.add(allocationBillLineId);
-  });
-
-  if (affectedBillLineIds.size) {
-    updateBillPaymentStatus_(Array.from(affectedBillLineIds));
+  if (billLineId) {
+    updateBillPaymentStatus_([billLineId]);
   }
 
   return { ok: true, payment: mapPaymentRow_(record) };
@@ -1704,7 +1793,7 @@ function doGet(e) {
     }
 
     if (action === 'billsminimal') {
-      const { bills } = handleFetchBillsMinimal_(e.parameter && e.parameter.status);
+      const { bills } = handleFetchBillsMinimal_(e.parameter && e.parameter.status, e.parameter && e.parameter.monthsBack);
       return jsonResponse({ ok: true, bills });
     }
 

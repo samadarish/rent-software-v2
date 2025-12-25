@@ -269,17 +269,22 @@ export async function deleteLandlordConfig(landlordId) {
  * Loads the list of previously generated bills for quick access in the UI.
  * @returns {Promise<{bills: Array}>} Generated bill summaries or empty list on error.
  */
-export async function fetchBillsMinimal(status = "pending") {
+export async function fetchBillsMinimal(status = "pending", options = {}) {
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view generated bills", "warning"),
     });
     if (!url) return { bills: [] };
 
     const normalized = (status || "pending").toString().trim().toLowerCase();
-    const params = normalized ? { status: normalized } : undefined;
+    const monthsBack =
+        options && typeof options === "object" ? Number(options.monthsBack) || 0 : 0;
+    const params = {};
+    if (normalized) params.status = normalized;
+    if (monthsBack > 0) params.monthsBack = monthsBack;
+    const finalParams = Object.keys(params).length ? params : undefined;
 
     try {
-        return await callAppScript({ url, action: "billsminimal", params });
+        return await callAppScript({ url, action: "billsminimal", params: finalParams });
     } catch (e) {
         console.error("fetchBillsMinimal error", e);
         showToast("Could not fetch bills", "error");

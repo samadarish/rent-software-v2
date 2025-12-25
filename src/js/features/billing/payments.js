@@ -12,7 +12,7 @@ import {
     fetchPayments,
     savePaymentRecord,
 } from "../../api/sheets.js";
-import { ensureTenantDirectoryLoaded } from "../tenants/tenants.js";
+import { ensureTenantDirectoryLoaded, getActiveTenantsForWing } from "../tenants/tenants.js";
 import { formatCurrency as formatCurrencyBase, normalizeMonthKey as normalizeMonthKeyBase } from "../../utils/formatters.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
@@ -55,6 +55,8 @@ const paymentsState = {
     editingId: "",
     viewOnly: false,
 };
+
+const BILL_MONTHS_BACK = 24;
 
 const attachmentPreviewCache = new Map();
 let paymentHistoryLoading = false;
@@ -264,6 +266,56 @@ function normalizeKey(value) {
 
 function normalizeMonthKey(value) {
     return normalizeMonthKeyBase(value, { lowercase: true });
+}
+
+function resolveUnitNumberForBill(bill) {
+    const direct = bill?.unitNumber || bill?.unit_number;
+    if (direct) return direct;
+
+    const wing = bill?.wing || "";
+    if (!wing) return "";
+
+    const candidates = getActiveTenantsForWing(wing);
+    if (!candidates.length) return "";
+
+    const tenantKey = normalizeKey(bill?.tenantKey || bill?.tenantName);
+    let match = null;
+    if (tenantKey) {
+        match = candidates.find((t) =>
+            normalizeKey(
+                t.grnNumber || t.grn_number || t.grn || t.tenantKey || t.tenantName || t.tenantFullName || t.name
+            ) === tenantKey
+        );
+    }
+
+    if (!match && bill?.tenantName) {
+        match = candidates.find((t) => normalizeKey(t.tenantFullName || t.name) === normalizeKey(bill.tenantName));
+    }
+
+    return (
+        match?.unitNumber ||
+        match?.unit_number ||
+        match?.unitLabel ||
+        match?.templateData?.unit_number ||
+        ""
+    );
+}
+
+async function enrichBillsWithUnits(bills = []) {
+    if (!Array.isArray(bills) || !bills.length) return bills;
+    const needsUnit = bills.some((bill) => !(bill.unitNumber || bill.unit_number));
+    if (!needsUnit) return bills;
+
+    try {
+        await ensureTenantDirectoryLoaded();
+    } catch (err) {
+        return bills;
+    }
+
+    return bills.map((bill) => {
+        const unitNumber = bill.unitNumber || bill.unit_number || resolveUnitNumberForBill(bill);
+        return unitNumber ? { ...bill, unitNumber } : bill;
+    });
 }
 
 function togglePaymentModal(show) {
@@ -939,6 +991,7 @@ function renderGeneratedBills() {
 
         tr.innerHTML = `
             <td class="px-3 py-2 text-[11px] font-semibold">${bill.tenantName || "-"}</td>
+            <td class="px-3 py-2 text-[11px]">${bill.unitNumber || bill.unit_number || "-"}</td>
             <td class="px-3 py-2 text-[11px]">${bill.wing || "-"}</td>
             <td class="px-3 py-2 text-[11px]">${monthLabel}${dueBadge}</td>
             <td class="px-3 py-2 text-[11px] text-right">${totalLabel}</td>
@@ -1020,9 +1073,10 @@ async function loadGeneratedBills(status = paymentsState.activeBillTab || "pendi
     if (loader) loader.classList.remove("hidden");
 
     try {
-        const payload = await fetchBillsMinimal(bucket);
+        const payload = await fetchBillsMinimal(bucket, { monthsBack: BILL_MONTHS_BACK });
         const bills = payload && payload.bills;
-        setBillsForStatus(bucket, Array.isArray(bills) ? bills : []);
+        const normalizedBills = await enrichBillsWithUnits(Array.isArray(bills) ? bills : []);
+        setBillsForStatus(bucket, normalizedBills);
         setBillsLoaded(bucket, true);
         renderGeneratedBills();
     } catch (err) {
@@ -1131,10 +1185,10 @@ async function handleSavePayment() {
             (Number(context.remaining) || Number(context.billTotal) || 0) - (Number(savedPayment.amount) || 0)
         ) || 0;
 
-    const targetTab = remainingAfter <= 0 ? "paid" : paymentsState.activeBillTab || "pending";
-    setBillsTab(targetTab, { skipLoad: true });
+    const activeTab = paymentsState.activeBillTab || "pending";
+    setBillsTab(activeTab, { skipLoad: true });
     closePaymentModal();
-    await loadGeneratedBills(targetTab, true);
+    await loadGeneratedBills(activeTab, true);
 }
 
 function isPaymentModalVisible() {
