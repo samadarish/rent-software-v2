@@ -1358,14 +1358,14 @@ async function saveTenantModal() {
     }
 }
 
-export function closeTenantModal() {
+function closeTenantModal() {
     const modal = document.getElementById("tenantDetailModal");
     if (modal) hideModal(modal);
     setTenantModalEditable(false);
     activeRentRevisions = [];
 }
 
-export function openTenantModal(tenant) {
+function openTenantModal(tenant) {
     if (!tenant) {
         showToast("Tenant not found", "error");
         return;

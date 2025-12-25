@@ -134,7 +134,7 @@ function wireDocxExportModal() {
  * @param {string} xml - The DOCX XML content
  * @returns {string} Modified XML with bold formatting applied
  */
-export function applyMarkdownBoldToDocxXml(xml) {
+function applyMarkdownBoldToDocxXml(xml) {
     const regex =
         /<w:r\b[^>]*>(\s*<w:rPr>[\s\S]*?<\/w:rPr>)?\s*<w:t([^>]*)>([\s\S]*?)<\/w:t>\s*<\/w:r>/g;
 

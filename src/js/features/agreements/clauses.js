@@ -22,7 +22,7 @@ import { stripHtml, applyBoldToSelection } from "../../utils/htmlUtils.js";
  * Generates a unique ID for a new clause
  * @returns {string} Unique clause ID
  */
-export function generateClauseId() {
+function generateClauseId() {
     return `clause-${Date.now()}-${incrementClauseIdCounter()}`;
 }
 

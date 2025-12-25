@@ -287,10 +287,6 @@ export async function fetchBillsMinimal(status = "pending") {
     }
 }
 
-export async function fetchPendingBillsMinimal() {
-    return fetchBillsMinimal("pending");
-}
-
 export async function fetchGeneratedBills(options = {}) {
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view generated bills", "warning"),

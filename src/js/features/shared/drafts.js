@@ -59,14 +59,14 @@ function refreshDraftPickers(mode, selectedName = "") {
     });
 }
 
-export function markDraftDirty(mode) {
+function markDraftDirty(mode) {
     if (!GUARDED_FLOWS.includes(mode)) return;
     if (suppressDirtyEvents) return;
     draftDirtyState[mode] = true;
     updateSaveDraftButtons(mode);
 }
 
-export function setDraftClean(mode) {
+function setDraftClean(mode) {
     if (!GUARDED_FLOWS.includes(mode)) return;
     draftDirtyState[mode] = false;
     updateSaveDraftButtons(mode);
@@ -119,7 +119,7 @@ function getModeLabel(mode) {
     return "Agreement";
 }
 
-export function saveDraftForCurrentFlow(name) {
+function saveDraftForCurrentFlow(name) {
     const draftName = (name || getDraftNameSuggestion()).trim();
     if (!draftName) {
         showToast("Draft name is required", "error");
@@ -317,7 +317,7 @@ export function syncDraftUiForFlow(mode) {
     updateSaveDraftButtons(mode);
 }
 
-export function openDraftNameModal(value = "") {
+function openDraftNameModal(value = "") {
     const modal = document.getElementById("draftNameModal");
     const input = document.getElementById("draftNameInput");
     if (!modal || !input) return;

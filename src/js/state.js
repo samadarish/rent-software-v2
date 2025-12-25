@@ -55,7 +55,7 @@ export function setLastMovedClause(id, direction) {
  * Counter for generating unique clause IDs
  * @type {number}
  */
-export let clauseIdCounter = 0;
+let clauseIdCounter = 0;
 
 /**
  * Increments and returns a new clause ID counter value

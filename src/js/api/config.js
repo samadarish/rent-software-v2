@@ -93,7 +93,7 @@ export function ensureAppScriptConfigured() {
  * Reads landlord defaults from local storage and returns an object shape.
  * @returns {{ name?: string, aadhaar?: string, address?: string }} persisted defaults
  */
-export function getLandlordDefaults() {
+function getLandlordDefaults() {
     try {
         const raw = localStorage.getItem(STORAGE_KEYS.LANDLORD_DEFAULTS);
         return raw ? JSON.parse(raw) : {};
