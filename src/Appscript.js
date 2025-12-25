@@ -74,6 +74,7 @@ const TENANCIES_HEADERS = [
   'rent_revision_unit',
   'rent_revision_number',
   'created_at',
+  'rent_increase_amount',
 ];
 
 const LANDLORD_HEADERS = [
@@ -240,8 +241,31 @@ function getMasterSpreadsheet_() {
 function ensureHeaderRow_(sheet, headers) {
   if (sheet.getLastRow() === 0) {
     sheet.insertRowBefore(1);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return;
   }
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+  const lastCol = Math.max(sheet.getLastColumn(), headers.length);
+  const existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0] || [];
+  const existingSet = new Set(
+    existing.map((val) => (val || '').toString().trim()).filter(Boolean)
+  );
+
+  let changed = false;
+  const updated = existing.slice();
+  headers.forEach((header) => {
+    const label = (header || '').toString().trim();
+    if (!label) return;
+    if (!existingSet.has(label)) {
+      updated.push(label);
+      existingSet.add(label);
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    sheet.getRange(1, 1, 1, updated.length).setValues([updated]);
+  }
 }
 
 function getSheetWithHeaders_(name, headers) {
@@ -475,6 +499,7 @@ function mapTenantPayload_(payload) {
     late_grace_days: updates.lateGracePeriodDays || template.late_days || '',
     rent_revision_unit: updates.rentRevisionUnit || template['rent_rev year_mon'] || '',
     rent_revision_number: updates.rentRevisionNumber || template.rent_rev_number || '',
+    rent_increase_amount: updates.rentIncreaseAmount || template.rent_inc || '',
     created_at: template.created_at || now,
   };
 
@@ -709,9 +734,6 @@ function buildTenantDirectory_() {
     return m;
   }, {});
 
-  const today = new Date();
-  const currentMonthKey = `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, '0')}`;
-
   const landlordById = landlords.reduce((m, l) => {
     m[l.landlord_id] = l;
     return m;
@@ -756,10 +778,10 @@ function buildTenantDirectory_() {
         endDate: t.end_date || '',
         status: t.status || '',
         grnNumber: t.grn_number || tenant.grn_number || '',
-        currentRent: getEffectiveRentForMonth_(t.tenancy_id, currentMonthKey, revisionCache) ?? 0,
+        currentRent: getLatestRentForTenancy_(t.tenancy_id, revisionCache) ?? 0,
       }));
-    const currentRent = getEffectiveRentForMonth_(tenancy.tenancy_id, currentMonthKey, revisionCache);
-    const resolvedRent = currentRent ?? 0;
+    const latestRent = getLatestRentForTenancy_(tenancy.tenancy_id, revisionCache);
+    const resolvedRent = latestRent ?? 0;
     return {
       tenantId: tenant.tenant_id,
       tenancyId: tenancy.tenancy_id,
@@ -784,7 +806,7 @@ function buildTenantDirectory_() {
       currentRent: resolvedRent,
       payableDate: tenancy.rent_payable_day || '',
       securityDeposit: tenancy.security_deposit || '',
-      rentIncrease: tenancy.rent_revision_number || '',
+      rentIncrease: tenancy.rent_increase_amount || '',
       rentRevisionNumber: tenancy.rent_revision_number || '',
       rentRevisionUnit: tenancy.rent_revision_unit || '',
       tenantNoticeMonths: tenancy.tenant_notice_months || '',
@@ -820,6 +842,7 @@ function buildTenantDirectory_() {
         rent_amount: resolvedRent,
         payable_date_raw: tenancy.rent_payable_day || '',
         secu_depo: tenancy.security_deposit || '',
+        rent_inc: tenancy.rent_increase_amount || '',
         rent_rev_number: tenancy.rent_revision_number || '',
         'rent_rev year_mon': tenancy.rent_revision_unit || '',
         notice_num_t: tenancy.tenant_notice_months || '',
@@ -901,20 +924,28 @@ function deleteTenancyRentRevision_(revisionId) {
   return true;
 }
 
-function getEffectiveRentForMonth_(tenancyId, monthKey, revisionCache) {
-  const normalizedMonth = normalizeMonthKey_(monthKey || '');
-  if (!tenancyId || !normalizedMonth) return null;
+function getLatestRentForTenancy_(tenancyId, revisionCache) {
+  if (!tenancyId) return null;
   const revisions = revisionCache ? revisionCache[tenancyId] || [] : listTenancyRentRevisions_(tenancyId);
-  for (let i = 0; i < revisions.length; i++) {
-    const rev = revisions[i];
+  if (!revisions.length) return null;
+
+  let latestMonth = '';
+  let latestCreated = 0;
+  let latestAmount = null;
+
+  revisions.forEach((rev) => {
     const effective = normalizeMonthKey_(rev.effective_month);
-    if (!effective) continue;
-    if (effective <= normalizedMonth) {
+    const createdAt = rev.created_at ? new Date(rev.created_at).getTime() : 0;
+    const monthCompare = (effective || '').localeCompare(latestMonth || '');
+    if (latestAmount === null || monthCompare > 0 || (monthCompare === 0 && createdAt > latestCreated)) {
+      latestMonth = effective || '';
+      latestCreated = createdAt;
       const amount = Number(rev.rent_amount);
-      return isNaN(amount) ? null : amount;
+      latestAmount = isNaN(amount) ? 0 : amount;
     }
-  }
-  return null;
+  });
+
+  return latestAmount;
 }
 
 /********* BILLING *********/
@@ -1048,53 +1079,10 @@ function handleSaveBillingRecord_(payload) {
     const tenancy = tenancyById[reading.tenancy_id];
     if (!tenancy) return;
 
-    // Get effective rent from revisions
-    let effectiveRent = getEffectiveRentForMonth_(tenancy.tenancy_id, monthKey, rentRevisionCache);
+    const latestRent = getLatestRentForTenancy_(tenancy.tenancy_id, rentRevisionCache);
 
-    // If no rent revision exists for this tenancy, create a default one
-    // This handles legacy tenancies that don't have rent revisions yet
-    if (effectiveRent === null || effectiveRent === undefined) {
-      // Try to get a default rent from override_rent if provided
-      const defaultRent = Number(reading.override_rent) || 0;
-
-      if (defaultRent > 0) {
-        // Create a rent revision for this tenancy starting from its commencement date
-        const revisionMonth = normalizeMonthKey_(tenancy.commencement_date || tenancy.agreement_date) ||
-          normalizeMonthKey_(new Date());
-        try {
-          upsertTenancyRentRevision_({
-            tenancyId: tenancy.tenancy_id,
-            effectiveMonth: revisionMonth,
-            rentAmount: defaultRent,
-            note: 'Auto-created during billing'
-          });
-          effectiveRent = defaultRent;
-
-          // Update the cache so subsequent iterations can use it
-          if (!rentRevisionCache[tenancy.tenancy_id]) {
-            rentRevisionCache[tenancy.tenancy_id] = [];
-          }
-          rentRevisionCache[tenancy.tenancy_id].push({
-            tenancy_id: tenancy.tenancy_id,
-            effective_month: revisionMonth,
-            rent_amount: defaultRent,
-            created_at: new Date()
-          });
-          rentRevisionCache[tenancy.tenancy_id].sort((a, b) => {
-            const monthCompare = (b.effective_month || '').localeCompare(a.effective_month || '');
-            if (monthCompare !== 0) return monthCompare;
-            const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-            const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
-            return bTime - aTime;
-          });
-        } catch (e) {
-          console.error('Failed to create default rent revision', e);
-        }
-      }
-    }
-
-    // Prioritize override_rent, then effective rent from revisions
-    const rent = reading.override_rent ? Number(reading.override_rent) : (effectiveRent || 0);
+    // Prioritize override_rent, then latest rent from revisions
+    const rent = reading.override_rent ? Number(reading.override_rent) : (latestRent || 0);
     const units = Math.max(Number(reading.new_reading || 0) - Number(reading.prev_reading || 0), 0);
     const electricityAmount = Math.round(units * rate * 100) / 100;
     const sweepAmount = normalizeBoolean_(reading.included) ? sweep : 0;
@@ -1202,7 +1190,7 @@ function handleGetBillingRecord_(monthKeyRaw, wingRaw) {
     const tenancy = tenancyMap[reading.tenancy_id] || {};
     const tenant = tenantMap[tenancy.tenant_id] || {};
     const unit = unitMap[tenancy.unit_id] || {};
-    const effectiveRent = getEffectiveRentForMonth_(reading.tenancy_id, monthKey, rentRevisionCache);
+    const latestRent = getLatestRentForTenancy_(reading.tenancy_id, rentRevisionCache);
     return {
       tenancyId: reading.tenancy_id,
       tenantKey: tenancy.grn_number || tenant.full_name || '',
@@ -1213,7 +1201,7 @@ function handleGetBillingRecord_(monthKeyRaw, wingRaw) {
       newReading: reading.new_reading || '',
       included: normalizeBoolean_(reading.included),
       override_rent: reading.override_rent || '',
-      rentAmount: reading.override_rent || effectiveRent || '',
+      rentAmount: reading.override_rent || latestRent || '',
       payableDate: tenancy.rent_payable_day || '',
       direction: unit.direction || '',
       floor: unit.floor || '',

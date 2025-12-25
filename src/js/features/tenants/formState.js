@@ -46,6 +46,8 @@ function refreshAmountWords() {
     if (rent) rent.dispatchEvent(new Event("input", { bubbles: true }));
     const deposit = document.getElementById("secu_depo");
     if (deposit) deposit.dispatchEvent(new Event("input", { bubbles: true }));
+    const increase = document.getElementById("rent_inc");
+    if (increase) increase.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 export function collectDraftFormValues() {

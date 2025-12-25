@@ -388,6 +388,27 @@
                 <input type="text" id="secu_amount_words" class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50"
                   readonly />
               </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Rent Increase (Rs)</label>
+                <input type="number" id="rent_inc" class="w-full border rounded px-2 py-1.5 text-xs" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Increase Amount (in words)</label>
+                <input type="text" id="increase_amount_word" class="w-full border rounded px-2 py-1.5 text-xs bg-slate-50"
+                  readonly />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Increase Every</label>
+                <select id="rent_rev_number" class="w-full border rounded px-2 py-1.5 text-xs bg-white"></select>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold block mb-1">Unit</label>
+                <select id="rent_rev_unit" class="w-full border rounded px-2 py-1.5 text-xs bg-white">
+                  <option value="">Select unit</option>
+                  <option value="YEAR">year(s)</option>
+                  <option value="MONTH">month(s)</option>
+                </select>
+              </div>
               <div class="md:col-span-3 bg-slate-50 border border-slate-200 rounded px-3 py-2">
                 <p class="text-[11px] font-semibold text-slate-800">Rent revisions</p>
                 <p class="text-[10px] text-slate-600">Track rent changes per tenancy using the Rent History ledger after saving

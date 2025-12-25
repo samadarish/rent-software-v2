@@ -8,7 +8,7 @@
  */
 
 import { floorOptions } from "../../constants.js";
-import { buildUnitLabel, formatDateForDoc, toOrdinal } from "../../utils/formatters.js";
+import { buildUnitLabel, formatDateForDoc, numberToIndianWords, toOrdinal } from "../../utils/formatters.js";
 import { htmlToMarkedText } from "../../utils/htmlUtils.js";
 import { getSelectedClauses } from "../agreements/clauses.js";
 import { getFamilyMembersFromTable } from "./family.js";
@@ -200,6 +200,17 @@ export function initFormOptions() {
         }
     }
 
+    const rentRevisionNumber = document.getElementById("rent_rev_number");
+    if (rentRevisionNumber) {
+        rentRevisionNumber.innerHTML = "";
+        for (let i = 0; i <= 31; i++) {
+            const opt = document.createElement("option");
+            opt.value = String(i);
+            opt.textContent = String(i);
+            rentRevisionNumber.appendChild(opt);
+        }
+    }
+
     // Notice period dropdowns (1-12 months)
     const noticeTenant = document.getElementById("notice_num_t");
     const noticeLandlord = document.getElementById("notice_num_l");
@@ -281,7 +292,19 @@ export function collectFormDataForTemplate() {
         .join("\n");
 
     // Calculate rent increase amount in words
-    const increaseAmountWord = "";
+    const rentIncreaseRaw = document.getElementById("rent_inc").value.trim();
+    const rentIncreaseVal = parseInt(rentIncreaseRaw, 10);
+    const increaseAmountWord =
+        !isNaN(rentIncreaseVal) && rentIncreaseVal > 0
+            ? `${numberToIndianWords(rentIncreaseVal)} only`
+            : document.getElementById("increase_amount_word").value.trim();
+    const rentRevisionUnitRaw = document.getElementById("rent_rev_unit").value.trim();
+    const rentRevisionUnitForDoc =
+        rentRevisionUnitRaw === "YEAR"
+            ? "year(s)"
+            : rentRevisionUnitRaw === "MONTH"
+                ? "month(s)"
+                : rentRevisionUnitRaw;
 
     const landlordName = selectedLandlord?.name ?? document.getElementById("Landlord_name").value;
     const landlordAddress = selectedLandlord?.address ?? document.getElementById("landlord_address").value;
@@ -331,9 +354,9 @@ export function collectFormDataForTemplate() {
         secu_amount_words: document
             .getElementById("secu_amount_words")
             .value.trim(),
-        rent_inc: "",
-        rent_rev_number: "",
-        "rent_rev year_mon": "",
+        rent_inc: document.getElementById("rent_inc").value.trim(),
+        rent_rev_number: document.getElementById("rent_rev_number").value.trim(),
+        "rent_rev year_mon": rentRevisionUnitForDoc,
 
         pet_text_area: document.getElementById("pet_text_area").value.trim(),
         late_rent: document.getElementById("late_rent").value.trim(),
@@ -364,6 +387,7 @@ export function collectFormDataForTemplate() {
 export function collectFullPayloadForDb() {
     const templateData = collectFormDataForTemplate();
     const sanitizedTemplate = { ...templateData };
+    sanitizedTemplate["rent_rev year_mon"] = document.getElementById("rent_rev_unit").value.trim();
     delete sanitizedTemplate.rent_amount_words;
     delete sanitizedTemplate.secu_amount_words;
     const selectedUnit = getSelectedUnitForForm();
