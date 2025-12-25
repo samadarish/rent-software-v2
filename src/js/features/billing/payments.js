@@ -496,60 +496,117 @@ function renderPaymentHistory(context = {}) {
     const sorted = [...matches].sort((a, b) => {
         const aTime = new Date(a.createdAt || a.date || 0).getTime();
         const bTime = new Date(b.createdAt || b.date || 0).getTime();
-        return bTime - aTime;
+        return aTime - bTime;
     });
 
-    sorted.forEach((p) => {
+    const downloadIcon = `
+        <svg viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4" aria-hidden="true">
+            <path d="M10 2a1 1 0 0 1 1 1v7.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.42L9 10.59V3a1 1 0 0 1 1-1z"/>
+            <path d="M4 14a1 1 0 0 1 1 1v1h10v-1a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1z"/>
+        </svg>
+    `;
+    const copyIcon = `
+        <svg viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4" aria-hidden="true">
+            <path d="M6 2a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h1a1 1 0 1 0 0-2H6V4h7v1a1 1 0 1 0 2 0V4a2 2 0 0 0-2-2H6z"/>
+            <path d="M9 7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h5a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H9zm0 2h5v7H9V9z"/>
+        </svg>
+    `;
+
+    const header = document.createElement("div");
+    header.className = "grid grid-cols-[32px,1fr,1fr,1fr,auto] gap-3 px-3 text-[10px] uppercase text-slate-500";
+    header.innerHTML = `
+        <div>No.</div>
+        <div>Amount</div>
+        <div>Mode</div>
+        <div>Date</div>
+        <div class="text-right">Image</div>
+    `;
+    list.appendChild(header);
+
+    sorted.forEach((p, idx) => {
         const card = document.createElement("div");
-        card.className = "border border-slate-200 rounded-lg p-3 bg-white shadow-sm";
+        card.className = "border border-slate-200 rounded-lg bg-white shadow-sm overflow-hidden";
 
         const amountLabel = formatCurrency(p.amount);
-        const dateLabel = p.createdAt || p.date || "";
-        const modeLabel = p.mode || "Mode";
+        const dateLabel = p.createdAt || p.date || "-";
+        const modeLabel = p.mode || "-";
         const notesLabel = p.notes || "";
         const rawUrl = p.attachmentUrl || "";
         const thumbUrl = rawUrl ? normalizeAttachmentUrl(rawUrl) : "";
+        const hasAttachment = !!thumbUrl;
+        const noteText = notesLabel || "No notes";
 
         card.innerHTML = `
-            <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0 space-y-1">
-                    <div class="flex flex-wrap items-center gap-1 text-[11px] font-semibold text-slate-800">
-                        <span class="text-slate-900">${amountLabel}</span>
-                        ${modeLabel ? `<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${modeLabel}</span>` : ""}
-                        ${dateLabel ? `<span class="text-[10px] text-slate-500">${dateLabel}</span>` : ""}
-                    </div>
-                    ${notesLabel ? `<p class="text-[10px] text-slate-600 max-w-[260px]">${notesLabel}</p>` : ""}
+            <div class="grid grid-cols-[32px,1fr,1fr,1fr,auto] gap-3 items-center px-3 py-2">
+                <div class="text-[10px] font-semibold text-slate-500">#${idx + 1}</div>
+                <div class="text-[12px] font-semibold text-slate-900">${amountLabel}</div>
+                <div class="text-[11px] text-slate-700">
+                    ${modeLabel !== "-" ? `<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${modeLabel}</span>` : "-"}
                 </div>
-                ${thumbUrl ? `<div class="shrink-0"><img class="receipt-thumb hidden w-14 h-14 rounded-lg border object-cover bg-slate-100 cursor-pointer" alt="Receipt preview" /></div>` : ""}
+                <div class="text-[10px] text-slate-500 whitespace-nowrap">${dateLabel}</div>
+                <div class="flex items-center justify-end gap-2">
+                    <div class="receipt-shell w-14 h-14 rounded-lg border bg-slate-50 flex items-center justify-center overflow-hidden">
+                        <img class="receipt-thumb ${hasAttachment ? "" : "hidden"} w-full h-full object-cover" alt="Receipt preview" />
+                        <span class="receipt-placeholder ${hasAttachment ? "hidden" : ""} text-[9px] text-slate-400">No image</span>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <button type="button" class="receipt-action receipt-download ${hasAttachment ? "text-slate-700 hover:text-slate-900" : "text-slate-400 cursor-not-allowed"}" title="Download receipt">
+                            ${downloadIcon}
+                        </button>
+                        <button type="button" class="receipt-action receipt-copy ${hasAttachment ? "text-slate-700 hover:text-slate-900" : "text-slate-400 cursor-not-allowed"}" title="Copy receipt">
+                            ${copyIcon}
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="border-t bg-slate-50 px-3 py-2 text-[10px] text-slate-600">
+                <span class="uppercase text-[9px] font-semibold text-slate-500">Note</span>
+                <span class="ml-1">${noteText}</span>
             </div>
         `;
 
-        const thumbContainer = card.querySelector('.shrink-0');
-        const img = card.querySelector('.receipt-thumb');
+        const thumbShell = card.querySelector(".receipt-shell");
+        const img = card.querySelector(".receipt-thumb");
+        const placeholder = card.querySelector(".receipt-placeholder");
+        const downloadBtn = card.querySelector(".receipt-download");
+        const copyBtn = card.querySelector(".receipt-copy");
         let targetUrl = thumbUrl;
 
+        const getTargetUrl = () => targetUrl || rawUrl || thumbUrl;
         const openTarget = () => {
-            const href = targetUrl || rawUrl || thumbUrl;
+            const href = getTargetUrl();
             if (href) openAttachmentViewer(href, p.attachmentName || "Receipt");
         };
-
-        const addFallback = () => {
-            if (!thumbContainer || !thumbUrl) return;
-            const btn = document.createElement("button");
-            btn.className = "text-[10px] text-indigo-700 underline";
-            btn.type = "button";
-            btn.textContent = "Open proof";
-            btn.addEventListener("click", openTarget);
-            thumbContainer.appendChild(btn);
+        const showPlaceholder = () => {
+            if (img) img.classList.add("hidden");
+            if (placeholder) placeholder.classList.remove("hidden");
         };
 
-        if (img && thumbUrl) {
-            img.referrerPolicy = 'no-referrer';
+        if (hasAttachment) {
+            if (thumbShell) {
+                thumbShell.classList.add("cursor-pointer");
+                thumbShell.addEventListener("click", openTarget);
+            }
+            if (downloadBtn) {
+                downloadBtn.disabled = false;
+                downloadBtn.addEventListener("click", () =>
+                    downloadAttachment(getTargetUrl(), p.attachmentName || "receipt")
+                );
+            }
+            if (copyBtn) {
+                copyBtn.disabled = false;
+                copyBtn.addEventListener("click", () => copyAttachmentToClipboard(getTargetUrl()));
+            }
+        } else {
+            if (downloadBtn) downloadBtn.disabled = true;
+            if (copyBtn) copyBtn.disabled = true;
+        }
+
+        if (img && hasAttachment) {
+            img.referrerPolicy = "no-referrer";
             img.src = thumbUrl;
             img.classList.remove("hidden");
-            img.classList.add("cursor-pointer");
-            img.addEventListener("click", openTarget);
-
+            if (placeholder) placeholder.classList.add("hidden");
             resolveAttachmentPreview(thumbUrl)
                 .then(({ previewUrl, viewUrl }) => {
                     const src = previewUrl || viewUrl || thumbUrl;
@@ -560,14 +617,10 @@ function renderPaymentHistory(context = {}) {
                     targetUrl = thumbUrl || rawUrl;
                 })
                 .finally(() => {
-                    if (!targetUrl) {
-                        img.remove();
-                        addFallback();
-                    }
+                    if (!targetUrl) showPlaceholder();
                 });
-        } else if (thumbUrl) {
-            targetUrl = thumbUrl;
-            addFallback();
+        } else {
+            showPlaceholder();
         }
 
         list.appendChild(card);
@@ -942,6 +995,61 @@ function setBillsTab(tab, options = {}) {
         renderGeneratedBills();
     } else {
         loadGeneratedBills(tab);
+    }
+}
+
+async function downloadAttachment(url, name) {
+    if (!url) {
+        showToast("No receipt image to download", "warning");
+        return;
+    }
+    const { viewUrl, previewUrl } = await resolveAttachmentPreview(url);
+    const href = viewUrl || previewUrl || url;
+    if (!href) {
+        showToast("No receipt image to download", "warning");
+        return;
+    }
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = name || "receipt";
+    anchor.rel = "noopener noreferrer";
+    anchor.target = "_blank";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    const fileLabel = name || "receipt";
+    showToast(`Download started: ${fileLabel} • ${href}`, "success");
+}
+
+async function copyAttachmentToClipboard(url) {
+    if (!url) {
+        showToast("No receipt image to copy", "warning");
+        return;
+    }
+    try {
+        const { previewUrl, viewUrl } = await resolveAttachmentPreview(url);
+        const target = previewUrl || viewUrl || url;
+        if (!target) {
+            showToast("No receipt image to copy", "warning");
+            return;
+        }
+        if (navigator.clipboard && window.ClipboardItem) {
+            const response = await fetch(target);
+            const blob = await response.blob();
+            const item = new ClipboardItem({ [blob.type || "image/png"]: blob });
+            await navigator.clipboard.write([item]);
+            showToast("Receipt image copied", "success");
+            return;
+        }
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(target);
+            showToast("Receipt link copied", "success");
+            return;
+        }
+        showToast("Clipboard not available", "warning");
+    } catch (err) {
+        console.error("Failed to copy receipt image", err);
+        showToast("Unable to copy receipt image", "error");
     }
 }
 
