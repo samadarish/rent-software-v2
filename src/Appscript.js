@@ -1620,7 +1620,8 @@ function savePaymentAttachment_(dataUrl, paymentId, originalName, tenantName, mo
   const cleanBase64 = match[2].replace(/\s/g, '');
   const bytes = Utilities.base64Decode(cleanBase64);
   const safeTenant = sanitizeFileSegment_(tenantName, 'Tenant');
-  const safeMonth = sanitizeFileSegment_(normalizeMonthKey_(monthKey) || monthKey, 'month');
+  const normalizedMonthKey = normalizeMonthKey_(monthKey);
+  const safeMonth = normalizedMonthKey || sanitizeFileSegment_(monthKey, 'month');
   const safePayment = sanitizeFileSegment_(paymentId || '', 'payment');
   const blobName = `${safeTenant}_${safeMonth}_${safePayment}`;
   const blob = Utilities.newBlob(bytes, mimeType).setName(blobName);
@@ -1693,7 +1694,9 @@ function handleSavePayment_(payload = {}) {
   const paymentId = payload.id || Utilities.getUuid();
   const paymentDate = parseIsoDate_(payload.date) || new Date();
   let billLineId = payload.billLineId || '';
-  const tenantId = payload.tenantId || '';
+  let tenantId = payload.tenantId || '';
+  let resolvedMonthKey = payload.monthKey || '';
+  let resolvedTenantName = payload.tenantName || '';
 
   // Fallback: If billLineId is missing but we have tenancy+month, find the bill
   if (!billLineId && payload.tenancyId && payload.monthKey) {
@@ -1704,13 +1707,33 @@ function handleSavePayment_(payload = {}) {
     );
     if (match) billLineId = match.bill_line_id;
   }
+
+  if (billLineId) {
+    const billLookup = readTableColumns_(BILL_LINES_SHEET, BILL_LINE_HEADERS, ['bill_line_id', 'month_key', 'tenancy_id']);
+    const billMatch = billLookup.find((b) => b.bill_line_id == billLineId);
+    if (billMatch) {
+      resolvedMonthKey = normalizeMonthKey_(billMatch.month_key) || resolvedMonthKey || '';
+      if (!tenantId || !resolvedTenantName) {
+        const tenancyLookup = readTableColumns_(TENANCIES_SHEET, TENANCIES_HEADERS, ['tenancy_id', 'tenant_id']);
+        const tenancyMatch = tenancyLookup.find((t) => t.tenancy_id == billMatch.tenancy_id);
+        if (tenancyMatch) {
+          tenantId = tenantId || tenancyMatch.tenant_id || '';
+          if (!resolvedTenantName) {
+            const tenantLookup = readTableColumns_(TENANTS_SHEET, TENANTS_HEADERS, ['tenant_id', 'full_name']);
+            const tenantMatch = tenantLookup.find((t) => t.tenant_id == tenancyMatch.tenant_id);
+            resolvedTenantName = (tenantMatch && tenantMatch.full_name) || resolvedTenantName;
+          }
+        }
+      }
+    }
+  }
   const attachment = payload.attachmentDataUrl
     ? savePaymentAttachment_(
       payload.attachmentDataUrl,
       paymentId,
       payload.attachmentName || '',
-      payload.tenantName || '',
-      payload.monthKey || ''
+      resolvedTenantName,
+      resolvedMonthKey
     )
     : { attachment_id: payload.attachmentId || '', attachmentName: payload.attachmentName || '', attachmentUrl: payload.attachmentUrl || '' };
 
