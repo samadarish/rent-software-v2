@@ -484,6 +484,28 @@ function handleAttachmentPreview_(attachmentUrl) {
   }
 }
 
+function sanitizeFileSegment_(value, fallback) {
+  const raw = (value || '').toString().trim();
+  if (!raw) return fallback || '';
+  const cleaned = raw.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return cleaned || (fallback || '');
+}
+
+function getFileExtension_(mimeType, originalName) {
+  const name = (originalName || '').toString();
+  const dot = name.lastIndexOf('.');
+  if (dot >= 0 && dot < name.length - 1) {
+    const ext = name.substring(dot + 1).replace(/[^A-Za-z0-9]/g, '');
+    if (ext) return ext.toLowerCase();
+  }
+  const normalized = (mimeType || '').toString().toLowerCase();
+  if (normalized.includes('jpeg')) return 'jpg';
+  if (normalized.includes('png')) return 'png';
+  if (normalized.includes('webp')) return 'webp';
+  if (normalized.includes('gif')) return 'gif';
+  return 'png';
+}
+
 /********* CLAUSES *********/
 function readUnifiedClauses_() {
   const sheet = getSheetWithHeaders_(CLAUSES_SHEET, CLAUSES_HEADERS);
@@ -1590,14 +1612,17 @@ function handleFetchGeneratedBills_(statusRaw) {
 }
 
 /********* PAYMENTS *********/
-function savePaymentAttachment_(dataUrl, paymentId, originalName) {
+function savePaymentAttachment_(dataUrl, paymentId, originalName, tenantName, monthKey) {
   if (!dataUrl) return { attachment_id: '', attachmentName: '', attachmentUrl: '' };
   const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
   if (!match) return { attachment_id: '', attachmentName: '', attachmentUrl: '' };
   const mimeType = match[1] || 'application/octet-stream';
   const cleanBase64 = match[2].replace(/\s/g, '');
   const bytes = Utilities.base64Decode(cleanBase64);
-  const blobName = `${paymentId || 'payment'}-${Date.now()}${originalName ? originalName.substring(originalName.lastIndexOf('.')) : ''}`;
+  const safeTenant = sanitizeFileSegment_(tenantName, 'Tenant');
+  const safeMonth = sanitizeFileSegment_(normalizeMonthKey_(monthKey) || monthKey, 'month');
+  const safePayment = sanitizeFileSegment_(paymentId || '', 'payment');
+  const blobName = `${safeTenant}_${safeMonth}_${safePayment}`;
   const blob = Utilities.newBlob(bytes, mimeType).setName(blobName);
   const folder = getOrCreateFolder_('Payment Proofs');
   const file = folder.createFile(blob);
@@ -1680,7 +1705,13 @@ function handleSavePayment_(payload = {}) {
     if (match) billLineId = match.bill_line_id;
   }
   const attachment = payload.attachmentDataUrl
-    ? savePaymentAttachment_(payload.attachmentDataUrl, paymentId, payload.attachmentName || '')
+    ? savePaymentAttachment_(
+      payload.attachmentDataUrl,
+      paymentId,
+      payload.attachmentName || '',
+      payload.tenantName || '',
+      payload.monthKey || ''
+    )
     : { attachment_id: payload.attachmentId || '', attachmentName: payload.attachmentName || '', attachmentUrl: payload.attachmentUrl || '' };
 
   const record = {

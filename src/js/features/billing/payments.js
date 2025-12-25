@@ -60,6 +60,7 @@ const BILL_MONTHS_BACK = 24;
 
 const attachmentPreviewCache = new Map();
 let paymentHistoryLoading = false;
+let paymentModalResetTimer = null;
 
 function getBillsForStatus(status = "pending") {
     return status === "paid" ? paymentsState.generatedBills.paid : paymentsState.generatedBills.pending;
@@ -266,6 +267,18 @@ function normalizeKey(value) {
 
 function normalizeMonthKey(value) {
     return normalizeMonthKeyBase(value, { lowercase: true });
+}
+
+function formatDownloadPath(url) {
+    if (!url || url.startsWith("data:")) return "";
+    try {
+        const parsed = new URL(url);
+        const id = parsed.searchParams.get("id");
+        if (id) return `drive:${id}`;
+        return `${parsed.hostname}${parsed.pathname}`;
+    } catch (err) {
+        return "";
+    }
 }
 
 function resolveUnitNumberForBill(bill) {
@@ -859,6 +872,10 @@ async function showAttachmentPreview(name, url) {
 }
 
 async function openPaymentModal(payment = null, billContext = null) {
+    if (paymentModalResetTimer) {
+        clearTimeout(paymentModalResetTimer);
+        paymentModalResetTimer = null;
+    }
     await ensureTenantDirectoryLoaded();
     resetPaymentForm();
 
@@ -968,13 +985,21 @@ async function openPaymentModalFromBill(bill) {
 
 function closePaymentModal() {
     togglePaymentModal(false);
-    resetPaymentForm();
+    if (paymentModalResetTimer) clearTimeout(paymentModalResetTimer);
+    paymentModalResetTimer = setTimeout(() => {
+        resetPaymentForm();
+        paymentModalResetTimer = null;
+    }, 240);
 }
 
 function setBillsTab(tab, options = {}) {
     paymentsState.activeBillTab = tab;
     const pendingTab = document.getElementById("billsPendingTab");
     const paidTab = document.getElementById("billsPaidTab");
+    const pendingBody = document.getElementById("pendingBillsBody");
+    const paidBody = document.getElementById("paidBillsBody");
+    const loader = document.getElementById("generatedBillsLoader");
+    const emptyState = document.getElementById("generatedBillsEmpty");
     if (pendingTab) {
         pendingTab.classList.toggle("bg-white", tab === "pending");
         pendingTab.classList.toggle("text-slate-800", tab === "pending");
@@ -982,6 +1007,16 @@ function setBillsTab(tab, options = {}) {
     if (paidTab) {
         paidTab.classList.toggle("bg-white", tab === "paid");
         paidTab.classList.toggle("text-slate-800", tab === "paid");
+    }
+    if (pendingBody && paidBody) {
+        pendingBody.classList.toggle("hidden", tab !== "pending");
+        paidBody.classList.toggle("hidden", tab !== "paid");
+    }
+    if (!options.skipLoad && !isBillsLoaded(tab)) {
+        if (loader) loader.classList.remove("hidden");
+        if (emptyState) emptyState.classList.add("hidden");
+        if (tab === "pending" && pendingBody) pendingBody.innerHTML = "";
+        if (tab === "paid" && paidBody) paidBody.innerHTML = "";
     }
     if (options.forceLoad) {
         loadGeneratedBills(tab, true);
@@ -1018,7 +1053,7 @@ async function downloadAttachment(url, name) {
     anchor.click();
     anchor.remove();
     const fileLabel = name || "receipt";
-    showToast(`Download started: ${fileLabel} • ${href}`, "success");
+    showToast(`Download started: ${fileLabel}`, "success");
 }
 
 async function copyAttachmentToClipboard(url) {

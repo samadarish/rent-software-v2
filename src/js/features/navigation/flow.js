@@ -182,7 +182,7 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     }
 
     if (noGrnCheckbox) {
-        const allowNoGrn = mode === "agreement" || mode === "createTenantNew";
+        const allowNoGrn = mode === "createTenantNew";
         noGrnCheckbox.closest("label")?.classList.toggle("hidden", !allowNoGrn);
 
         if (!allowNoGrn) {
