@@ -1009,13 +1009,16 @@ function renderSendList() {
             <td class="px-3 py-2 text-[12px] font-semibold text-slate-800">${summary.name}</td>
             <td class="px-3 py-2 text-[12px] font-semibold text-slate-700">₹${summary.total.toFixed(2)}</td>
             <td class="px-3 py-2 text-right text-[12px]">
-                ${
-                    sent
-                        ? '<span class="inline-flex items-center gap-1 text-emerald-700 font-semibold">✓ Sent</span>'
-                        : `<button class="send-bill-btn px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500" data-id="${
-                              summary.id
-                          }">Send Bill (WhatsApp)</button>`
-                }
+                <div class="inline-flex items-center gap-2">
+                    ${
+                        sent
+                            ? '<span class="text-[11px] text-emerald-700 font-semibold">Sent</span>'
+                            : ''
+                    }
+                    <button class="send-bill-btn px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500" data-id="${
+                        summary.id
+                    }">Send Bill (WhatsApp)</button>
+                </div>
             </td>
         `;
 

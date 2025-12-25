@@ -10,13 +10,13 @@
 
 import { clauseSections } from "../../constants.js";
 import {
-    clausesDirty,
     setClausesDirtyState,
     lastMovedClauseId,
     lastMoveDirection,
-    incrementClauseIdCounter
+    incrementClauseIdCounter,
+    setLastMovedClause
 } from "../../state.js";
-import { stripHtml, applyBoldToSelection, htmlToMarkedText } from "../../utils/htmlUtils.js";
+import { stripHtml, applyBoldToSelection } from "../../utils/htmlUtils.js";
 
 /**
  * Generates a unique ID for a new clause
@@ -105,7 +105,7 @@ export function renderClausesUI() {
     if (!container) return;
     container.innerHTML = "";
 
-    Object.entries(clauseSections).forEach(([sectionKey, section]) => {
+    Object.entries(clauseSections).forEach(([, section]) => {
         const box = document.createElement("div");
         box.className =
             "border border-slate-200 rounded-lg p-2 space-y-2 bg-white/80";
@@ -137,7 +137,7 @@ export function renderClausesUI() {
                 // Up button - move clause up in the list
                 const upBtn = document.createElement("button");
                 upBtn.type = "button";
-                upBtn.textContent = "↑";
+                upBtn.textContent = "Up";
                 upBtn.title = "Move up";
                 upBtn.className =
                     "mt-0.5 text-[10px] px-1.5 py-0.5 rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed";
@@ -152,12 +152,9 @@ export function renderClausesUI() {
                         it.sortOrder = i + 1;
                     });
 
-                    // Import state functions dynamically
-                    import("../../state.js").then(({ setLastMovedClause }) => {
-                        setLastMovedClause(item.id, "up");
-                        setClausesDirty(true);
-                        renderClausesUI();
-                    });
+                    setLastMovedClause(item.id, "up");
+                    setClausesDirty(true);
+                    renderClausesUI();
                 });
                 upBtn.disabled = arr.indexOf(item) <= 0;
                 li.appendChild(upBtn);
@@ -165,7 +162,7 @@ export function renderClausesUI() {
                 // Down button - move clause down in the list
                 const downBtn = document.createElement("button");
                 downBtn.type = "button";
-                downBtn.textContent = "↓";
+                downBtn.textContent = "Down";
                 downBtn.title = "Move down";
                 downBtn.className =
                     "mt-0.5 text-[10px] px-1.5 py-0.5 rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed";
@@ -180,11 +177,9 @@ export function renderClausesUI() {
                         it.sortOrder = i + 1;
                     });
 
-                    import("../../state.js").then(({ setLastMovedClause }) => {
-                        setLastMovedClause(item.id, "down");
-                        setClausesDirty(true);
-                        renderClausesUI();
-                    });
+                    setLastMovedClause(item.id, "down");
+                    setClausesDirty(true);
+                    renderClausesUI();
                 });
                 downBtn.disabled = arr.indexOf(item) === arr.length - 1;
                 li.appendChild(downBtn);

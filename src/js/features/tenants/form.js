@@ -30,7 +30,7 @@ function getLandlordById(landlordId) {
     return landlordCache.find((l) => l.landlord_id === landlordId);
 }
 
-function applyLandlordToForm(landlord) {
+export function applyLandlordToForm(landlord) {
     const name = document.getElementById("Landlord_name");
     const aadhaar = document.getElementById("landlord_aadhar");
     const address = document.getElementById("landlord_address");
@@ -43,7 +43,7 @@ function getUnitById(unitId) {
     return unitCache.find((u) => u.unit_id === unitId);
 }
 
-function applyUnitToPremises(unit) {
+export function applyUnitToPremises(unit) {
     const wing = document.getElementById("wing");
     const unitNumber = document.getElementById("unit_number_display");
     const floor = document.getElementById("floor_of_building");
@@ -128,6 +128,14 @@ function getSelectedUnitForForm() {
     const select = document.getElementById("unit_selector");
     if (!select || !select.value) return null;
     return getUnitById(select.value);
+}
+
+export function getUnitCache() {
+    return unitCache.slice();
+}
+
+export function getLandlordCache() {
+    return landlordCache.slice();
 }
 
 export async function refreshUnitOptions(force = false) {
@@ -355,9 +363,12 @@ export function collectFormDataForTemplate() {
  */
 export function collectFullPayloadForDb() {
     const templateData = collectFormDataForTemplate();
+    const sanitizedTemplate = { ...templateData };
+    delete sanitizedTemplate.rent_amount_words;
+    delete sanitizedTemplate.secu_amount_words;
     const selectedUnit = getSelectedUnitForForm();
     return {
-        templateData,
+        templateData: sanitizedTemplate,
         Tenant_occupation: document.getElementById("Tenant_occupation").value.trim(),
         wing: document.getElementById("wing").value.trim(),
         floor_of_building: document.getElementById("floor_of_building").value,
@@ -365,6 +376,6 @@ export function collectFullPayloadForDb() {
         unitId: selectedUnit?.unit_id || "",
         unit_number: selectedUnit?.unit_number || templateData.unit_number || "",
         landlordId: templateData.landlord_id || "",
-        activeTenant: currentFlow === "addPastTenant" ? "No" : "Yes",
+        activeTenant: "Yes",
     };
 }

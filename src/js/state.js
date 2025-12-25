@@ -7,7 +7,7 @@
 
 /**
  * Current application flow mode
- * @type {"agreement" | "createTenantNew" | "addPastTenant" | "viewTenants" | "generateBill" | "payments"}
+ * @type {"agreement" | "createTenantNew" | "viewTenants" | "generateBill" | "payments"}
  */
 export let currentFlow = "agreement";
 
@@ -19,11 +19,7 @@ export function setCurrentFlow(mode) {
     currentFlow = mode;
 }
 
-/**
- * Indicates if clauses have been modified and need to be synced to Google Sheets
- * @type {boolean}
- */
-export let clausesDirty = false;
+let clausesDirty = false;
 
 /**
  * Updates the clauses dirty state

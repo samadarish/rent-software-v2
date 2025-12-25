@@ -4,7 +4,6 @@
  * Handles switching between different application modes:
  * - Agreement mode (create agreement and save tenant)
  * - Create Tenant New mode (active tenant)
- * - Add Past Tenant mode (past tenant)
  */
 
 import { currentFlow, setCurrentFlow } from "../../state.js";
@@ -12,14 +11,15 @@ import { isDraftDirty, loadDraftForFlow, openUnsavedDraftModal, syncDraftUiForFl
 import { loadTenantDirectory } from "../tenants/tenants.js";
 import { applyLandlordDefaultsToForm } from "../../api/config.js";
 import { refreshPaymentsIfNeeded } from "../billing/payments.js";
+import { setNoGrnState } from "../tenants/formState.js";
 import { smoothToggle } from "../../utils/ui.js";
 
-const DRAFT_GUARDED_FLOWS = new Set(["agreement", "createTenantNew", "addPastTenant"]);
+const DRAFT_GUARDED_FLOWS = new Set(["agreement", "createTenantNew"]);
 
 /**
  * Switches the application to a different flow/mode
  * Updates UI elements, button visibility, and form sections based on the mode
- * @param {"dashboard" | "agreement" | "createTenantNew" | "addPastTenant" | "viewTenants" | "generateBill" | "payments"} mode - The flow mode to switch to
+ * @param {"dashboard" | "agreement" | "createTenantNew" | "viewTenants" | "generateBill" | "payments"} mode - The flow mode to switch to
  */
 export function switchFlow(mode, options = { bypassGuard: false }) {
     if (
@@ -58,7 +58,7 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     const isGenerateBill = mode === "generateBill";
     const isPayments = mode === "payments";
     const isViewTenants = mode === "viewTenants";
-    const isFormFlow = mode === "agreement" || mode === "createTenantNew" || mode === "addPastTenant";
+    const isFormFlow = mode === "agreement" || mode === "createTenantNew";
     const toggleSection = (element, show) =>
         smoothToggle(element, show, show ? {} : { duration: 0 });
 
@@ -98,7 +98,7 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
         createAgreementBtn.classList.add(...activeClasses);
     }
 
-    if ((mode === "createTenantNew" || mode === "addPastTenant") && createTenantBtn) {
+    if (mode === "createTenantNew" && createTenantBtn) {
         createTenantBtn.classList.remove(hoverClass, ...inactiveTextClasses);
         createTenantBtn.classList.add(...activeClasses);
     }
@@ -127,8 +127,6 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
             titleEl.textContent = "Agreement Form";
         } else if (mode === "createTenantNew") {
             titleEl.textContent = "Create Tenant – Active";
-        } else if (mode === "addPastTenant") {
-            titleEl.textContent = "Create Tenant – Past";
         } else if (mode === "viewTenants") {
             titleEl.textContent = "Tenant Directory";
         } else if (mode === "generateBill") {
@@ -150,27 +148,18 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
         toggleButtons(".btn-save-agreement", false);
         toggleButtons(".btn-export-docx", false);
         toggleButtons(".btn-create-new", false);
-        toggleButtons(".btn-save-past", false);
     } else if (mode === "agreement") {
         toggleButtons(".btn-save-agreement", true);
         toggleButtons(".btn-export-docx", true);
         toggleButtons(".btn-create-new", false);
-        toggleButtons(".btn-save-past", false);
     } else if (mode === "createTenantNew") {
         toggleButtons(".btn-save-agreement", false);
         toggleButtons(".btn-export-docx", false);
         toggleButtons(".btn-create-new", true);
-        toggleButtons(".btn-save-past", false);
-    } else if (mode === "addPastTenant") {
-        toggleButtons(".btn-save-agreement", false);
-        toggleButtons(".btn-export-docx", false);
-        toggleButtons(".btn-create-new", false);
-        toggleButtons(".btn-save-past", true);
     } else if (mode === "viewTenants" || mode === "generateBill" || mode === "payments") {
         toggleButtons(".btn-save-agreement", false);
         toggleButtons(".btn-export-docx", false);
         toggleButtons(".btn-create-new", false);
-        toggleButtons(".btn-save-past", false);
     }
 
     // Toggle sidebar content (clauses for agreement, placeholder for tenant modes)
@@ -178,13 +167,12 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     const clausesPlaceholderContent = document.getElementById("clausesPlaceholderContent");
     const directorySidebarContent = document.getElementById("directorySidebarContent");
     const utilitySidebarContent = document.getElementById("utilitySidebarContent");
-    const grnInput = document.getElementById("grn_number");
     const noGrnCheckbox = document.getElementById("grnNoCheckbox");
 
     if (clausesAgreementContent && clausesPlaceholderContent && directorySidebarContent) {
         const showClauses = mode === "agreement";
         const showDirectory = mode === "viewTenants";
-        const showTenantSidebar = mode === "createTenantNew" || mode === "addPastTenant";
+        const showTenantSidebar = mode === "createTenantNew";
         const showUtilitySidebar = isDashboard || isGenerateBill || isPayments;
 
         toggleSection(clausesAgreementContent, showClauses);
@@ -193,29 +181,12 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
         toggleSection(utilitySidebarContent, showUtilitySidebar);
     }
 
-    if (grnInput && noGrnCheckbox) {
-        const allowNoGrn = mode === "createTenantNew" || mode === "addPastTenant";
+    if (noGrnCheckbox) {
+        const allowNoGrn = mode === "agreement" || mode === "createTenantNew";
         noGrnCheckbox.closest("label")?.classList.toggle("hidden", !allowNoGrn);
 
         if (!allowNoGrn) {
-            grnInput.disabled = false;
-            grnInput.dataset.noGrn = "0";
-            grnInput.value = "";
-            if (grnInput.dataset.prevGrn) {
-                grnInput.value = grnInput.dataset.prevGrn || grnInput.value;
-                delete grnInput.dataset.prevGrn;
-            }
-            noGrnCheckbox.checked = false;
-        }
-    }
-
-    // Show tenancy end date field only for past tenants
-    const tenancyEndGroup = document.getElementById("tenancyEndGroup");
-    if (tenancyEndGroup) {
-        if (mode === "addPastTenant") {
-            tenancyEndGroup.classList.remove("hidden");
-        } else {
-            tenancyEndGroup.classList.add("hidden");
+            setNoGrnState({ checked: false, source: "flow" });
         }
     }
 

@@ -600,6 +600,7 @@ function handleSaveTenant_(payload) {
           tenancyId: mapped.tenancy.tenancy_id,
           effectiveMonth,
           rentAmount: mapped.rentAmountValue,
+          note: 'Initial rent',
         });
       }
     }
@@ -663,10 +664,14 @@ function handleUpdateTenant_(payload) {
         (Number(existingRevisionForMonth.rent_amount) !== Number(mapped.rentAmountValue));
 
       if (shouldCreateRevision) {
+        const note = existingRevisionForMonth
+          ? existingRevisionForMonth.note || ''
+          : (existingRevisions.length === 0 ? 'Initial rent' : '');
         upsertTenancyRentRevision_({
           tenancyId: mapped.tenancy.tenancy_id,
           effectiveMonth,
           rentAmount: mapped.rentAmountValue,
+          note,
         });
       }
     }

@@ -102,7 +102,7 @@
           <button id="navCreateTenantBtn"
             class="flex items-center justify-between w-full text-left text-[11px] px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700">
             <span> + Create Tenant</span>
-            <span class="text-[9px] text-slate-400">New / Past</span>
+            <span class="text-[9px] text-slate-400">Active</span>
           </button>
 
           <!-- Create Agreement (current) -->
@@ -184,10 +184,7 @@
               class="btn-create-new hidden px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">
               Create new tenant
             </button>
-            <button
-              class="btn-save-past hidden px-3 py-1.5 rounded bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">
-              Save past tenant
-            </button>
+            
           </div>
 
           <!-- AGREEMENT META -->
@@ -207,7 +204,7 @@
                     placeholder="e.g. GRN-2025-001" />
                   <label for="grnNoCheckbox" class="flex items-center gap-1 px-2 py-1 text-[10px] border border-slate-300 rounded bg-slate-50 hover:bg-slate-100 cursor-pointer">
                     <input id="grnNoCheckbox" type="checkbox" class="h-3 w-3 accent-slate-600" />
-                    <span>No GRN?</span>
+                    <span>NoGRN number</span>
                   </label>
                 </div>
               </div>
@@ -215,11 +212,7 @@
                 <label class="text-[11px] font-semibold block mb-1">Tenancy Commencement</label>
                 <input type="date" id="tenancy_comm" class="w-full border rounded px-2 py-1.5 text-xs" />
               </div>
-              <!-- Tenancy End Date – visible only for "Add past tenant" mode -->
-              <div id="tenancyEndGroup" class="hidden">
-                <label class="text-[11px] font-semibold block mb-1">Tenancy End Date</label>
-                <input type="date" id="tenancy_end" class="w-full border rounded px-2 py-1.5 text-xs" />
-              </div>
+              
     </div>
   </div>
 
@@ -330,7 +323,7 @@
                   <option value="">Select a unit to auto-fill details</option>
                 </select>
                 <p class="text-[10px] text-slate-500 mt-1">
-                  Active tenant form hides occupied units; agreements and past tenants show all units.
+                  Active tenant form hides occupied units; agreements show all units.
                 </p>
               </div>
               <div>
@@ -455,10 +448,7 @@
               class="btn-create-new hidden px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">
               Create new tenant
             </button>
-            <button
-              class="btn-save-past hidden px-3 py-1.5 rounded bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">
-              Save past tenant
-            </button>
+            
           </div>
         </section>
 
@@ -630,8 +620,8 @@
               </div>
 
               <p class="text-[10px] text-slate-500 mb-1">
-                Clauses are loaded from and saved back to Google Sheets (one sheet per section).
-                Use the <strong>↑ / ↓</strong> arrows to change the order, toggle them on/off,
+                Clauses are loaded from and saved back to Google Sheets.
+                Use the <strong>Up / Down</strong> buttons to change the order, toggle them on/off,
                 and use <strong>B</strong> to bold words. Click
                 <strong>Sync Clauses to DB</strong> after editing.
               </p>
@@ -641,7 +631,7 @@
               </div>
             </div>
 
-            <!-- NON-AGREEMENT PLACEHOLDER (Create Tenant / Past Tenant) -->
+            <!-- NON-AGREEMENT PLACEHOLDER (Create Tenant) -->
             <div id="clausesPlaceholderContent" class="hidden fade-section">
               <h3 class="text-xs font-semibold mb-1.5">Sidebar</h3>
               <p class="text-[10px] text-slate-500">
@@ -733,7 +723,7 @@
           <div id="actionsCard" class="hidden fade-section bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-2">
             <h3 class="text-xs font-semibold mb-1.5">Info</h3>
             <p class="text-[10px] text-slate-500">
-              Drafts are saved locally per view. Switch between Agreement, Active, and Past tenants to work on separate
+              Drafts are saved locally per view. Switch between Agreement and Active tenant flows to work on separate
               drafts.
             </p>
           </div>
@@ -1236,39 +1226,13 @@
       </div>
     </div>
 
-    <!-- CREATE TENANT MODE MODAL -->
-    <div id="tenantModeModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
-      <div class="bg-white rounded-xl shadow-lg w-full max-w-sm p-4 md:p-5 modal-panel">
-        <h3 class="text-xs font-semibold mb-3">Create Tenant</h3>
-        <p class="text-[10px] text-slate-500 mb-3">
-          Choose whether you are adding a current active tenant or a past tenant.
-        </p>
-        <div class="space-y-2">
-          <button id="tenantModeNewBtn"
-            class="w-full px-3 py-2 text-[11px] rounded bg-slate-900 text-white hover:bg-slate-800">
-            Create new (Active tenant)
-          </button>
-          <button id="tenantModePastBtn"
-            class="w-full px-3 py-2 text-[11px] rounded border border-slate-400 hover:bg-slate-100">
-            Add past tenant
-          </button>
-        </div>
-        <div class="flex justify-end gap-2 pt-3 border-t mt-4">
-          <button id="tenantModeCancelBtn"
-            class="px-3 py-1.5 text-[11px] rounded border border-slate-400 hover:bg-slate-100">
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- LANDLORD DEFAULTS MODAL -->
     <div id="landlordConfigModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
       <div class="bg-white rounded-xl shadow-lg w-full max-w-5xl p-4 md:p-6 space-y-4 modal-panel">
         <div class="flex items-start justify-between">
           <div>
             <h3 class="text-xs font-semibold">Landlord configuration</h3>
-            <p class="text-[10px] text-slate-500">Defaults will auto-fill across Agreement, New, and Past tenant flows.
+            <p class="text-[10px] text-slate-500">Defaults will auto-fill across Agreement and Active tenant flows.
             </p>
           </div>
           <button id="landlordDefaultsCancelBtn" class="text-slate-500 hover:text-slate-800">✕</button>

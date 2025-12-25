@@ -29,6 +29,7 @@ import {
 import { exportDocxFromTemplate } from "./features/agreements/docx.js";
 import { buildUnitLabel, numberToIndianWords } from "./utils/formatters.js";
 import { clearAllDrafts, promptAndSaveDraft } from "./features/shared/drafts.js";
+import { handleNoGrnToggle } from "./features/tenants/formState.js";
 import { cloneSelectOptions, hideModal, showModal } from "./utils/ui.js";
 
 let unitConfigCache = [];
@@ -133,38 +134,6 @@ function syncWingList() {
     });
 }
 
-/**
- * Generates a pseudo GRN value when the user indicates they have none.
- * @returns {string} A random NoGRN value.
- */
-function generateNoGrnValue() {
-    const rand = Math.floor(10000 + Math.random() * 90000);
-    return `NoGRN${rand}`;
-}
-
-/**
- * Toggles the GRN input between manual and auto-generated modes.
- */
-function toggleNoGrnMode() {
-    const input = document.getElementById("grn_number");
-    const checkbox = document.getElementById("grnNoCheckbox");
-    if (!input || !checkbox) return;
-
-    const noGrnActive = checkbox.checked;
-
-    if (noGrnActive) {
-        input.dataset.noGrn = "1";
-        input.dataset.prevGrn = input.value;
-        input.disabled = true;
-        input.value = generateNoGrnValue();
-        return;
-    }
-
-    input.dataset.noGrn = "0";
-    input.disabled = false;
-    input.value = "";
-    delete input.dataset.prevGrn;
-}
 
 function wireAmountToWords(inputId, outputId) {
     const input = document.getElementById(inputId);
@@ -197,7 +166,7 @@ export function attachEventHandlers() {
 
     const noGrnCheckbox = document.getElementById("grnNoCheckbox");
     if (noGrnCheckbox) {
-        noGrnCheckbox.addEventListener("change", toggleNoGrnMode);
+        noGrnCheckbox.addEventListener("change", handleNoGrnToggle);
     }
 
     // Navigation: Create Agreement button
@@ -240,39 +209,11 @@ export function attachEventHandlers() {
         });
     }
 
-    // Navigation: Create Tenant button – opens mode chooser modal
+    // Navigation: Create Tenant button
     const navCreateTenantBtn = document.getElementById("navCreateTenantBtn");
     if (navCreateTenantBtn) {
         navCreateTenantBtn.addEventListener("click", () => {
-            const modal = document.getElementById("tenantModeModal");
-            if (modal) showModal(modal);
-        });
-    }
-
-    // Tenant mode modal buttons
-    const tenantModeCancelBtn = document.getElementById("tenantModeCancelBtn");
-    if (tenantModeCancelBtn) {
-        tenantModeCancelBtn.addEventListener("click", () => {
-            const modal = document.getElementById("tenantModeModal");
-            if (modal) hideModal(modal);
-        });
-    }
-
-    const tenantModeNewBtn = document.getElementById("tenantModeNewBtn");
-    if (tenantModeNewBtn) {
-        tenantModeNewBtn.addEventListener("click", () => {
-            const modal = document.getElementById("tenantModeModal");
-            if (modal) hideModal(modal);
             switchFlow("createTenantNew");
-        });
-    }
-
-    const tenantModePastBtn = document.getElementById("tenantModePastBtn");
-    if (tenantModePastBtn) {
-        tenantModePastBtn.addEventListener("click", () => {
-            const modal = document.getElementById("tenantModeModal");
-            if (modal) hideModal(modal);
-            switchFlow("addPastTenant");
         });
     }
 
@@ -458,7 +399,7 @@ export function attachEventHandlers() {
     // Action buttons (class-based selectors for multiple instances)
 
     // Save tenant
-    document.querySelectorAll(".btn-save-agreement, .btn-create-new, .btn-save-past").forEach((btn) => {
+    document.querySelectorAll(".btn-save-agreement, .btn-create-new").forEach((btn) => {
         btn.addEventListener("click", saveTenantToDb);
     });
 

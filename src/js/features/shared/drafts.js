@@ -6,15 +6,16 @@
 
 import { currentFlow } from "../../state.js";
 import { getFamilyMembersFromTable, setFamilyMembersInTable, syncTenantToFamilyTable } from "../tenants/family.js";
+import { pruneDraftValues } from "../tenants/draftHydration.js";
+import { collectDraftFormValues, hydrateTenantFormFromDraft, resetTenantFormValues } from "../tenants/formState.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
 const DRAFT_KEY_PREFIX = "rent_sw_draft_";
-const GUARDED_FLOWS = ["agreement", "createTenantNew", "addPastTenant"];
+const GUARDED_FLOWS = ["agreement", "createTenantNew"];
 
 const draftDirtyState = {
     agreement: false,
     createTenantNew: false,
-    addPastTenant: false,
 };
 
 const LANDLORD_FIELD_IDS = new Set(["Landlord_name", "landlord_aadhar", "landlord_address"]);
@@ -87,9 +88,21 @@ function getDraftList(mode) {
     if (!raw) return [];
     try {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-        if (parsed && typeof parsed === "object") return [parsed];
-        return [];
+        const drafts = Array.isArray(parsed) ? parsed : (parsed && typeof parsed === "object" ? [parsed] : []);
+        if (!drafts.length) return [];
+        let didPrune = false;
+        const normalized = drafts.map((draft) => {
+            const values = pruneDraftValues(draft?.values || {});
+            if (
+                draft?.values &&
+                ("rent_amount_words" in draft.values || "secu_amount_words" in draft.values)
+            ) {
+                didPrune = true;
+            }
+            return { ...draft, values };
+        });
+        if (didPrune) persistDraftList(mode, normalized);
+        return normalized;
     } catch (err) {
         console.error("Error parsing draft list", err);
         return [];
@@ -103,59 +116,7 @@ function persistDraftList(mode, drafts) {
 
 function getModeLabel(mode) {
     if (mode === "createTenantNew") return "Create tenant";
-    if (mode === "addPastTenant") return "Past tenant";
     return "Agreement";
-}
-
-function collectFormValues() {
-    const values = {};
-    document.querySelectorAll("#formSection input, #formSection textarea, #formSection select").forEach((el) => {
-        if (!el.id) return;
-        if (el.type === "checkbox" || el.type === "radio") {
-            values[el.id] = el.checked;
-        } else {
-            values[el.id] = el.value;
-        }
-    });
-    return values;
-}
-
-function applyFormValues(values = {}) {
-    suppressDirtyEvents = true;
-    try {
-        document.querySelectorAll("#formSection input, #formSection textarea, #formSection select").forEach((el) => {
-            if (!el.id || !(el.id in values)) return;
-            if (el.type === "checkbox" || el.type === "radio") {
-                el.checked = Boolean(values[el.id]);
-            } else if (el.tagName === "SELECT") {
-                el.value = values[el.id];
-            } else {
-                el.value = values[el.id];
-            }
-        });
-    } finally {
-        suppressDirtyEvents = false;
-    }
-}
-
-function resetFormFields() {
-    suppressDirtyEvents = true;
-    try {
-        document.querySelectorAll("#formSection input, #formSection textarea, #formSection select").forEach((el) => {
-            if (!el.id) return;
-            if (el.type === "checkbox" || el.type === "radio") {
-                el.checked = false;
-            } else if (el.tagName === "SELECT") {
-                el.value = "";
-            } else {
-                el.value = "";
-            }
-        });
-        setFamilyMembersInTable([]);
-        syncTenantToFamilyTable();
-    } finally {
-        suppressDirtyEvents = false;
-    }
 }
 
 export function saveDraftForCurrentFlow(name) {
@@ -169,7 +130,7 @@ export function saveDraftForCurrentFlow(name) {
     const payload = {
         name: draftName,
         savedAt: new Date().toISOString(),
-        values: collectFormValues(),
+        values: collectDraftFormValues(),
         family: getFamilyMembersFromTable(),
     };
     try {
@@ -202,23 +163,42 @@ export function loadDraftForFlow(mode, draftName = null) {
         : drafts[drafts.length - 1];
 
     if (!draftToLoad) {
-        resetFormFields();
+        suppressDirtyEvents = true;
+        try {
+            resetTenantFormValues();
+            setFamilyMembersInTable([]);
+            syncTenantToFamilyTable();
+        } finally {
+            suppressDirtyEvents = false;
+        }
         setDraftClean(mode);
         refreshDraftPickers(mode);
         return;
     }
 
     try {
-        resetFormFields();
-        applyFormValues(draftToLoad.values || {});
-        setFamilyMembersInTable(draftToLoad.family || []);
-        syncTenantToFamilyTable();
+        suppressDirtyEvents = true;
+        try {
+            resetTenantFormValues();
+            hydrateTenantFormFromDraft(draftToLoad.values || {});
+            setFamilyMembersInTable(draftToLoad.family || []);
+            syncTenantToFamilyTable();
+        } finally {
+            suppressDirtyEvents = false;
+        }
         showToast(`${getModeLabel(mode)} draft "${draftToLoad.name}" loaded`, "info");
         setDraftClean(mode);
         refreshDraftPickers(mode, draftToLoad.name);
     } catch (err) {
         console.error("Error loading draft", err);
-        resetFormFields();
+        suppressDirtyEvents = true;
+        try {
+            resetTenantFormValues();
+            setFamilyMembersInTable([]);
+            syncTenantToFamilyTable();
+        } finally {
+            suppressDirtyEvents = false;
+        }
         markDraftDirty(mode);
         refreshDraftPickers(mode);
         showToast("Draft could not be loaded", "error");
