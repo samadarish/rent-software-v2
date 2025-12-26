@@ -614,6 +614,136 @@ export async function loadClausesFromSheet(showNotification = false, force = fal
     }
 }
 
+export async function uploadPaymentAttachment(payload, options = {}) {
+    const url = ensureAppScriptUrl({
+        promptForConfig: true,
+        onMissing: () => showToast("Configure Apps Script URL to upload receipts", "warning"),
+    });
+    if (!url) return { ok: false };
+    const onProgress = options && typeof options.onProgress === "function" ? options.onProgress : null;
+    const onAbort = options && typeof options.onAbort === "function" ? options.onAbort : null;
+    const uploadId = options && options.uploadId ? String(options.uploadId) : `upload-${Date.now()}`;
+    const tauriInvoke = window.__TAURI__?.core?.invoke;
+    const tauriEvents = window.__TAURI__?.event;
+
+    if (typeof tauriInvoke === "function") {
+        let unlisten = null;
+        if (onProgress && typeof tauriEvents?.listen === "function") {
+            unlisten = await tauriEvents.listen("upload-progress", (event) => {
+                const payloadData = event?.payload || {};
+                const id = payloadData.uploadId || payloadData.upload_id || "";
+                if (!id || id !== uploadId) return;
+                const loaded = Number(payloadData.loaded) || 0;
+                const total = Number(payloadData.total) || 0;
+                const percent = total ? (loaded / total) * 100 : null;
+                onProgress({ loaded, total, percent });
+                if (payloadData.done && typeof unlisten === "function") {
+                    unlisten();
+                    unlisten = null;
+                }
+            });
+        }
+        if (onAbort) {
+            onAbort(() => tauriInvoke("cancel_upload", { uploadId }));
+        }
+        try {
+            const result = await tauriInvoke("upload_payment_attachment", {
+                url,
+                payload,
+                uploadId,
+            });
+            if (typeof unlisten === "function") unlisten();
+            return result || { ok: false };
+        } catch (err) {
+            if (typeof unlisten === "function") unlisten();
+            console.error("uploadPaymentAttachment error", err);
+            showToast("Failed to upload receipt", "error");
+            return { ok: false, error: String(err) };
+        }
+    }
+
+    if (!onProgress) {
+        try {
+            const data = await callAppScript({
+                url,
+                action: "uploadPaymentAttachment",
+                method: "POST",
+                payload,
+            });
+            return data || { ok: false };
+        } catch (err) {
+            console.error("uploadPaymentAttachment error", err);
+            showToast("Failed to upload receipt", "error");
+            return { ok: false, error: String(err) };
+        }
+    }
+
+    try {
+        const body = JSON.stringify({ action: "uploadPaymentAttachment", payload });
+        const result = await new Promise((resolve) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", url, true);
+            xhr.setRequestHeader("Content-Type", "text/plain");
+
+            xhr.upload.onprogress = (event) => {
+                if (!onProgress) return;
+                const total = event.lengthComputable ? event.total : null;
+                const loaded = event.loaded || 0;
+                const percent = total ? (loaded / total) * 100 : null;
+                onProgress({ loaded, total, percent });
+            };
+
+            xhr.onload = () => {
+                if (xhr.status < 200 || xhr.status >= 300) {
+                    resolve({ ok: false, error: `Upload failed (${xhr.status})` });
+                    return;
+                }
+                try {
+                    resolve(JSON.parse(xhr.responseText));
+                } catch (err) {
+                    resolve({ ok: false, error: "Upload response parse failed" });
+                }
+            };
+
+            xhr.onerror = () => resolve({ ok: false, error: "Upload failed" });
+            xhr.onabort = () => resolve({ ok: false, error: "Upload cancelled" });
+
+            if (onAbort) {
+                onAbort(() => xhr.abort());
+            }
+            xhr.send(body);
+        });
+
+        if (!result?.ok) {
+            showToast("Failed to upload receipt", "error");
+        }
+        return result || { ok: false };
+    } catch (err) {
+        console.error("uploadPaymentAttachment error", err);
+        showToast("Failed to upload receipt", "error");
+        return { ok: false, error: String(err) };
+    }
+}
+
+export async function deleteAttachment(attachmentId) {
+    const url = ensureAppScriptUrl({
+        promptForConfig: false,
+    });
+    if (!url || !attachmentId) return { ok: false };
+    try {
+        const data = await callAppScript({
+            url,
+            action: "deleteAttachment",
+            method: "POST",
+            payload: { attachmentId },
+        });
+        return data || { ok: false };
+    } catch (err) {
+        console.error("deleteAttachment error", err);
+        return { ok: false };
+    }
+}
+
 /**
  * Saves clauses to Google Sheets
  */

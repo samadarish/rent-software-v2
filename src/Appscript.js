@@ -168,6 +168,7 @@ const ATTACHMENT_HEADERS = [
   'attachment_id',
   'file_name',
   'file_url',
+  'file_drive_id',
   'uploaded_at',
 ];
 
@@ -1631,12 +1632,38 @@ function savePaymentAttachment_(dataUrl, paymentId, originalName, tenantName, mo
   const ensured = ensureDriveFileShareable_(file.getUrl());
   const attachment = {
     attachment_id: Utilities.getUuid(),
+    file_drive_id: file.getId(),
     file_name: file.getName(),
     file_url: ensured.viewUrl,
     uploaded_at: new Date(),
   };
   upsertUnique_(ATTACHMENTS_SHEET, ATTACHMENT_HEADERS, ['attachment_id'], attachment);
   return { attachment_id: attachment.attachment_id, attachmentName: attachment.file_name, attachmentUrl: attachment.file_url };
+}
+
+function deleteAttachmentById_(attachmentId) {
+  if (!attachmentId) return false;
+  const rows = readTable_(ATTACHMENTS_SHEET, ATTACHMENT_HEADERS);
+  const remaining = rows.filter((r) => r.attachment_id !== attachmentId);
+  const target = rows.find((r) => r.attachment_id === attachmentId);
+
+  if (target && target.file_drive_id) {
+    try {
+      const file = DriveApp.getFileById(target.file_drive_id);
+      file.setTrashed(true);
+    } catch (err) {
+      // Ignore drive deletion errors
+    }
+  }
+
+  const sheet = getSheetWithHeaders_(ATTACHMENTS_SHEET, ATTACHMENT_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, ATTACHMENT_HEADERS.length).clearContent();
+  if (remaining.length) {
+    const rowsOut = remaining.map((r) => ATTACHMENT_HEADERS.map((key) => r[key] ?? ''));
+    sheet.getRange(2, 1, rowsOut.length, ATTACHMENT_HEADERS.length).setValues(rowsOut);
+  }
+  return true;
 }
 
 function getOrCreateFolder_(name) {
@@ -1735,7 +1762,11 @@ function handleSavePayment_(payload = {}) {
       resolvedTenantName,
       resolvedMonthKey
     )
-    : { attachment_id: payload.attachmentId || '', attachmentName: payload.attachmentName || '', attachmentUrl: payload.attachmentUrl || '' };
+    : {
+      attachment_id: payload.attachmentId || '',
+      attachmentName: payload.attachmentName || '',
+      attachmentUrl: payload.attachmentUrl || '',
+    };
 
   const record = {
     payment_id: paymentId,
@@ -1786,6 +1817,7 @@ function mapPaymentRow_(record) {
     wing: unit.wing || '',
     attachmentName: attachment.file_name || '',
     attachmentUrl: attachment.file_url || '',
+    attachmentId: attachment.attachment_id || '',
     monthKey: bill.month_key || '',
     monthLabel: formatMonthLabelForDisplay_(bill.month_key || ''),
     billTotal: Number(bill.total_amount) || 0,
@@ -1893,6 +1925,20 @@ function doPost(e) {
     if (action === 'deleteLandlord') return handleDeleteLandlord_(body.payload || {});
     if (action === 'saveBillingRecord') return handleSaveBillingRecord_(body.payload);
     if (action === 'savePayment') return jsonResponse(handleSavePayment_(body.payload || {}));
+    if (action === 'uploadPaymentAttachment') {
+      const payload = body.payload || {};
+      try {
+        const result = savePaymentAttachment_(payload.dataUrl || payload.attachmentDataUrl || '', payload.paymentId || '', payload.attachmentName || '', payload.tenantName || '', payload.monthKey || '');
+        return jsonResponse({ ok: true, attachment: result });
+      } catch (err) {
+        return jsonResponse({ ok: false, error: String(err) });
+      }
+    }
+    if (action === 'deleteAttachment') {
+      const attachmentId = body.payload && body.payload.attachmentId;
+      const ok = deleteAttachmentById_(attachmentId);
+      return jsonResponse({ ok, attachmentId });
+    }
     if (action === 'saveClauses') {
       writeUnifiedClauses_(body.payload || {});
       return jsonResponse({ ok: true, message: 'Clauses saved to Google Sheets' });

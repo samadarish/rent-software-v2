@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Payments Feature Module
  *
  * Displays recorded payments, allows adding new receipts, and links
@@ -11,6 +11,8 @@ import {
     fetchBillsMinimal,
     fetchPayments,
     savePaymentRecord,
+    uploadPaymentAttachment,
+    deleteAttachment,
 } from "../../api/sheets.js";
 import { ensureTenantDirectoryLoaded, getActiveTenantsForWing } from "../tenants/tenants.js";
 import { formatCurrency as formatCurrencyBase, normalizeMonthKey as normalizeMonthKeyBase } from "../../utils/formatters.js";
@@ -52,8 +54,13 @@ const paymentsState = {
     attachmentUrl: "",
     attachmentPreviewUrl: "",
     attachmentViewUrl: "",
+    attachmentId: "",
+    attachmentCommitted: false,
     editingId: "",
     viewOnly: false,
+    uploadingAttachment: false,
+    uploadProgress: 0,
+    uploadController: null,
 };
 
 const BILL_MONTHS_BACK = 24;
@@ -339,12 +346,15 @@ function togglePaymentModal(show) {
 }
 
 function resetPaymentForm() {
+    cancelAttachmentUpload();
+    discardUploadedAttachment();
     paymentsState.editingId = "";
     paymentsState.attachmentDataUrl = "";
     paymentsState.attachmentName = "";
     paymentsState.attachmentUrl = "";
     paymentsState.attachmentPreviewUrl = "";
     paymentsState.attachmentViewUrl = "";
+    paymentsState.attachmentId = "";
     paymentsState.viewOnly = false;
     paymentsState.billContext = {
         monthKey: "",
@@ -392,6 +402,9 @@ function resetPaymentForm() {
     const formFields = document.getElementById("paymentFormFields");
     const notesSection = document.getElementById("paymentNotesSection");
     const attachmentWrapper = document.getElementById("paymentAttachmentWrapper");
+    const progressWrap = document.getElementById("paymentAttachmentProgress");
+    const progressFill = document.getElementById("paymentAttachmentProgressFill");
+    const progressLabel = document.getElementById("paymentAttachmentProgressLabel");
 
     if (dateInput) dateInput.value = todayIso;
     if (modeSelect) modeSelect.value = "UPI";
@@ -405,15 +418,15 @@ function resetPaymentForm() {
     }
 
     if (billTitle) billTitle.textContent = "Select a bill to record";
-    if (billAmount) billAmount.textContent = "₹0";
+    if (billAmount) billAmount.textContent = "â‚¹0";
     if (billStatus) billStatus.textContent = "Open this modal from a bill card to link the payment automatically.";
-    if (billMonth) billMonth.textContent = "Month • -";
-    if (wingBadge) wingBadge.textContent = "Wing • -";
-    if (breakdownTotal) breakdownTotal.textContent = "₹0";
-    if (breakdownRent) breakdownRent.textContent = "₹0";
-    if (breakdownElec) breakdownElec.textContent = "₹0";
-    if (breakdownMotor) breakdownMotor.textContent = "₹0";
-    if (breakdownSweep) breakdownSweep.textContent = "₹0";
+    if (billMonth) billMonth.textContent = "Month â€¢ -";
+    if (wingBadge) wingBadge.textContent = "Wing â€¢ -";
+    if (breakdownTotal) breakdownTotal.textContent = "â‚¹0";
+    if (breakdownRent) breakdownRent.textContent = "â‚¹0";
+    if (breakdownElec) breakdownElec.textContent = "â‚¹0";
+    if (breakdownMotor) breakdownMotor.textContent = "â‚¹0";
+    if (breakdownSweep) breakdownSweep.textContent = "â‚¹0";
 
     if (attachmentPreview) {
         attachmentPreview.classList.add("hidden");
@@ -428,6 +441,9 @@ function resetPaymentForm() {
     if (formFields) formFields.classList.remove("hidden");
     if (notesSection) notesSection.classList.remove("hidden");
     if (attachmentWrapper) attachmentWrapper.classList.remove("hidden");
+    if (progressWrap) progressWrap.classList.add("hidden");
+    if (progressFill) progressFill.style.width = "0%";
+    if (progressLabel) progressLabel.textContent = "";
     if (dueWrap) dueWrap.classList.remove("hidden");
     const historyContainer = document.getElementById("paymentHistoryContainer");
     const historyList = document.getElementById("paymentHistoryList");
@@ -641,7 +657,7 @@ function renderPaymentHistory(context = {}) {
 
     if (summary) {
         const totalPaid = sorted.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-        summary.textContent = `Showing ${sorted.length} partial payment${sorted.length === 1 ? "" : "s"} • Total recorded ${formatCurrency(totalPaid)}`;
+        summary.textContent = `Showing ${sorted.length} partial payment${sorted.length === 1 ? "" : "s"} â€¢ Total recorded ${formatCurrency(totalPaid)}`;
     }
 
     container.classList.remove("hidden");
@@ -699,15 +715,15 @@ function applyBillContext(context = {}) {
     if (billTitle) billTitle.textContent = context.tenantName ? `${context.tenantName}` : "Select a bill to record";
     if (billAmount) {
         const headlineAmount = typeof remaining === "number" ? remaining : billTotal;
-        billAmount.textContent = billTotal ? formatCurrency(headlineAmount) : "₹0";
+        billAmount.textContent = billTotal ? formatCurrency(headlineAmount) : "â‚¹0";
     }
     if (dueWrap) dueWrap.classList.toggle("hidden", typeof remaining === "number" && remaining <= 0);
     if (billStatus) {
-        const dueLabel = context.payableDate ? ` • Due ${context.payableDate}` : "";
+        const dueLabel = context.payableDate ? ` â€¢ Due ${context.payableDate}` : "";
         billStatus.textContent = "";
     }
-    if (billMonth) billMonth.textContent = `Month • ${monthLabel || "-"}`;
-    if (wingBadge) wingBadge.textContent = `Wing • ${context.wing || "-"}`;
+    if (billMonth) billMonth.textContent = `Month â€¢ ${monthLabel || "-"}`;
+    if (wingBadge) wingBadge.textContent = `Wing â€¢ ${context.wing || "-"}`;
     if (breakdownTotal) breakdownTotal.textContent = formatCurrency(billTotal || remaining || 0);
     if (breakdownRent) breakdownRent.textContent = formatCurrency(rentAmount);
     if (breakdownElec) breakdownElec.textContent = formatCurrency(electricityAmount);
@@ -956,6 +972,8 @@ async function openPaymentModal(payment = null, billContext = null) {
         paymentsState.editingId = payment.id;
         paymentsState.attachmentName = payment.attachmentName || "";
         paymentsState.attachmentUrl = normalizeAttachmentUrl(payment.attachmentUrl || "");
+        paymentsState.attachmentId = payment.attachmentId || "";
+        paymentsState.attachmentCommitted = !!(payment.attachmentUrl || payment.attachmentId);
         paymentsState.attachmentDataUrl = "";
 
         if (modeSelect && payment.mode) modeSelect.value = payment.mode;
@@ -984,6 +1002,7 @@ async function openPaymentModalFromBill(bill) {
 }
 
 function closePaymentModal() {
+    cancelAttachmentUpload();
     togglePaymentModal(false);
     if (paymentModalResetTimer) clearTimeout(paymentModalResetTimer);
     paymentModalResetTimer = setTimeout(() => {
@@ -1292,6 +1311,7 @@ async function handleSavePayment() {
         attachmentDataUrl: paymentsState.attachmentDataUrl,
         attachmentName: paymentsState.attachmentName,
         attachmentUrl: paymentsState.attachmentUrl,
+        attachmentId: paymentsState.attachmentId,
         tenancyId: context.tenancyId,
         billLineId: context.billLineId,
     };
@@ -1321,6 +1341,8 @@ async function handleSavePayment() {
     paymentsState.attachmentDataUrl = "";
     paymentsState.attachmentName = savedPayment.attachmentName || "";
     paymentsState.attachmentUrl = normalizeAttachmentUrl(savedPayment.attachmentUrl || "");
+    paymentsState.attachmentId = savedPayment.attachmentId || paymentsState.attachmentId || "";
+    paymentsState.attachmentCommitted = true;
 
     const remainingAfter =
         Math.max(
@@ -1339,6 +1361,101 @@ function isPaymentModalVisible() {
     return !!modal && !modal.classList.contains("hidden");
 }
 
+function cancelAttachmentUpload() {
+    if (paymentsState.uploadController) {
+        paymentsState.uploadController.cancelled = true;
+        if (typeof paymentsState.uploadController.abort === "function") {
+            paymentsState.uploadController.abort();
+        }
+    }
+    paymentsState.uploadController = null;
+    paymentsState.uploadingAttachment = false;
+    paymentsState.uploadProgress = 0;
+    const progressWrap = document.getElementById("paymentAttachmentProgress");
+    const progressFill = document.getElementById("paymentAttachmentProgressFill");
+    const progressLabel = document.getElementById("paymentAttachmentProgressLabel");
+    if (progressWrap) progressWrap.classList.add("hidden");
+    if (progressFill) progressFill.style.width = "0%";
+    if (progressLabel) progressLabel.textContent = "";
+}
+
+function clearAttachmentState() {
+    paymentsState.attachmentId = "";
+    paymentsState.attachmentDataUrl = "";
+    paymentsState.attachmentName = "";
+    paymentsState.attachmentUrl = "";
+    paymentsState.attachmentPreviewUrl = "";
+    paymentsState.attachmentViewUrl = "";
+    paymentsState.attachmentCommitted = false;
+}
+
+async function discardUploadedAttachment() {
+    const committed = paymentsState.attachmentCommitted;
+    const id = paymentsState.attachmentId;
+    clearAttachmentState();
+    if (!id || committed) return;
+    try {
+        await deleteAttachment(id);
+    } catch (err) {
+        console.warn("Unable to delete attachment", err);
+    }
+}
+
+function setAttachmentUploadProgress(percent, label) {
+    const progressWrap = document.getElementById("paymentAttachmentProgress");
+    const progressFill = document.getElementById("paymentAttachmentProgressFill");
+    const progressLabel = document.getElementById("paymentAttachmentProgressLabel");
+    if (!progressWrap || !progressFill || !progressLabel) return;
+    if (percent === null || percent === undefined) {
+        progressWrap.classList.add("hidden");
+        progressFill.style.width = "0%";
+        progressLabel.textContent = "";
+        paymentsState.uploadProgress = 0;
+        return;
+    }
+    paymentsState.uploadProgress = Math.max(0, Math.min(100, percent));
+    progressWrap.classList.remove("hidden");
+    progressFill.style.width = `${paymentsState.uploadProgress}%`;
+    progressLabel.textContent = label || "Uploading...";
+}
+
+function approxBytesFromDataUrl(dataUrl) {
+    if (!dataUrl) return 0;
+    const comma = dataUrl.indexOf(",");
+    if (comma === -1) return 0;
+    const base64 = dataUrl.slice(comma + 1);
+    return Math.floor((base64.length * 3) / 4);
+}
+
+function getTauriInvoke() {
+    if (window.__TAURI__?.core?.invoke) return window.__TAURI__.core.invoke;
+    if (window.__TAURI_INTERNALS__?.invoke) return window.__TAURI_INTERNALS__.invoke;
+    return null;
+}
+
+async function compressImageWithRust(dataUrl, controller) {
+    const invoke = getTauriInvoke();
+    const fallback = {
+        dataUrl,
+        bytes: approxBytesFromDataUrl(dataUrl),
+        mimeType: "",
+    };
+    if (typeof invoke !== "function") return fallback;
+    if (controller?.cancelled) throw new Error("cancelled");
+    try {
+        const result = await invoke("compress_receipt_image", {
+            dataUrl,
+            maxDim: 2000,
+        });
+        if (controller?.cancelled) throw new Error("cancelled");
+        return result || fallback;
+    } catch (err) {
+        if (controller?.cancelled) throw new Error("cancelled");
+        console.warn("compressImageWithRust failed, using original image", err);
+        return fallback;
+    }
+}
+
 function readFileAsDataUrl(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -1354,26 +1471,111 @@ async function updateAttachmentFromFile(file) {
         showToast("Please use an image file for the receipt", "warning");
         return false;
     }
-    if (file.size > 2 * 1024 * 1024) {
-        showToast("Please choose an image under 2 MB", "warning");
+
+    const context = paymentsState.billContext || {};
+    if (!context.monthKey || !context.tenantName) {
+        showToast("Open the payment modal from a bill before adding a receipt", "warning");
         return false;
     }
+
+    if (paymentsState.attachmentId && !paymentsState.attachmentCommitted) {
+        await discardUploadedAttachment();
+    }
+
+    cancelAttachmentUpload();
+    const controller = { cancelled: false };
+    paymentsState.uploadController = controller;
+    paymentsState.uploadingAttachment = true;
+    setAttachmentUploadProgress(5, "Reading image...");
+    const attachmentPreview = document.getElementById("paymentAttachmentPreview");
+    if (attachmentPreview) attachmentPreview.classList.remove("hidden");
 
     let dataUrl = "";
+    let compressedBytes = 0;
     try {
         dataUrl = await readFileAsDataUrl(file);
+        if (controller.cancelled) throw new Error("cancelled");
+        setAttachmentUploadProgress(35, "Compressing image...");
+        const optimized = await compressImageWithRust(dataUrl, controller);
+        if (controller.cancelled) throw new Error("cancelled");
+        dataUrl = optimized.data_url || optimized.dataUrl || dataUrl;
+        compressedBytes = Number(optimized.bytes) || approxBytesFromDataUrl(dataUrl);
+        const approxKb = Math.max(1, Math.round(compressedBytes / 1024));
+        setAttachmentUploadProgress(55, `Compressed ~${approxKb} KB`);
     } catch (err) {
+        if (controller.cancelled || err?.message === "cancelled") {
+            cancelAttachmentUpload();
+            return false;
+        }
         console.warn("Unable to read attachment", err);
         showToast("Could not read the image. Please try again.", "error");
+        cancelAttachmentUpload();
         return false;
     }
-    const ext = (file.type?.split("/")[1] || "png").split(";")[0];
-    const name = file.name || `pasted-receipt.${ext}`;
+    if (controller.cancelled) {
+        cancelAttachmentUpload();
+        return false;
+    }
 
-    paymentsState.attachmentDataUrl = dataUrl || "";
-    paymentsState.attachmentName = name;
-    paymentsState.attachmentUrl = dataUrl || "";
-    await showAttachmentPreview(name, dataUrl || "");
+    const totalBytes = compressedBytes || approxBytesFromDataUrl(dataUrl);
+    const totalKb = totalBytes ? Math.max(1, Math.round(totalBytes / 1024)) : 0;
+    const uploadBase = 60;
+    const uploadSpan = 35;
+    const uploadId = `receipt-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setAttachmentUploadProgress(uploadBase, totalKb ? `Uploading 0 / ${totalKb} KB` : "Uploading...");
+    const uploadResult = await uploadPaymentAttachment(
+        {
+            dataUrl,
+            attachmentName: file.name || "",
+            tenantName: context.tenantName,
+            monthKey: context.monthKey,
+            paymentId: paymentsState.editingId || `temp-${Date.now()}`,
+        },
+        {
+            uploadId,
+            onProgress: ({ loaded, total, percent }) => {
+                if (controller.cancelled) return;
+                const resolvedTotal = total || totalBytes || 0;
+                const loadedKb = Math.round((loaded || 0) / 1024);
+                const resolvedKb = resolvedTotal ? Math.max(1, Math.round(resolvedTotal / 1024)) : 0;
+                let progress = uploadBase;
+                if (typeof percent === "number") {
+                    progress = uploadBase + (percent / 100) * uploadSpan;
+                } else if (resolvedTotal) {
+                    progress = uploadBase + Math.min(1, (loaded || 0) / resolvedTotal) * uploadSpan;
+                }
+                const label = resolvedKb
+                    ? `Uploading ${loadedKb} / ${resolvedKb} KB`
+                    : `Uploading ${loadedKb} KB`;
+                setAttachmentUploadProgress(Math.min(99, progress), label);
+            },
+            onAbort: (abortFn) => {
+                controller.abort = abortFn;
+            },
+        }
+    );
+
+    if (!uploadResult?.ok || !uploadResult.attachment) {
+        if (controller.cancelled) {
+            cancelAttachmentUpload();
+            return false;
+        }
+        showToast("Failed to upload receipt. Please try again.", "error");
+        cancelAttachmentUpload();
+        return false;
+    }
+
+    const { attachment_id, attachmentUrl, attachmentName } = uploadResult.attachment;
+    clearAttachmentState();
+    paymentsState.attachmentId = attachment_id || "";
+    paymentsState.attachmentName = attachmentName || file.name || "";
+    paymentsState.attachmentUrl = attachmentUrl || "";
+    paymentsState.attachmentCommitted = false;
+    await showAttachmentPreview(paymentsState.attachmentName, paymentsState.attachmentUrl || dataUrl || "");
+    setAttachmentUploadProgress(100, "Uploaded");
+    setTimeout(() => setAttachmentUploadProgress(null), 600);
+    paymentsState.uploadController = null;
+    paymentsState.uploadingAttachment = false;
     return true;
 }
 
@@ -1404,12 +1606,10 @@ function wireAttachmentHandlers() {
 
     if (clearBtn) {
         clearBtn.addEventListener("click", async () => {
+            cancelAttachmentUpload();
+            await discardUploadedAttachment();
             if (input) input.value = "";
-            paymentsState.attachmentDataUrl = "";
-            paymentsState.attachmentName = "";
-            paymentsState.attachmentUrl = "";
-            paymentsState.attachmentPreviewUrl = "";
-            paymentsState.attachmentViewUrl = "";
+            clearAttachmentState();
             await showAttachmentPreview("No file selected", "");
             if (nameLabel) nameLabel.textContent = "No file selected";
             if (pasteHint)
@@ -1520,3 +1720,8 @@ export async function refreshPaymentsIfNeeded(force = false) {
         await loadPayments();
     }
 }
+
+
+
+
+
