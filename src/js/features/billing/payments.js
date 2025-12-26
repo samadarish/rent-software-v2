@@ -64,6 +64,10 @@ const paymentsState = {
 };
 
 const BILL_MONTHS_BACK = 24;
+const RECEIPT_MAX_DIM = 1100;
+const RECEIPT_JPEG_QUALITY = 0.68;
+const RECEIPT_TARGET_BYTES = 350 * 1024;
+const RECEIPT_OUTPUT_MIME = "image/jpeg";
 
 const attachmentPreviewCache = new Map();
 let paymentHistoryLoading = false;
@@ -431,7 +435,10 @@ function resetPaymentForm() {
     if (attachmentPreview) {
         attachmentPreview.classList.add("hidden");
         const img = attachmentPreview.querySelector("img");
-        if (img) img.src = "";
+        if (img) {
+            img.src = "";
+            img.classList.add("hidden");
+        }
     }
     if (attachmentName) attachmentName.textContent = "No file selected";
     if (attachmentLink) attachmentLink.classList.add("hidden");
@@ -865,11 +872,15 @@ async function showAttachmentPreview(name, url) {
             if (img) {
                 img.referrerPolicy = "no-referrer";
                 img.src = previewUrl;
+                img.classList.remove("hidden");
             }
             attachmentPreview.classList.remove("hidden");
             attachmentPreview.classList.add("cursor-pointer");
         } else {
-            if (img) img.src = "";
+            if (img) {
+                img.src = "";
+                img.classList.add("hidden");
+            }
             attachmentPreview.classList.add("hidden");
             attachmentPreview.classList.remove("cursor-pointer");
         }
@@ -1269,6 +1280,10 @@ async function handleSavePayment() {
         showToast("Open the modal from a generated bill to link the payment", "warning");
         return;
     }
+    if (paymentsState.uploadingAttachment) {
+        showToast("Receipt image is still uploading. Please wait for it to finish.", "warning");
+        return;
+    }
 
     const dateValue = dateInput?.value || new Date().toISOString().slice(0, 10);
     const rawAmount = amountInput?.value || "";
@@ -1427,33 +1442,41 @@ function approxBytesFromDataUrl(dataUrl) {
     return Math.floor((base64.length * 3) / 4);
 }
 
-function getTauriInvoke() {
-    if (window.__TAURI__?.core?.invoke) return window.__TAURI__.core.invoke;
-    if (window.__TAURI_INTERNALS__?.invoke) return window.__TAURI_INTERNALS__.invoke;
-    return null;
+function isImageMimeType(mimeType) {
+    return (mimeType || "").toLowerCase().startsWith("image/");
 }
 
-async function compressImageWithRust(dataUrl, controller) {
-    const invoke = getTauriInvoke();
-    const fallback = {
-        dataUrl,
-        bytes: approxBytesFromDataUrl(dataUrl),
-        mimeType: "",
-    };
-    if (typeof invoke !== "function") return fallback;
-    if (controller?.cancelled) throw new Error("cancelled");
-    try {
-        const result = await invoke("compress_receipt_image", {
-            dataUrl,
-            maxDim: 2000,
-        });
-        if (controller?.cancelled) throw new Error("cancelled");
-        return result || fallback;
-    } catch (err) {
-        if (controller?.cancelled) throw new Error("cancelled");
-        console.warn("compressImageWithRust failed, using original image", err);
-        return fallback;
-    }
+function isImageFileName(name) {
+    return /\.(png|jpe?g|gif|webp|bmp)$/i.test(name || "");
+}
+
+function isImageDataUrl(dataUrl) {
+    return /^data:image\//i.test(dataUrl || "");
+}
+
+function getMimeFromDataUrl(dataUrl, fallback = "") {
+    const match = /^data:([^;]+);/i.exec(dataUrl || "");
+    return match?.[1] || fallback;
+}
+
+function normalizeImageDataUrl(dataUrl, mimeTypeHint) {
+    if (!dataUrl) return dataUrl;
+    if (isImageDataUrl(dataUrl)) return dataUrl;
+    const mimeType = isImageMimeType(mimeTypeHint) ? mimeTypeHint : "";
+    if (!mimeType) return dataUrl;
+    const comma = dataUrl.indexOf(",");
+    if (comma === -1) return dataUrl;
+    const payload = dataUrl.slice(comma + 1);
+    return `data:${mimeType};base64,${payload}`;
+}
+
+function readBlobAsDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result || "");
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+    });
 }
 
 function readFileAsDataUrl(file) {
@@ -1465,9 +1488,321 @@ function readFileAsDataUrl(file) {
     });
 }
 
-async function updateAttachmentFromFile(file) {
+function loadImageFromFile(file, controller) {
+    return new Promise((resolve, reject) => {
+        if (!file) {
+            reject(new Error("missing file"));
+            return;
+        }
+        if (controller?.cancelled) {
+            reject(new Error("cancelled"));
+            return;
+        }
+        const objectUrl = URL.createObjectURL(file);
+        const img = new Image();
+        const finalize = (handler) => (value) => {
+            URL.revokeObjectURL(objectUrl);
+            if (controller?.cancelled) {
+                reject(new Error("cancelled"));
+                return;
+            }
+            handler(value);
+        };
+        img.onload = finalize(() => resolve(img));
+        img.onerror = finalize((err) => reject(err));
+        img.src = objectUrl;
+    });
+}
+
+async function canvasToDataUrl(canvas, mimeType, quality) {
+    if (typeof canvas.toBlob !== "function") {
+        const fallbackDataUrl = canvas.toDataURL(mimeType, quality);
+        const resolvedMime = getMimeFromDataUrl(fallbackDataUrl, mimeType);
+        return {
+            dataUrl: fallbackDataUrl,
+            bytes: approxBytesFromDataUrl(fallbackDataUrl),
+            mimeType: resolvedMime,
+        };
+    }
+    return new Promise((resolve) => {
+        canvas.toBlob(
+            async (blob) => {
+                if (!blob) {
+                    const fallbackDataUrl = canvas.toDataURL(mimeType, quality);
+                    const resolvedMime = getMimeFromDataUrl(fallbackDataUrl, mimeType);
+                    resolve({
+                        dataUrl: fallbackDataUrl,
+                        bytes: approxBytesFromDataUrl(fallbackDataUrl),
+                        mimeType: resolvedMime,
+                    });
+                    return;
+                }
+                try {
+                    const dataUrl = await readBlobAsDataUrl(blob);
+                    resolve({
+                        dataUrl,
+                        bytes: blob.size,
+                        mimeType: blob.type || mimeType,
+                    });
+                } catch (err) {
+                    const fallbackDataUrl = canvas.toDataURL(mimeType, quality);
+                    resolve({
+                        dataUrl: fallbackDataUrl,
+                        bytes: approxBytesFromDataUrl(fallbackDataUrl),
+                        mimeType,
+                    });
+                }
+            },
+            mimeType,
+            quality
+        );
+    });
+}
+
+function getExtensionForMime(mimeType) {
+    const normalized = (mimeType || "").toLowerCase();
+    if (normalized === "image/jpeg" || normalized === "image/jpg") return "jpg";
+    if (normalized === "image/png") return "png";
+    if (normalized === "image/webp") return "webp";
+    return "";
+}
+
+function buildAttachmentName(originalName, mimeType) {
+    const extension = getExtensionForMime(mimeType);
+    const baseName = (originalName || "receipt").replace(/\.[^.]+$/, "");
+    if (!extension) {
+        return originalName || "receipt";
+    }
+    return `${baseName}.${extension}`;
+}
+
+function buildQualityCandidates(primary) {
+    const candidates = [primary, 0.6, 0.52, 0.45];
+    const unique = [];
+    candidates.forEach((quality) => {
+        const clamped = Math.max(0.35, Math.min(0.9, Number(quality) || 0));
+        if (!unique.some((value) => Math.abs(value - clamped) < 0.001)) {
+            unique.push(clamped);
+        }
+    });
+    return unique;
+}
+
+function dataUrlToFile(dataUrl, baseName) {
+    const comma = dataUrl.indexOf(",");
+    if (comma === -1) {
+        return null;
+    }
+    const header = dataUrl.slice(0, comma);
+    const data = dataUrl.slice(comma + 1);
+    const isBase64 = /;base64/i.test(header);
+    const mimeType = getMimeFromDataUrl(dataUrl, "");
+    let bytes;
+    if (isBase64) {
+        const binary = atob(data);
+        const len = binary.length;
+        bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i += 1) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+    } else {
+        const decoded = decodeURIComponent(data);
+        bytes = new TextEncoder().encode(decoded);
+    }
+    const blob = new Blob([bytes], { type: mimeType || "" });
+    const extension = getExtensionForMime(mimeType) || "png";
+    const name = `${baseName || "clipboard-image"}.${extension}`;
+    if (typeof File === "function") {
+        return new File([blob], name, { type: mimeType || "" });
+    }
+    return Object.assign(blob, { name });
+}
+
+function extractImageDataUrl(clipboard) {
+    if (!clipboard?.getData) return "";
+    const html = clipboard.getData("text/html") || "";
+    const htmlMatch = html.match(/data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+/i);
+    if (htmlMatch?.[0]) return htmlMatch[0];
+    const text = clipboard.getData("text/plain") || "";
+    const textMatch = text.match(/data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+/i);
+    return textMatch?.[0] || "";
+}
+
+function readClipboardStringItem(item) {
+    return new Promise((resolve) => {
+        if (!item || typeof item.getAsString !== "function") {
+            resolve("");
+            return;
+        }
+        try {
+            item.getAsString((value) => resolve(value || ""));
+        } catch (err) {
+            resolve("");
+        }
+    });
+}
+
+async function getClipboardImage(clipboard) {
+    const items = Array.from(clipboard?.items || []);
+    const itemWithImage = items.find((item) => item.kind === "file" && isImageMimeType(item.type));
+    let file = itemWithImage?.getAsFile() || null;
+    let mimeTypeHint = itemWithImage?.type || "";
+    if (!file) {
+        const fileFromFiles = Array.from(clipboard?.files || []).find((candidate) => {
+            if (!candidate) return false;
+            return isImageMimeType(candidate.type) || isImageFileName(candidate.name);
+        });
+        if (fileFromFiles) {
+            file = fileFromFiles;
+            mimeTypeHint = fileFromFiles.type || "";
+        }
+    }
+    if (!file) {
+        const stringImageItem = items.find((item) => item.kind === "string" && isImageMimeType(item.type));
+        if (stringImageItem) {
+            const value = await readClipboardStringItem(stringImageItem);
+            const base = value && !/^data:/i.test(value) && isImageMimeType(stringImageItem.type)
+                ? `data:${stringImageItem.type};base64,${value}`
+                : value;
+            const normalized = normalizeImageDataUrl(base, stringImageItem.type);
+            file = dataUrlToFile(normalized, "clipboard-image");
+            mimeTypeHint = stringImageItem.type || mimeTypeHint;
+        }
+    }
+    if (!file) {
+        const dataUrl = extractImageDataUrl(clipboard);
+        if (dataUrl) {
+            const normalized = normalizeImageDataUrl(dataUrl, mimeTypeHint);
+            file = dataUrlToFile(normalized, "clipboard-image");
+            mimeTypeHint = getMimeFromDataUrl(normalized, mimeTypeHint);
+        }
+    }
+    if (!file && navigator.clipboard?.read) {
+        try {
+            const clipboardItems = await navigator.clipboard.read();
+            const imageItem = clipboardItems.find((item) =>
+                item.types?.some((type) => isImageMimeType(type))
+            );
+            if (imageItem) {
+                const type = imageItem.types.find((t) => isImageMimeType(t)) || "";
+                const blob = await imageItem.getType(type);
+                const extension = getExtensionForMime(type) || "png";
+                const name = `clipboard-image.${extension}`;
+                if (typeof File === "function") {
+                    file = new File([blob], name, { type });
+                } else {
+                    file = Object.assign(blob, { name });
+                }
+                mimeTypeHint = type;
+            }
+        } catch (err) {
+            console.warn("Clipboard read failed", err);
+        }
+    }
+
+    return { file, mimeTypeHint };
+}
+
+async function compressImageInBrowser(file, controller, mimeTypeHint = "") {
+    const originalBytes = file?.size || 0;
+    const ensureNotCancelled = () => {
+        if (controller?.cancelled) {
+            throw new Error("cancelled");
+        }
+    };
+    const buildFallback = async () => {
+        ensureNotCancelled();
+        const fallbackDataUrl = await readFileAsDataUrl(file);
+        const resolvedMime = getMimeFromDataUrl(fallbackDataUrl, file?.type || mimeTypeHint || "");
+        ensureNotCancelled();
+        return {
+            dataUrl: normalizeImageDataUrl(fallbackDataUrl, resolvedMime || mimeTypeHint),
+            bytes: originalBytes || approxBytesFromDataUrl(fallbackDataUrl),
+            mimeType: resolvedMime,
+        };
+    };
+
+    ensureNotCancelled();
+    let image = null;
+    try {
+        image = await loadImageFromFile(file, controller);
+    } catch (err) {
+        if (controller?.cancelled) throw new Error("cancelled");
+        console.warn("Image load failed, using original image", err);
+        return buildFallback();
+    }
+
+    ensureNotCancelled();
+    const width = image.width || 0;
+    const height = image.height || 0;
+    if (!width || !height) {
+        return buildFallback();
+    }
+    const scale = Math.min(1, RECEIPT_MAX_DIM / Math.max(width, height));
+    const targetWidth = Math.max(1, Math.round(width * scale));
+    const targetHeight = Math.max(1, Math.round(height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) {
+        return buildFallback();
+    }
+
+    if (scale < 1) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+    }
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, targetWidth, targetHeight);
+    ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+    let best = null;
+    const qualities = buildQualityCandidates(RECEIPT_JPEG_QUALITY);
+    for (const quality of qualities) {
+        ensureNotCancelled();
+        const attempt = await canvasToDataUrl(canvas, RECEIPT_OUTPUT_MIME, quality);
+        ensureNotCancelled();
+        if (!attempt?.dataUrl) continue;
+        const attemptBytes = Number(attempt.bytes) || approxBytesFromDataUrl(attempt.dataUrl);
+        const resolved = {
+            dataUrl: attempt.dataUrl,
+            bytes: attemptBytes,
+            mimeType: attempt.mimeType || RECEIPT_OUTPUT_MIME,
+        };
+        if (!best || attemptBytes < best.bytes) {
+            best = resolved;
+        }
+        if (attemptBytes && attemptBytes <= RECEIPT_TARGET_BYTES) {
+            break;
+        }
+    }
+
+    if (!best?.dataUrl) {
+        return buildFallback();
+    }
+
+    const optimizedBytes = best.bytes || approxBytesFromDataUrl(best.dataUrl);
+    if (originalBytes && optimizedBytes && optimizedBytes >= originalBytes) {
+        return buildFallback();
+    }
+
+    return {
+        dataUrl: best.dataUrl,
+        bytes: optimizedBytes,
+        mimeType: best.mimeType || RECEIPT_OUTPUT_MIME,
+    };
+}
+
+async function updateAttachmentFromFile(file, options = {}) {
+    const mimeTypeHint = options.mimeTypeHint || "";
+    const allowUnknown = !!options.allowUnknown;
     if (!file) return false;
-    if (!file.type?.startsWith("image/")) {
+    const hasName = !!file.name;
+    const hasType = !!file.type;
+    const isImageHint = isImageMimeType(file.type) || isImageMimeType(mimeTypeHint) || isImageFileName(file.name);
+    if (!allowUnknown && !isImageHint && (hasName || hasType)) {
         showToast("Please use an image file for the receipt", "warning");
         return false;
     }
@@ -1492,18 +1827,43 @@ async function updateAttachmentFromFile(file) {
 
     let dataUrl = "";
     let compressedBytes = 0;
+    let uploadName = file.name || "receipt";
     try {
-        dataUrl = await readFileAsDataUrl(file);
+        setAttachmentUploadProgress(35, "Optimizing image...");
+        const optimized = await compressImageInBrowser(file, controller, mimeTypeHint);
         if (controller.cancelled) throw new Error("cancelled");
-        setAttachmentUploadProgress(35, "Compressing image...");
-        const optimized = await compressImageWithRust(dataUrl, controller);
-        if (controller.cancelled) throw new Error("cancelled");
-        dataUrl = optimized.data_url || optimized.dataUrl || dataUrl;
+        dataUrl = optimized.dataUrl || "";
+        if (!isImageDataUrl(dataUrl) && !isImageMimeType(optimized.mimeType || mimeTypeHint)) {
+            throw new Error("invalid-image");
+        }
         compressedBytes = Number(optimized.bytes) || approxBytesFromDataUrl(dataUrl);
+        uploadName = buildAttachmentName(
+            file.name || "receipt",
+            optimized.mimeType || file.type || mimeTypeHint || ""
+        );
         const approxKb = Math.max(1, Math.round(compressedBytes / 1024));
-        setAttachmentUploadProgress(55, `Compressed ~${approxKb} KB`);
+        setAttachmentUploadProgress(55, `Optimized ~${approxKb} KB`);
+        if (dataUrl && isImageDataUrl(dataUrl)) {
+            const linkWrap = document.getElementById("paymentAttachmentLink");
+            if (linkWrap) linkWrap.classList.add("hidden");
+            const preview = document.getElementById("paymentAttachmentPreview");
+            const previewImg = preview?.querySelector("img");
+            if (previewImg) {
+                previewImg.referrerPolicy = "no-referrer";
+                previewImg.src = dataUrl;
+                previewImg.classList.remove("hidden");
+            }
+            if (preview) preview.classList.remove("hidden");
+            paymentsState.attachmentPreviewUrl = dataUrl;
+            paymentsState.attachmentViewUrl = dataUrl;
+        }
     } catch (err) {
         if (controller.cancelled || err?.message === "cancelled") {
+            cancelAttachmentUpload();
+            return false;
+        }
+        if (err?.message === "invalid-image") {
+            showToast("Clipboard data isn't an image. Please paste an image.", "warning");
             cancelAttachmentUpload();
             return false;
         }
@@ -1526,7 +1886,7 @@ async function updateAttachmentFromFile(file) {
     const uploadResult = await uploadPaymentAttachment(
         {
             dataUrl,
-            attachmentName: file.name || "",
+            attachmentName: uploadName || file.name || "",
             tenantName: context.tenantName,
             monthKey: context.monthKey,
             paymentId: paymentsState.editingId || `temp-${Date.now()}`,
@@ -1555,6 +1915,18 @@ async function updateAttachmentFromFile(file) {
         }
     );
 
+    if (controller.cancelled) {
+        if (uploadResult?.attachment?.attachment_id) {
+            try {
+                await deleteAttachment(uploadResult.attachment.attachment_id);
+            } catch (err) {
+                console.warn("Unable to delete attachment", err);
+            }
+        }
+        cancelAttachmentUpload();
+        return false;
+    }
+
     if (!uploadResult?.ok || !uploadResult.attachment) {
         if (controller.cancelled) {
             cancelAttachmentUpload();
@@ -1568,7 +1940,7 @@ async function updateAttachmentFromFile(file) {
     const { attachment_id, attachmentUrl, attachmentName } = uploadResult.attachment;
     clearAttachmentState();
     paymentsState.attachmentId = attachment_id || "";
-    paymentsState.attachmentName = attachmentName || file.name || "";
+    paymentsState.attachmentName = attachmentName || uploadName || file.name || "";
     paymentsState.attachmentUrl = attachmentUrl || "";
     paymentsState.attachmentCommitted = false;
     await showAttachmentPreview(paymentsState.attachmentName, paymentsState.attachmentUrl || dataUrl || "");
@@ -1617,22 +1989,31 @@ function wireAttachmentHandlers() {
         });
     }
 
-    const handlePaste = async (e) => {
-        if (!isPaymentModalVisible()) return;
-        const items = Array.from(e.clipboardData?.items || []);
-        const file = items
-            .map((item) => (item.kind === "file" ? item.getAsFile() : null))
-            .find((f) => f && f.type?.startsWith("image/"));
-        if (!file) return;
+    let pasteFallbackTimer = null;
+    const handleClipboardImage = async (clipboard, event) => {
+        if (!isPaymentModalVisible()) return false;
+        if (event && event.__paymentPasteHandled) return false;
+        if (event) event.__paymentPasteHandled = true;
+        const { file, mimeTypeHint } = await getClipboardImage(clipboard);
+        if (!file) return false;
 
-        e.preventDefault();
-        const loaded = await updateAttachmentFromFile(file);
+        if (event?.preventDefault) event.preventDefault();
+        const loaded = await updateAttachmentFromFile(file, { mimeTypeHint, allowUnknown: true });
         if (loaded) {
             if (nameLabel) nameLabel.textContent = paymentsState.attachmentName || "";
             if (input) input.value = "";
             if (pasteHint) pasteHint.textContent = "Image added from clipboard. Paste again to replace.";
             if (pasteZone) pasteZone.blur();
         }
+        return loaded;
+    };
+
+    const handlePaste = (e) => {
+        if (pasteFallbackTimer) {
+            clearTimeout(pasteFallbackTimer);
+            pasteFallbackTimer = null;
+        }
+        handleClipboardImage(e.clipboardData, e);
     };
 
     if (modal) modal.addEventListener("paste", handlePaste);
@@ -1647,6 +2028,12 @@ function wireAttachmentHandlers() {
         pasteZone.addEventListener("keydown", (e) => {
             if (!e.ctrlKey && !e.metaKey && e.key.length === 1) {
                 e.preventDefault();
+            }
+            if (e.key.toLowerCase() === "v" && (e.ctrlKey || e.metaKey)) {
+                if (pasteFallbackTimer) clearTimeout(pasteFallbackTimer);
+                pasteFallbackTimer = setTimeout(() => {
+                    handleClipboardImage(null, null);
+                }, 80);
             }
         });
         pasteZone.addEventListener("drop", (e) => e.preventDefault());

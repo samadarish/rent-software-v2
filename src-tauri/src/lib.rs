@@ -1,22 +1,9 @@
-use base64::{engine::general_purpose, Engine as _};
-use image::codecs::jpeg::JpegEncoder;
-use image::codecs::webp::WebPEncoder;
-use image::{imageops::FilterType, ColorType, DynamicImage, GenericImageView};
 use serde::Serialize;
 use tauri::Emitter;
 use std::collections::HashMap;
 use std::io::{self, Read};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-
-#[derive(Serialize)]
-struct CompressionResult {
-    data_url: String,
-    mime_type: String,
-    bytes: usize,
-    width: u32,
-    height: u32,
-}
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -117,128 +104,6 @@ impl<R: Read> Read for ProgressReader<R> {
 }
 
 #[tauri::command]
-fn compress_receipt_image(data_url: String, max_dim: Option<u32>) -> Result<CompressionResult, String> {
-    let (original_mime, original_bytes) = parse_data_url(&data_url)?;
-    let decoded = match image::load_from_memory(&original_bytes) {
-        Ok(image) => image,
-        Err(_) => {
-            let data_url = build_data_url(&original_mime, &original_bytes);
-            return Ok(CompressionResult {
-                data_url,
-                mime_type: original_mime,
-                bytes: original_bytes.len(),
-                width: 0,
-                height: 0,
-            });
-        }
-    };
-    let (orig_width, orig_height) = decoded.dimensions();
-
-    let resized = resize_image(decoded, max_dim.unwrap_or(2000));
-    let (out_width, out_height) = resized.dimensions();
-
-    let mut candidates: Vec<(String, Vec<u8>)> = Vec::new();
-    if let Ok(bytes) = encode_webp_lossless(&resized) {
-        candidates.push(("image/webp".to_string(), bytes));
-    }
-    for quality in [85_u8, 75, 65] {
-        if let Ok(bytes) = encode_jpeg(&resized, quality) {
-            candidates.push(("image/jpeg".to_string(), bytes));
-        }
-    }
-
-    let mut best_mime = original_mime;
-    let mut best_bytes = original_bytes;
-    let mut best_width = orig_width;
-    let mut best_height = orig_height;
-
-    for (mime_type, bytes) in candidates {
-        if bytes.len() < best_bytes.len() {
-            best_mime = mime_type;
-            best_bytes = bytes;
-            best_width = out_width;
-            best_height = out_height;
-        }
-    }
-
-    let data_url = build_data_url(&best_mime, &best_bytes);
-    Ok(CompressionResult {
-        data_url,
-        mime_type: best_mime,
-        bytes: best_bytes.len(),
-        width: best_width,
-        height: best_height,
-    })
-}
-
-fn parse_data_url(input: &str) -> Result<(String, Vec<u8>), String> {
-    let input = input.trim();
-    if let Some(comma) = input.find(',') {
-        let (meta, data) = input.split_at(comma);
-        let meta = meta.trim_start_matches("data:");
-        let mime = meta
-            .split(';')
-            .next()
-            .unwrap_or("application/octet-stream")
-            .to_string();
-        let mut cleaned = data[1..].to_string();
-        cleaned.retain(|c| !c.is_whitespace());
-        let bytes = general_purpose::STANDARD
-            .decode(cleaned)
-            .map_err(|e| format!("Base64 decode failed: {e}"))?;
-        return Ok((mime, bytes));
-    }
-
-    let mut cleaned = input.to_string();
-    cleaned.retain(|c| !c.is_whitespace());
-    let bytes = general_purpose::STANDARD
-        .decode(cleaned)
-        .map_err(|e| format!("Base64 decode failed: {e}"))?;
-    Ok(("application/octet-stream".to_string(), bytes))
-}
-
-fn build_data_url(mime_type: &str, bytes: &[u8]) -> String {
-    let encoded = general_purpose::STANDARD.encode(bytes);
-    format!("data:{mime_type};base64,{encoded}")
-}
-
-fn resize_image(image: DynamicImage, max_dim: u32) -> DynamicImage {
-    if max_dim == 0 {
-        return image;
-    }
-    let (width, height) = image.dimensions();
-    if width <= max_dim && height <= max_dim {
-        return image;
-    }
-    let scale = (max_dim as f32 / width as f32).min(max_dim as f32 / height as f32);
-    let new_width = (width as f32 * scale).round().max(1.0) as u32;
-    let new_height = (height as f32 * scale).round().max(1.0) as u32;
-    image.resize(new_width, new_height, FilterType::Lanczos3)
-}
-
-fn encode_webp_lossless(image: &DynamicImage) -> Result<Vec<u8>, String> {
-    let rgba = image.to_rgba8();
-    let (width, height) = rgba.dimensions();
-    let mut out = Vec::new();
-    let encoder = WebPEncoder::new_lossless(&mut out);
-    encoder
-        .encode(rgba.as_raw(), width, height, ColorType::Rgba8)
-        .map_err(|e| e.to_string())?;
-    Ok(out)
-}
-
-fn encode_jpeg(image: &DynamicImage, quality: u8) -> Result<Vec<u8>, String> {
-    let rgb = image.to_rgb8();
-    let (width, height) = rgb.dimensions();
-    let mut out = Vec::new();
-    let mut encoder = JpegEncoder::new_with_quality(&mut out, quality);
-    encoder
-        .encode(rgb.as_raw(), width, height, ColorType::Rgb8)
-        .map_err(|e| e.to_string())?;
-    Ok(out)
-}
-
-#[tauri::command]
 fn upload_payment_attachment(
     app: tauri::AppHandle,
     state: tauri::State<UploadState>,
@@ -290,7 +155,6 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(UploadState::default())
         .invoke_handler(tauri::generate_handler![
-            compress_receipt_image,
             upload_payment_attachment,
             cancel_upload
         ])
