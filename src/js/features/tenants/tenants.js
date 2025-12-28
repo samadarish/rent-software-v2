@@ -134,7 +134,7 @@ function getTenantGroupKey(raw) {
  * @returns {string}
  */
 function getTenancyHistoryKey(history = {}) {
-    const candidates = [history.tenancyId, history.tenancy_id, history.tenancy_id, history.grnNumber];
+    const candidates = [history.tenancyId, history.tenancy_id, history.grnNumber];
     for (const candidate of candidates) {
         const key = (candidate || "").toString().trim().toLowerCase();
         if (key) return key;

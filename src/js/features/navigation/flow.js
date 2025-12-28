@@ -70,70 +70,47 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     toggleSection(paymentsSection, isPayments);
 
     // Update navigation button active states
-    const dashboardBtn = document.getElementById("navDashboardBtn");
-    const createTenantBtn = document.getElementById("navCreateTenantBtn");
-    const createAgreementBtn = document.getElementById("navCreateAgreementBtn");
-    const viewTenantsBtn = document.getElementById("navViewTenantsBtn");
-    const generateBillBtn = document.getElementById("navGenerateBillBtn");
-    const paymentsBtn = document.getElementById("navPaymentsBtn");
+    const navButtons = {
+        dashboard: "navDashboardBtn",
+        agreement: "navCreateAgreementBtn",
+        createTenantNew: "navCreateTenantBtn",
+        viewTenants: "navViewTenantsBtn",
+        generateBill: "navGenerateBillBtn",
+        payments: "navPaymentsBtn",
+    };
 
     const activeClasses = ["bg-slate-900", "text-white", "shadow-sm"];
     const inactiveTextClasses = ["text-slate-700"];
     const hoverClass = "hover:bg-slate-100";
 
-    [dashboardBtn, createTenantBtn, createAgreementBtn, viewTenantsBtn, generateBillBtn, paymentsBtn]
-        .filter(Boolean)
-        .forEach((btn) => {
-            btn.classList.remove(...activeClasses);
-            btn.classList.add(hoverClass, ...inactiveTextClasses);
-        });
+    Object.values(navButtons).forEach((id) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.classList.remove(...activeClasses);
+        btn.classList.add(hoverClass, ...inactiveTextClasses);
+    });
 
-    if (mode === "dashboard" && dashboardBtn) {
-        dashboardBtn.classList.remove(hoverClass, ...inactiveTextClasses);
-        dashboardBtn.classList.add(...activeClasses);
-    }
-
-    if (mode === "agreement" && createAgreementBtn) {
-        createAgreementBtn.classList.remove(hoverClass, ...inactiveTextClasses);
-        createAgreementBtn.classList.add(...activeClasses);
-    }
-
-    if (mode === "createTenantNew" && createTenantBtn) {
-        createTenantBtn.classList.remove(hoverClass, ...inactiveTextClasses);
-        createTenantBtn.classList.add(...activeClasses);
-    }
-
-    if (mode === "viewTenants" && viewTenantsBtn) {
-        viewTenantsBtn.classList.remove(hoverClass, ...inactiveTextClasses);
-        viewTenantsBtn.classList.add(...activeClasses);
-    }
-
-    if (mode === "generateBill" && generateBillBtn) {
-        generateBillBtn.classList.remove(hoverClass, ...inactiveTextClasses);
-        generateBillBtn.classList.add(...activeClasses);
-    }
-
-    if (mode === "payments" && paymentsBtn) {
-        paymentsBtn.classList.remove(hoverClass, ...inactiveTextClasses);
-        paymentsBtn.classList.add(...activeClasses);
+    const activeButtonId = navButtons[mode];
+    if (activeButtonId) {
+        const activeButton = document.getElementById(activeButtonId);
+        if (activeButton) {
+            activeButton.classList.remove(hoverClass, ...inactiveTextClasses);
+            activeButton.classList.add(...activeClasses);
+        }
     }
 
     // Update form title
     const titleEl = document.getElementById("mainFormTitle");
-    if (titleEl) {
-        if (mode === "dashboard") {
-            titleEl.textContent = "Dashboard";
-        } else if (mode === "agreement") {
-            titleEl.textContent = "Agreement Form";
-        } else if (mode === "createTenantNew") {
-            titleEl.textContent = "Create Tenant – Active";
-        } else if (mode === "viewTenants") {
-            titleEl.textContent = "Tenant Directory";
-        } else if (mode === "generateBill") {
-            titleEl.textContent = "Generate Bills";
-        } else if (mode === "payments") {
-            titleEl.textContent = "Payments";
-        }
+    const titleMap = {
+        dashboard: "Dashboard",
+        agreement: "Agreement Form",
+        createTenantNew: "Create Tenant – Active",
+        viewTenants: "Tenant Directory",
+        generateBill: "Generate Bills",
+        payments: "Payments",
+    };
+    if (titleEl && titleMap[mode]) {
+        titleEl.textContent = titleMap[mode];
     }
 
     // Toggle action buttons in Top and Bottom bars based on mode
@@ -144,23 +121,26 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
         });
     };
 
-    if (mode === "dashboard") {
-        toggleButtons(".btn-save-agreement", false);
-        toggleButtons(".btn-export-docx", false);
-        toggleButtons(".btn-create-new", false);
-    } else if (mode === "agreement") {
-        toggleButtons(".btn-save-agreement", true);
-        toggleButtons(".btn-export-docx", true);
-        toggleButtons(".btn-create-new", false);
-    } else if (mode === "createTenantNew") {
-        toggleButtons(".btn-save-agreement", false);
-        toggleButtons(".btn-export-docx", false);
-        toggleButtons(".btn-create-new", true);
-    } else if (mode === "viewTenants" || mode === "generateBill" || mode === "payments") {
-        toggleButtons(".btn-save-agreement", false);
-        toggleButtons(".btn-export-docx", false);
-        toggleButtons(".btn-create-new", false);
-    }
+    const actionVisibility = {
+        agreement: {
+            ".btn-save-agreement": true,
+            ".btn-export-docx": true,
+            ".btn-create-new": false,
+        },
+        createTenantNew: {
+            ".btn-save-agreement": false,
+            ".btn-export-docx": false,
+            ".btn-create-new": true,
+        },
+        default: {
+            ".btn-save-agreement": false,
+            ".btn-export-docx": false,
+            ".btn-create-new": false,
+        },
+    };
+
+    const actionConfig = actionVisibility[mode] || actionVisibility.default;
+    Object.entries(actionConfig).forEach(([selector, show]) => toggleButtons(selector, show));
 
     // Toggle sidebar content (clauses for agreement, placeholder for tenant modes)
     const clausesAgreementContent = document.getElementById("clausesAgreementContent");

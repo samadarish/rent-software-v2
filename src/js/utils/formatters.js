@@ -160,7 +160,7 @@ export function normalizeMonthKey(value, options = {}) {
 
     if (!value) return "";
 
-    if (value instanceof Date && !Number.isNaN(value)) {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
         const month = `${value.getUTCMonth() + 1}`.padStart(2, "0");
         const result = `${value.getUTCFullYear()}-${month}`;
         return lowercase ? result.toLowerCase() : result;
@@ -174,7 +174,7 @@ export function normalizeMonthKey(value, options = {}) {
     if (!Number.isNaN(numericValue) && /^\d+(?:\.0+)?$/.test(str) && numericValue > 30000) {
         const excelEpoch = Date.UTC(1899, 11, 30);
         const utcDate = new Date(excelEpoch + numericValue * 24 * 60 * 60 * 1000);
-        if (!Number.isNaN(utcDate)) {
+        if (!Number.isNaN(utcDate.getTime())) {
             const month = `${utcDate.getUTCMonth() + 1}`.padStart(2, "0");
             const result = `${utcDate.getUTCFullYear()}-${month}`;
             return lowercase ? result.toLowerCase() : result;
@@ -224,7 +224,7 @@ export function normalizeMonthKey(value, options = {}) {
     }
 
     const parsedDate = new Date(str);
-    if (!Number.isNaN(parsedDate)) {
+    if (!Number.isNaN(parsedDate.getTime())) {
         const month = `${parsedDate.getUTCMonth() + 1}`.padStart(2, "0");
         const result = `${parsedDate.getUTCFullYear()}-${month}`;
         return lowercase ? result.toLowerCase() : result;

@@ -7,7 +7,7 @@
 /**
  * Displays a toast notification to the user
  * @param {string} message - The message to display
- * @param {"success" | "error" | "info"} type - The type of toast (determines color)
+ * @param {"success" | "error" | "info" | "warning"} type - The type of toast (determines color)
  */
 export function showToast(message, type = "success") {
     const container = document.getElementById("toastContainer");
@@ -24,6 +24,8 @@ export function showToast(message, type = "success") {
         toast.classList.add("bg-emerald-600");
     } else if (type === "error") {
         toast.classList.add("bg-red-600");
+    } else if (type === "warning") {
+        toast.classList.add("bg-amber-500");
     } else {
         toast.classList.add("bg-slate-700");
     }

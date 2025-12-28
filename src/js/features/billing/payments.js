@@ -409,6 +409,7 @@ function resetPaymentForm() {
     const progressWrap = document.getElementById("paymentAttachmentProgress");
     const progressFill = document.getElementById("paymentAttachmentProgressFill");
     const progressLabel = document.getElementById("paymentAttachmentProgressLabel");
+    const zeroLabel = formatCurrency(0);
 
     if (dateInput) dateInput.value = todayIso;
     if (modeSelect) modeSelect.value = "UPI";
@@ -422,15 +423,15 @@ function resetPaymentForm() {
     }
 
     if (billTitle) billTitle.textContent = "Select a bill to record";
-    if (billAmount) billAmount.textContent = "â‚¹0";
+    if (billAmount) billAmount.textContent = zeroLabel;
     if (billStatus) billStatus.textContent = "Open this modal from a bill card to link the payment automatically.";
-    if (billMonth) billMonth.textContent = "Month â€¢ -";
-    if (wingBadge) wingBadge.textContent = "Wing â€¢ -";
-    if (breakdownTotal) breakdownTotal.textContent = "â‚¹0";
-    if (breakdownRent) breakdownRent.textContent = "â‚¹0";
-    if (breakdownElec) breakdownElec.textContent = "â‚¹0";
-    if (breakdownMotor) breakdownMotor.textContent = "â‚¹0";
-    if (breakdownSweep) breakdownSweep.textContent = "â‚¹0";
+    if (billMonth) billMonth.textContent = "Month • -";
+    if (wingBadge) wingBadge.textContent = "Wing • -";
+    if (breakdownTotal) breakdownTotal.textContent = zeroLabel;
+    if (breakdownRent) breakdownRent.textContent = zeroLabel;
+    if (breakdownElec) breakdownElec.textContent = zeroLabel;
+    if (breakdownMotor) breakdownMotor.textContent = zeroLabel;
+    if (breakdownSweep) breakdownSweep.textContent = zeroLabel;
 
     if (attachmentPreview) {
         attachmentPreview.classList.add("hidden");
@@ -664,7 +665,7 @@ function renderPaymentHistory(context = {}) {
 
     if (summary) {
         const totalPaid = sorted.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-        summary.textContent = `Showing ${sorted.length} partial payment${sorted.length === 1 ? "" : "s"} â€¢ Total recorded ${formatCurrency(totalPaid)}`;
+        summary.textContent = `Showing ${sorted.length} partial payment${sorted.length === 1 ? "" : "s"} • Total recorded ${formatCurrency(totalPaid)}`;
     }
 
     container.classList.remove("hidden");
@@ -719,18 +720,20 @@ function applyBillContext(context = {}) {
         billLineId: context.billLineId || "",
     };
 
+    const fallbackAmountLabel = formatCurrency(0);
+
     if (billTitle) billTitle.textContent = context.tenantName ? `${context.tenantName}` : "Select a bill to record";
     if (billAmount) {
         const headlineAmount = typeof remaining === "number" ? remaining : billTotal;
-        billAmount.textContent = billTotal ? formatCurrency(headlineAmount) : "â‚¹0";
+        billAmount.textContent = billTotal ? formatCurrency(headlineAmount) : fallbackAmountLabel;
     }
     if (dueWrap) dueWrap.classList.toggle("hidden", typeof remaining === "number" && remaining <= 0);
     if (billStatus) {
-        const dueLabel = context.payableDate ? ` â€¢ Due ${context.payableDate}` : "";
-        billStatus.textContent = "";
+        const dueLabel = context.payableDate ? `Due ${context.payableDate}` : "";
+        billStatus.textContent = dueLabel || "Bill selected";
     }
-    if (billMonth) billMonth.textContent = `Month â€¢ ${monthLabel || "-"}`;
-    if (wingBadge) wingBadge.textContent = `Wing â€¢ ${context.wing || "-"}`;
+    if (billMonth) billMonth.textContent = `Month • ${monthLabel || "-"}`;
+    if (wingBadge) wingBadge.textContent = `Wing • ${context.wing || "-"}`;
     if (breakdownTotal) breakdownTotal.textContent = formatCurrency(billTotal || remaining || 0);
     if (breakdownRent) breakdownRent.textContent = formatCurrency(rentAmount);
     if (breakdownElec) breakdownElec.textContent = formatCurrency(electricityAmount);

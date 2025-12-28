@@ -147,6 +147,14 @@ function wireAmountToWords(inputId, outputId) {
     });
 }
 
+function bindClick(id, handler) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.addEventListener("click", handler);
+    }
+    return el;
+}
+
 /**
  * Attaches all event handlers for the application
  * Called once on DOM load
@@ -169,53 +177,18 @@ export function attachEventHandlers() {
         noGrnCheckbox.addEventListener("change", handleNoGrnToggle);
     }
 
-    // Navigation: Create Agreement button
-    const navCreateAgreementBtn = document.getElementById("navCreateAgreementBtn");
-    if (navCreateAgreementBtn) {
-        navCreateAgreementBtn.addEventListener("click", () => {
-            switchFlow("agreement");
-        });
-    }
+    const navTargets = {
+        navDashboardBtn: "dashboard",
+        navGenerateBillBtn: "generateBill",
+        navPaymentsBtn: "payments",
+        navViewTenantsBtn: "viewTenants",
+        navCreateTenantBtn: "createTenantNew",
+        navCreateAgreementBtn: "agreement",
+    };
 
-    // Navigation: View Tenants button
-    const navViewTenantsBtn = document.getElementById("navViewTenantsBtn");
-    if (navViewTenantsBtn) {
-        navViewTenantsBtn.addEventListener("click", () => {
-            switchFlow("viewTenants");
-        });
-    }
-
-    // Navigation: Generate Bill button
-    const navGenerateBillBtn = document.getElementById("navGenerateBillBtn");
-    if (navGenerateBillBtn) {
-        navGenerateBillBtn.addEventListener("click", () => {
-            switchFlow("generateBill");
-        });
-    }
-
-    // Navigation: Dashboard button
-    const navDashboardBtn = document.getElementById("navDashboardBtn");
-    if (navDashboardBtn) {
-        navDashboardBtn.addEventListener("click", () => {
-            switchFlow("dashboard");
-        });
-    }
-
-    // Navigation: Payments button
-    const navPaymentsBtn = document.getElementById("navPaymentsBtn");
-    if (navPaymentsBtn) {
-        navPaymentsBtn.addEventListener("click", () => {
-            switchFlow("payments");
-        });
-    }
-
-    // Navigation: Create Tenant button
-    const navCreateTenantBtn = document.getElementById("navCreateTenantBtn");
-    if (navCreateTenantBtn) {
-        navCreateTenantBtn.addEventListener("click", () => {
-            switchFlow("createTenantNew");
-        });
-    }
+    Object.entries(navTargets).forEach(([id, mode]) => {
+        bindClick(id, () => switchFlow(mode));
+    });
 
     // Amount to words converters
     wireAmountToWords("rent_amount", "rent_amount_words");
@@ -234,34 +207,22 @@ export function attachEventHandlers() {
     }
 
     // App Script URL configuration modal
-    const navConfigBtn = document.getElementById("navConfigBtn");
-    if (navConfigBtn) {
-        navConfigBtn.addEventListener("click", () => {
-            const url = getAppScriptUrl();
-            const input = document.getElementById("appscript_url");
-            if (input) input.value = url || "";
-            const modal = document.getElementById("appscriptModal");
-            if (modal) showModal(modal);
-        });
-    }
+    bindClick("navConfigBtn", () => {
+        const url = getAppScriptUrl();
+        const input = document.getElementById("appscript_url");
+        if (input) input.value = url || "";
+        const modal = document.getElementById("appscriptModal");
+        if (modal) showModal(modal);
+    });
 
-    const navLandlordConfigBtn = document.getElementById("navLandlordConfigBtn");
-    if (navLandlordConfigBtn) {
-        navLandlordConfigBtn.addEventListener("click", openLandlordConfigModal);
-    }
+    bindClick("navLandlordConfigBtn", openLandlordConfigModal);
 
-    const appscriptCancelBtn = document.getElementById("appscriptCancelBtn");
-    if (appscriptCancelBtn) {
-        appscriptCancelBtn.addEventListener("click", () => {
-            const modal = document.getElementById("appscriptModal");
-            if (modal) hideModal(modal);
-        });
-    }
+    bindClick("appscriptCancelBtn", () => {
+        const modal = document.getElementById("appscriptModal");
+        if (modal) hideModal(modal);
+    });
 
-    const appscriptSaveBtn = document.getElementById("appscriptSaveBtn");
-    if (appscriptSaveBtn) {
-        appscriptSaveBtn.addEventListener("click", saveAppScriptUrl);
-    }
+    bindClick("appscriptSaveBtn", saveAppScriptUrl);
 
     const landlordDefaultsSaveBtn = document.getElementById("landlordDefaultsSaveBtn");
     if (landlordDefaultsSaveBtn) {
