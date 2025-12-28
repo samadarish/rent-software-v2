@@ -35,7 +35,6 @@ const paymentsState = {
         monthKey: "",
         monthLabel: "",
         billTotal: 0,
-        billed: false,
         tenantName: "",
         tenantKey: "",
         wing: "",
@@ -61,9 +60,21 @@ const paymentsState = {
     uploadingAttachment: false,
     uploadProgress: 0,
     uploadController: null,
+    pendingPagination: {
+        page: 1,
+        pageSize: 9,
+    },
+    paidFilters: {
+        fromMonth: "",
+        toMonth: "",
+        limit: 9,
+        hasSearched: false,
+    },
 };
 
 const BILL_MONTHS_BACK = 24;
+const PENDING_PAGE_SIZE = 9;
+const PAID_DEFAULT_LIMIT = 9;
 const RECEIPT_MAX_DIM = 1100;
 const RECEIPT_JPEG_QUALITY = 0.68;
 const RECEIPT_TARGET_BYTES = 350 * 1024;
@@ -165,51 +176,177 @@ function normalizeBooleanValue(value) {
     return !!value;
 }
 
+function normalizeMonthRange(fromMonth, toMonth) {
+    let from = normalizeMonthKey(fromMonth || "");
+    let to = normalizeMonthKey(toMonth || "");
+    if (from && to && from > to) {
+        [from, to] = [to, from];
+    }
+    return { from, to };
+}
+
+function resolveBillPaidFlag(bill = {}) {
+    const remainingRaw = bill?.remainingAmount ?? bill?.remaining_amount;
+    const amountPaidRaw = bill?.amountPaid ?? bill?.amount_paid;
+    const isPaidRaw = bill?.isPaid ?? bill?.is_paid;
+    const hasPaidRaw = bill?.hasPaid ?? bill?.has_paid;
+
+    if (isPaidRaw !== null && isPaidRaw !== undefined && isPaidRaw !== "") {
+        return normalizeBooleanValue(isPaidRaw);
+    }
+    if (hasPaidRaw !== null && hasPaidRaw !== undefined && hasPaidRaw !== "") {
+        return normalizeBooleanValue(hasPaidRaw);
+    }
+    if (remainingRaw !== null && remainingRaw !== undefined && remainingRaw !== "") {
+        return (Number(remainingRaw) || 0) <= 0;
+    }
+    if (amountPaidRaw !== null && amountPaidRaw !== undefined && amountPaidRaw !== "") {
+        const totalAmount = Number(bill?.totalAmount ?? bill?.total_amount) || 0;
+        const remaining = Math.max(0, totalAmount - (Number(amountPaidRaw) || 0));
+        if (totalAmount > 0) {
+            return remaining <= 0;
+        }
+    }
+    return null;
+}
+
+function trimBillForList(bill = {}) {
+    if (!bill || typeof bill !== "object") return bill;
+    return {
+        tenantName: bill.tenantName,
+        tenantKey: bill.tenantKey,
+        wing: bill.wing,
+        unitNumber: bill.unitNumber,
+        unit_number: bill.unit_number,
+        monthKey: bill.monthKey,
+        monthLabel: bill.monthLabel,
+        totalAmount: bill.totalAmount,
+        total_amount: bill.total_amount,
+        remainingAmount: bill.remainingAmount,
+        remaining_amount: bill.remaining_amount,
+        amountPaid: bill.amountPaid,
+        amount_paid: bill.amount_paid,
+        isPaid: bill.isPaid,
+        is_paid: bill.is_paid,
+        hasPaid: bill.hasPaid,
+        has_paid: bill.has_paid,
+        payableDate: bill.payableDate,
+        billLineId: bill.billLineId,
+        tenancyId: bill.tenancyId,
+    };
+}
+
+function filterPendingBills(bills = []) {
+    return bills.filter((bill) => {
+        const paidFlag = resolveBillPaidFlag(bill);
+        return paidFlag === false || paidFlag === null;
+    });
+}
+
+function applyPaidBillFilters(bills = [], filters = {}) {
+    const { from, to } = normalizeMonthRange(filters.fromMonth, filters.toMonth);
+    const limit = Number(filters.limit) || 0;
+
+    const filtered = bills.filter((bill) => {
+        if (resolveBillPaidFlag(bill) !== true) return false;
+        const billMonth = normalizeMonthKey(bill.monthKey || bill.monthLabel);
+        if (!billMonth) return false;
+        if (from && billMonth < from) return false;
+        if (to && billMonth > to) return false;
+        return true;
+    });
+
+    if (!limit) return filtered;
+    return filtered.slice(0, limit);
+}
+
+function clampPendingPage(totalItems) {
+    const pageSize = paymentsState.pendingPagination.pageSize || PENDING_PAGE_SIZE;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const page = Math.min(Math.max(1, paymentsState.pendingPagination.page || 1), totalPages);
+    paymentsState.pendingPagination.page = page;
+    return { page, pageSize, totalPages };
+}
+
+function updatePendingPaginationUi(totalItems) {
+    const wrapper = document.getElementById("pendingBillsPagination");
+    const info = document.getElementById("pendingBillsPageInfo");
+    const prevBtn = document.getElementById("pendingBillsPrev");
+    const nextBtn = document.getElementById("pendingBillsNext");
+    if (!wrapper) return;
+
+    const { page, totalPages } = clampPendingPage(totalItems);
+    if (info) {
+        info.textContent = totalItems
+            ? `Page ${page} of ${totalPages} - ${totalItems} total`
+            : "No pending bills";
+    }
+    if (prevBtn) {
+        prevBtn.disabled = page <= 1;
+        prevBtn.classList.toggle("opacity-50", prevBtn.disabled);
+    }
+    if (nextBtn) {
+        nextBtn.disabled = page >= totalPages;
+        nextBtn.classList.toggle("opacity-50", nextBtn.disabled);
+    }
+
+    wrapper.classList.toggle("hidden", totalItems <= (paymentsState.pendingPagination.pageSize || PENDING_PAGE_SIZE));
+}
+
+function readPaidFiltersFromUi() {
+    const fromInput = document.getElementById("paidBillsFrom");
+    const toInput = document.getElementById("paidBillsTo");
+    const limitSelect = document.getElementById("paidBillsLimit");
+    return {
+        fromMonth: normalizeMonthKey(fromInput?.value || ""),
+        toMonth: normalizeMonthKey(toInput?.value || ""),
+        limit: Number(limitSelect?.value) || PAID_DEFAULT_LIMIT,
+    };
+}
+
+function computeMonthsBackForRange(fromMonth, toMonth) {
+    const { from } = normalizeMonthRange(fromMonth, toMonth);
+    if (!from) return BILL_MONTHS_BACK;
+    const [yearStr, monthStr] = from.split("-");
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    if (!year || !month) return BILL_MONTHS_BACK;
+    const now = new Date();
+    const diff =
+        (now.getFullYear() - year) * 12 +
+        (now.getMonth() + 1 - month);
+    return Math.max(1, diff + 1);
+}
+
 function summarizeBillPayments(bill) {
     const totalAmount = Number(bill?.totalAmount ?? bill?.total_amount) || 0;
     const remainingRaw = bill?.remainingAmount ?? bill?.remaining_amount;
     const amountPaidRaw = bill?.amountPaid ?? bill?.amount_paid;
     const isPaidRaw = bill?.isPaid ?? bill?.is_paid;
+    const hasPaidRaw = bill?.hasPaid ?? bill?.has_paid;
     const hasRemaining = remainingRaw !== null && remainingRaw !== undefined && remainingRaw !== "";
     const hasAmountPaid = amountPaidRaw !== null && amountPaidRaw !== undefined && amountPaidRaw !== "";
     const hasIsPaid = isPaidRaw !== null && isPaidRaw !== undefined && isPaidRaw !== "";
+    const hasHasPaid = hasPaidRaw !== null && hasPaidRaw !== undefined && hasPaidRaw !== "";
+    const paidFlag = hasIsPaid
+        ? normalizeBooleanValue(isPaidRaw)
+        : hasHasPaid
+        ? normalizeBooleanValue(hasPaidRaw)
+        : null;
 
-    if (hasRemaining || hasAmountPaid || hasIsPaid) {
+    if (hasRemaining || hasAmountPaid || hasIsPaid || hasHasPaid) {
         const remaining = hasRemaining
             ? Math.max(0, Number(remainingRaw) || 0)
-            : hasIsPaid && normalizeBooleanValue(isPaidRaw)
+            : paidFlag === true
             ? 0
             : Math.max(0, totalAmount - (Number(amountPaidRaw) || 0));
-        const paidAmount = hasAmountPaid ? Number(amountPaidRaw) || 0 : Math.max(0, totalAmount - remaining);
         return {
-            paidAmount,
             remaining,
-            receiptCount: 0,
         };
     }
-
-    const { matches } = getPaymentsForBill(bill);
-
-    const paidAmount = matches.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    const remaining = Math.max(0, (Number(bill.totalAmount ?? bill.total_amount) || 0) - paidAmount);
-
     return {
-        paidAmount,
-        remaining,
-        receiptCount: matches.length,
+        remaining: totalAmount,
     };
-}
-
-function billHasStoredStatus(bill) {
-    const remainingRaw = bill?.remainingAmount ?? bill?.remaining_amount;
-    const amountPaidRaw = bill?.amountPaid ?? bill?.amount_paid;
-    const isPaidRaw = bill?.isPaid ?? bill?.is_paid;
-    return [remainingRaw, amountPaidRaw, isPaidRaw].some((value) => value !== null && value !== undefined && value !== "");
-}
-
-function billsHaveStoredStatus(bills = []) {
-    if (!bills.length) return true;
-    return bills.every((bill) => billHasStoredStatus(bill));
 }
 
 async function getBillDetailsForModal(bill) {
@@ -280,18 +417,6 @@ function normalizeMonthKey(value) {
     return normalizeMonthKeyBase(value, { lowercase: true });
 }
 
-function formatDownloadPath(url) {
-    if (!url || url.startsWith("data:")) return "";
-    try {
-        const parsed = new URL(url);
-        const id = parsed.searchParams.get("id");
-        if (id) return `drive:${id}`;
-        return `${parsed.hostname}${parsed.pathname}`;
-    } catch (err) {
-        return "";
-    }
-}
-
 function resolveUnitNumberForBill(bill) {
     const direct = bill?.unitNumber || bill?.unit_number;
     if (direct) return direct;
@@ -325,15 +450,18 @@ function resolveUnitNumberForBill(bill) {
     );
 }
 
-async function enrichBillsWithUnits(bills = []) {
+async function enrichBillsWithUnits(bills = [], options = {}) {
     if (!Array.isArray(bills) || !bills.length) return bills;
     const needsUnit = bills.some((bill) => !(bill.unitNumber || bill.unit_number));
     if (!needsUnit) return bills;
 
-    try {
-        await ensureTenantDirectoryLoaded();
-    } catch (err) {
-        return bills;
+    const allowFetch = options.allowFetch !== false;
+    if (allowFetch) {
+        try {
+            await ensureTenantDirectoryLoaded();
+        } catch (err) {
+            return bills;
+        }
     }
 
     return bills.map((bill) => {
@@ -364,7 +492,6 @@ function resetPaymentForm() {
         monthKey: "",
         monthLabel: "",
         billTotal: 0,
-        billed: false,
         tenantKey: "",
         tenantName: "",
         wing: "",
@@ -704,7 +831,6 @@ function applyBillContext(context = {}) {
         billTotal,
         amount: typeof context.amount === "number" ? context.amount : remaining,
         remaining,
-        billed: !!context.monthKey,
         tenantName: context.tenantName || "",
         tenantKey: context.tenantKey || context.grn || "",
         wing: context.wing || "",
@@ -961,13 +1087,6 @@ async function openPaymentModal(payment = null, billContext = null) {
         };
     }
 
-    const allBills = getAllGeneratedBills();
-    if (!context && allBills.length) {
-        const firstBill = allBills[0];
-        const summary = summarizeBillPayments(firstBill);
-        context = { ...firstBill, remaining: summary.remaining };
-    }
-
     if (modalTitle) {
         const isSettled = payment && (context?.remaining ?? 0) <= 0;
         if (isSettled) {
@@ -1031,6 +1150,8 @@ function setBillsTab(tab, options = {}) {
     const paidTab = document.getElementById("billsPaidTab");
     const pendingBody = document.getElementById("pendingBillsBody");
     const paidBody = document.getElementById("paidBillsBody");
+    const paidFilters = document.getElementById("paidBillsFilters");
+    const pendingPagination = document.getElementById("pendingBillsPagination");
     const loader = document.getElementById("generatedBillsLoader");
     const emptyState = document.getElementById("generatedBillsEmpty");
     if (pendingTab) {
@@ -1045,17 +1166,22 @@ function setBillsTab(tab, options = {}) {
         pendingBody.classList.toggle("hidden", tab !== "pending");
         paidBody.classList.toggle("hidden", tab !== "paid");
     }
-    if (!options.skipLoad && !isBillsLoaded(tab)) {
+    if (paidFilters) paidFilters.classList.toggle("hidden", tab !== "paid");
+    if (pendingPagination) pendingPagination.classList.toggle("hidden", tab !== "pending");
+
+    const deferPaidLoad = tab === "paid" && !paymentsState.paidFilters?.hasSearched;
+
+    if (!options.skipLoad && !isBillsLoaded(tab) && !deferPaidLoad) {
         if (loader) loader.classList.remove("hidden");
         if (emptyState) emptyState.classList.add("hidden");
         if (tab === "pending" && pendingBody) pendingBody.innerHTML = "";
         if (tab === "paid" && paidBody) paidBody.innerHTML = "";
     }
     if (options.forceLoad) {
-        loadGeneratedBills(tab, true);
+        loadGeneratedBills(tab, true, options);
         return;
     }
-    if (options.skipLoad) {
+    if (options.skipLoad || deferPaidLoad) {
         renderGeneratedBills();
         return;
     }
@@ -1121,6 +1247,27 @@ async function copyAttachmentToClipboard(url) {
     }
 }
 
+function setRecordButtonLoading(button, isLoading) {
+    if (!button) return;
+    if (isLoading) {
+        if (!button.dataset.label) {
+            button.dataset.label = button.textContent || "Record payment";
+        }
+        button.disabled = true;
+        button.classList.add("opacity-75", "cursor-wait");
+        button.innerHTML = `
+            <span class="inline-flex items-center gap-2">
+                <span class="inline-block h-3 w-3 rounded-full border-2 border-white border-t-transparent animate-spin"></span>
+                ${button.dataset.label}
+            </span>
+        `;
+        return;
+    }
+    button.disabled = false;
+    button.classList.remove("opacity-75", "cursor-wait");
+    button.textContent = button.dataset.label || "Record payment";
+}
+
 function renderGeneratedBills() {
     const pendingBody = document.getElementById("pendingBillsBody");
     const paidBody = document.getElementById("paidBillsBody");
@@ -1129,29 +1276,6 @@ function renderGeneratedBills() {
     if (!pendingBody || !paidBody) return;
 
     if (loader) loader.classList.add("hidden");
-    pendingBody.innerHTML = "";
-    paidBody.innerHTML = "";
-
-    const pendingBills = getBillsForStatus("pending");
-    const paidBills = getBillsForStatus("paid");
-    if (!pendingBills.length && !paidBills.length) {
-        if (emptyState) emptyState.classList.remove("hidden");
-        return;
-    }
-
-    if (emptyState) emptyState.classList.add("hidden");
-
-    const pending = [];
-    const paid = [];
-
-    pendingBills.forEach((bill) => {
-        const status = summarizeBillPayments(bill);
-        pending.push({ bill, status });
-    });
-    paidBills.forEach((bill) => {
-        const status = summarizeBillPayments(bill);
-        paid.push({ bill, status });
-    });
 
     const makeRow = (targetBody, { bill, status }, isPaid) => {
         const tr = document.createElement("tr");
@@ -1203,7 +1327,15 @@ function renderGeneratedBills() {
                 const btn = document.createElement("button");
                 btn.className = "px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500";
                 btn.textContent = "Record payment";
-                btn.addEventListener("click", () => openPaymentModalFromBill({ ...bill, remaining: status.remaining }));
+                btn.addEventListener("click", async () => {
+                    if (btn.disabled) return;
+                    setRecordButtonLoading(btn, true);
+                    try {
+                        await openPaymentModalFromBill({ ...bill, remaining: status.remaining });
+                    } finally {
+                        setRecordButtonLoading(btn, false);
+                    }
+                });
                 actionCell.appendChild(btn);
             }
         }
@@ -1212,22 +1344,61 @@ function renderGeneratedBills() {
     };
 
     const activeTab = paymentsState.activeBillTab || "pending";
-    if (pending.length) {
-        pending.forEach((entry) => makeRow(pendingBody, entry, false));
-    }
-    if (paid.length) {
-        paid.forEach((entry) => makeRow(paidBody, entry, true));
+    if (activeTab === "pending") {
+        pendingBody.innerHTML = "";
+        paidBody.classList.add("hidden");
+        pendingBody.classList.remove("hidden");
+
+        const pendingBills = filterPendingBills(getBillsForStatus("pending"));
+        if (!pendingBills.length) {
+            if (emptyState) {
+                emptyState.textContent = "No pending bills right now.";
+                emptyState.classList.remove("hidden");
+            }
+            updatePendingPaginationUi(0);
+            return;
+        }
+
+        if (emptyState) emptyState.classList.add("hidden");
+
+        const { page, pageSize } = clampPendingPage(pendingBills.length);
+        const startIdx = (page - 1) * pageSize;
+        const pageBills = pendingBills.slice(startIdx, startIdx + pageSize);
+        pageBills.forEach((bill) => {
+            const status = summarizeBillPayments(bill);
+            makeRow(pendingBody, { bill, status }, false);
+        });
+        updatePendingPaginationUi(pendingBills.length);
+        return;
     }
 
-    pendingBody.classList.toggle("hidden", activeTab !== "pending");
-    paidBody.classList.toggle("hidden", activeTab !== "paid");
+    paidBody.innerHTML = "";
+    pendingBody.classList.add("hidden");
+    paidBody.classList.remove("hidden");
 
-    const showEmptyPending = activeTab === "pending" && !pending.length;
-    const showEmptyPaid = activeTab === "paid" && !paid.length;
-    if (emptyState) {
-        emptyState.textContent = showEmptyPaid ? "No paid bills yet." : "No pending bills right now.";
-        emptyState.classList.toggle("hidden", pending.length + paid.length > 0 && !showEmptyPending && !showEmptyPaid);
+    if (!paymentsState.paidFilters?.hasSearched) {
+        if (emptyState) {
+            emptyState.textContent = "Select a month range and click Search to view paid bills.";
+            emptyState.classList.remove("hidden");
+        }
+        return;
     }
+
+    const paidBills = applyPaidBillFilters(getBillsForStatus("paid"), paymentsState.paidFilters);
+    if (!paidBills.length) {
+        if (emptyState) {
+            emptyState.textContent = "No paid bills match this search.";
+            emptyState.classList.remove("hidden");
+        }
+        return;
+    }
+
+    if (emptyState) emptyState.classList.add("hidden");
+
+    paidBills.forEach((bill) => {
+        const status = summarizeBillPayments(bill);
+        makeRow(paidBody, { bill, status }, true);
+    });
 }
 
 async function loadPayments() {
@@ -1235,10 +1406,13 @@ async function loadPayments() {
     paymentsState.items = Array.isArray(payments) ? payments : [];
     paymentsState.paymentIndex = buildPaymentIndex(paymentsState.items);
     paymentsState.loaded = true;
-    renderGeneratedBills();
 }
 
-async function loadGeneratedBills(status = paymentsState.activeBillTab || "pending", force = false) {
+async function loadGeneratedBills(
+    status = paymentsState.activeBillTab || "pending",
+    force = false,
+    options = {}
+) {
     const bucket = status === "paid" ? "paid" : "pending";
     if (!force && isBillsLoaded(bucket)) {
         renderGeneratedBills();
@@ -1249,11 +1423,25 @@ async function loadGeneratedBills(status = paymentsState.activeBillTab || "pendi
     if (loader) loader.classList.remove("hidden");
 
     try {
-        const payload = await fetchBillsMinimal(bucket, { monthsBack: BILL_MONTHS_BACK });
+        const monthsBack =
+            typeof options.monthsBack === "number"
+                ? options.monthsBack
+                : bucket === "paid"
+                ? computeMonthsBackForRange(
+                      paymentsState.paidFilters?.fromMonth,
+                      paymentsState.paidFilters?.toMonth
+                  )
+                : BILL_MONTHS_BACK;
+        const payload = await fetchBillsMinimal(bucket, { monthsBack });
         const bills = payload && payload.bills;
-        const normalizedBills = await enrichBillsWithUnits(Array.isArray(bills) ? bills : []);
-        setBillsForStatus(bucket, normalizedBills);
+        const normalizedBills = await enrichBillsWithUnits(Array.isArray(bills) ? bills : [], { allowFetch: false });
+        const trimmedBills = normalizedBills.map(trimBillForList);
+        setBillsForStatus(bucket, trimmedBills);
         setBillsLoaded(bucket, true);
+        if (bucket === "pending") {
+            paymentsState.pendingPagination.page = 1;
+            paymentsState.pendingPagination.pageSize = PENDING_PAGE_SIZE;
+        }
         renderGeneratedBills();
     } catch (err) {
         console.error("Failed to load generated bills", err);
@@ -1263,6 +1451,42 @@ async function loadGeneratedBills(status = paymentsState.activeBillTab || "pendi
         showToast("Unable to load generated bills right now.", "error");
     } finally {
         if (loader) loader.classList.add("hidden");
+    }
+}
+
+function changePendingPage(delta) {
+    const pendingBills = filterPendingBills(getBillsForStatus("pending"));
+    if (!pendingBills.length) return;
+    const { totalPages } = clampPendingPage(pendingBills.length);
+    const next = Math.min(
+        Math.max(1, (paymentsState.pendingPagination.page || 1) + delta),
+        totalPages
+    );
+    if (next === paymentsState.pendingPagination.page) return;
+    paymentsState.pendingPagination.page = next;
+    renderGeneratedBills();
+}
+
+async function handlePaidSearch() {
+    const searchBtn = document.getElementById("paidBillsSearchBtn");
+    if (searchBtn) {
+        searchBtn.disabled = true;
+        searchBtn.classList.add("opacity-60");
+    }
+    const filters = readPaidFiltersFromUi();
+    paymentsState.paidFilters = {
+        ...paymentsState.paidFilters,
+        ...filters,
+        hasSearched: true,
+    };
+    const monthsBack = computeMonthsBackForRange(filters.fromMonth, filters.toMonth);
+    try {
+        await loadGeneratedBills("paid", true, { monthsBack });
+    } finally {
+        if (searchBtn) {
+            searchBtn.disabled = false;
+            searchBtn.classList.remove("opacity-60");
+        }
     }
 }
 
@@ -2078,6 +2302,29 @@ export function initPaymentsFeature() {
         refreshPaymentsIfNeeded(true);
     });
 
+    const paidSearchBtn = document.getElementById("paidBillsSearchBtn");
+    if (paidSearchBtn) paidSearchBtn.addEventListener("click", handlePaidSearch);
+
+    const pendingPrev = document.getElementById("pendingBillsPrev");
+    const pendingNext = document.getElementById("pendingBillsNext");
+    if (pendingPrev) pendingPrev.addEventListener("click", () => changePendingPage(-1));
+    if (pendingNext) pendingNext.addEventListener("click", () => changePendingPage(1));
+
+    const paidLimit = document.getElementById("paidBillsLimit");
+    if (paidLimit) {
+        paidLimit.value = String(paymentsState.paidFilters?.limit || PAID_DEFAULT_LIMIT);
+    }
+    paymentsState.pendingPagination.pageSize = PENDING_PAGE_SIZE;
+    [document.getElementById("paidBillsFrom"), document.getElementById("paidBillsTo"), paidLimit].forEach((el) => {
+        if (!el) return;
+        el.addEventListener("change", () => {
+            paymentsState.paidFilters.hasSearched = false;
+            if (paymentsState.activeBillTab === "paid") {
+                renderGeneratedBills();
+            }
+        });
+    });
+
     const pendingTab = document.getElementById("billsPendingTab");
     const paidTab = document.getElementById("billsPaidTab");
     if (pendingTab) pendingTab.addEventListener("click", () => setBillsTab("pending"));
@@ -2096,18 +2343,12 @@ export function initPaymentsFeature() {
 
 export async function refreshPaymentsIfNeeded(force = false) {
     const activeTab = paymentsState.activeBillTab || "pending";
-    const shouldLoadBills = force || !isBillsLoaded(activeTab);
+    const deferPaidLoad = activeTab === "paid" && !paymentsState.paidFilters?.hasSearched;
+    const shouldLoadBills = force || (!isBillsLoaded(activeTab) && !deferPaidLoad);
     if (shouldLoadBills) {
         await loadGeneratedBills(activeTab, force);
     } else {
         renderGeneratedBills();
-    }
-
-    const allBills = getAllGeneratedBills();
-    const shouldLoadPayments =
-        force || (!paymentsState.loaded && !billsHaveStoredStatus(allBills));
-    if (shouldLoadPayments) {
-        await loadPayments();
     }
 }
 

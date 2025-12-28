@@ -592,6 +592,33 @@
             </div>
             <div class="p-3 space-y-3">
               <div class="text-[10px] uppercase text-slate-500 font-semibold">Generated bills</div>
+              <div id="paidBillsFilters" class="hidden bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <div class="flex flex-wrap items-end gap-3">
+                  <label class="text-[10px] text-slate-500">
+                    <span class="block uppercase font-semibold">From</span>
+                    <input id="paidBillsFrom" type="month"
+                      class="mt-1 w-[140px] border border-slate-200 rounded px-2 py-1 text-[11px] bg-white" />
+                  </label>
+                  <label class="text-[10px] text-slate-500">
+                    <span class="block uppercase font-semibold">To</span>
+                    <input id="paidBillsTo" type="month"
+                      class="mt-1 w-[140px] border border-slate-200 rounded px-2 py-1 text-[11px] bg-white" />
+                  </label>
+                  <label class="text-[10px] text-slate-500">
+                    <span class="block uppercase font-semibold">Show</span>
+                    <select id="paidBillsLimit"
+                      class="mt-1 border border-slate-200 rounded px-2 py-1 text-[11px] bg-white">
+                      <option value="9">9 rows</option>
+                      <option value="18">18 rows</option>
+                      <option value="36">36 rows</option>
+                      <option value="72">72 rows</option>
+                    </select>
+                  </label>
+                  <button id="paidBillsSearchBtn"
+                    class="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">Search</button>
+                </div>
+                <p class="mt-2 text-[10px] text-slate-500">Select a month range and click Search to view paid bills.</p>
+              </div>
               <div id="generatedBillsLoader" class="text-[12px] text-slate-600">Loading bills...</div>
               <div id="generatedBillsEmpty" class="text-[12px] text-slate-500 hidden">Generate a bill to start recording
                 payments.</div>
@@ -612,6 +639,16 @@
                   <tbody id="pendingBillsBody" class="text-[11px]"></tbody>
                   <tbody id="paidBillsBody" class="text-[11px] hidden"></tbody>
                 </table>
+              </div>
+              <div id="pendingBillsPagination"
+                class="hidden mt-2 flex items-center justify-between text-[11px] text-slate-600">
+                <div id="pendingBillsPageInfo" class="text-[10px] text-slate-500">Page 1 of 1</div>
+                <div class="flex items-center gap-2">
+                  <button id="pendingBillsPrev"
+                    class="px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50">Prev</button>
+                  <button id="pendingBillsNext"
+                    class="px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50">Next</button>
+                </div>
               </div>
             </div>
           </div>
