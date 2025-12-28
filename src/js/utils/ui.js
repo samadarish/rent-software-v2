@@ -18,7 +18,7 @@ export function showToast(message, type = "success") {
 
     const toast = document.createElement("div");
     toast.className =
-        "pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-lg shadow text-[11px] text-white opacity-0 translate-y-1 transition";
+        "pointer-events-auto w-full flex items-start gap-3 rounded-xl px-4 py-3 font-medium leading-snug text-white shadow-lg opacity-0 translate-y-1 transition";
 
     if (type === "success") {
         toast.classList.add("bg-emerald-600");
@@ -30,7 +30,7 @@ export function showToast(message, type = "success") {
         toast.classList.add("bg-slate-700");
     }
 
-    toast.innerHTML = `<span>${message}</span>`;
+    toast.innerHTML = `<span class="flex-1">${message}</span>`;
     container.appendChild(toast);
 
     // Animate in

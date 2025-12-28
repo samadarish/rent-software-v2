@@ -53,7 +53,8 @@ main {
 /* ========== TOASTS ========== */
 
 #toastContainer > div {
-  font-size: 0.7rem;
+  font-size: 1rem;
+  line-height: 1.4;
 }
 
 /* ========== TABLES ========== */
