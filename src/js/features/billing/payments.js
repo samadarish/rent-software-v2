@@ -83,6 +83,7 @@ const RECEIPT_OUTPUT_MIME = "image/jpeg";
 const attachmentPreviewCache = new Map();
 let paymentHistoryLoading = false;
 let paymentModalResetTimer = null;
+let paymentModalRequestId = 0;
 
 function getBillsForStatus(status = "pending") {
     return status === "paid" ? paymentsState.generatedBills.paid : paymentsState.generatedBills.pending;
@@ -477,6 +478,44 @@ function togglePaymentModal(show) {
     }
 }
 
+function setPaymentModalLoading(isLoading, label = "Loading details...") {
+    const loader = document.getElementById("paymentModalLoading");
+    if (!loader) return;
+    const text = document.getElementById("paymentModalLoadingText");
+    if (text && label) text.textContent = label;
+    loader.classList.toggle("hidden", !isLoading);
+}
+
+function updatePaymentModalTitle(modalTitle, payment, context) {
+    if (!modalTitle) return;
+    const isSettled = payment && (context?.remaining ?? 0) <= 0;
+    if (isSettled) {
+        modalTitle.textContent = "Payment details";
+        return;
+    }
+    modalTitle.textContent = payment ? "Edit payment" : "Record payment";
+}
+
+function mergePaymentOverrides(context, payment) {
+    if (!payment) return context;
+    return {
+        ...context,
+        amount: payment.amount ?? context.amount,
+        rentAmount: payment.rentAmount ?? context.rentAmount,
+        electricityAmount: payment.electricityAmount ?? context.electricityAmount,
+        motorShare: payment.motorShare ?? context.motorShare,
+        sweepAmount: payment.sweepAmount ?? context.sweepAmount,
+        prevReading: payment.prevReading ?? context.prevReading,
+        newReading: payment.newReading ?? context.newReading,
+        payableDate: payment.payableDate ?? context.payableDate,
+        notes: payment.notes ?? context.notes,
+        mode: payment.mode ?? context.mode,
+        date: payment.date ?? context.date,
+        billLineId: payment.billLineId ?? context.billLineId,
+        tenancyId: payment.tenancyId ?? context.tenancyId,
+    };
+}
+
 function resetPaymentForm() {
     cancelAttachmentUpload();
     discardUploadedAttachment();
@@ -580,6 +619,7 @@ function resetPaymentForm() {
     if (progressFill) progressFill.style.width = "0%";
     if (progressLabel) progressLabel.textContent = "";
     if (dueWrap) dueWrap.classList.remove("hidden");
+    setPaymentModalLoading(false);
     const historyContainer = document.getElementById("paymentHistoryContainer");
     const historyList = document.getElementById("paymentHistoryList");
     const historySummary = document.getElementById("paymentHistorySummary");
@@ -1032,7 +1072,7 @@ async function openPaymentModal(payment = null, billContext = null) {
         clearTimeout(paymentModalResetTimer);
         paymentModalResetTimer = null;
     }
-    await ensureTenantDirectoryLoaded();
+    const modalRequestId = ++paymentModalRequestId;
     resetPaymentForm();
 
     const modalTitle = document.getElementById("paymentModalTitle");
@@ -1041,11 +1081,9 @@ async function openPaymentModal(payment = null, billContext = null) {
     const notesInput = document.getElementById("paymentNotesInput");
     const idField = document.getElementById("paymentRecordId");
 
-    if (modalTitle) modalTitle.textContent = payment ? "Edit payment" : "Record payment";
-
-    let context = billContext || null;
+    let context = billContext ? { ...billContext } : null;
     if (payment) {
-        context = {
+        const baseContext = {
             monthKey: payment.monthKey,
             monthLabel: payment.monthLabel,
             billTotal: payment.billTotal || payment.amount,
@@ -1054,49 +1092,21 @@ async function openPaymentModal(payment = null, billContext = null) {
             tenantKey: payment.tenantKey,
             wing: payment.wing,
             amount: payment.amount,
+            billLineId: payment.billLineId,
+            tenancyId: payment.tenancyId,
         };
-
-        const matchingBill = getAllGeneratedBills().find(
-            (bill) => normalizeKey(bill.tenantKey || bill.tenantName) === normalizeKey(payment.tenantKey || payment.tenantName)
-                && normalizeMonthKey(bill.monthKey) === normalizeMonthKey(payment.monthKey)
-                && (bill.wing || '').toLowerCase() === (payment.wing || '').toLowerCase()
-        );
-
-        if (matchingBill) {
-            const detailedBill = await getBillDetailsForModal(matchingBill);
-            const status = summarizeBillPayments(detailedBill);
-            context = {
-                ...detailedBill,
-                remaining: status.remaining,
-            };
-        }
-
-        context = {
-            ...context,
-            amount: payment.amount ?? context.amount,
-            rentAmount: payment.rentAmount ?? context.rentAmount,
-            electricityAmount: payment.electricityAmount ?? context.electricityAmount,
-            motorShare: payment.motorShare ?? context.motorShare,
-            sweepAmount: payment.sweepAmount ?? context.sweepAmount,
-            prevReading: payment.prevReading ?? context.prevReading,
-            newReading: payment.newReading ?? context.newReading,
-            payableDate: payment.payableDate ?? context.payableDate,
-            notes: payment.notes ?? context.notes,
-            mode: payment.mode ?? context.mode,
-            date: payment.date ?? context.date,
-        };
+        context = context ? { ...baseContext, ...context } : baseContext;
+        context = mergePaymentOverrides(context, payment);
     }
 
-    if (modalTitle) {
-        const isSettled = payment && (context?.remaining ?? 0) <= 0;
-        if (isSettled) {
-            modalTitle.textContent = "Payment details";
-        } else if (payment) {
-            modalTitle.textContent = "Edit payment";
-        } else {
-            modalTitle.textContent = "Record payment";
+    if (context && typeof context.remaining !== "number") {
+        const status = summarizeBillPayments(context);
+        if (typeof status.remaining === "number") {
+            context = { ...context, remaining: status.remaining };
         }
     }
+
+    updatePaymentModalTitle(modalTitle, payment, context);
 
     if (context) applyBillContext(context);
 
@@ -1113,15 +1123,60 @@ async function openPaymentModal(payment = null, billContext = null) {
         if (dateInput) dateInput.value = payment.date || dateInput.value;
         if (notesInput) notesInput.value = payment.notes || "";
         if (idField) idField.value = payment.id || "";
-
-        if (payment.attachmentUrl) {
-            await showAttachmentPreview(payment.attachmentName, payment.attachmentUrl);
-        }
+    } else {
+        paymentsState.viewOnly = false;
     }
 
     setPaymentFormReadOnly(paymentsState.viewOnly);
-
     togglePaymentModal(true);
+
+    if (payment?.attachmentUrl) {
+        showAttachmentPreview(payment.attachmentName, payment.attachmentUrl);
+    }
+
+    const isActiveRequest = () =>
+        modalRequestId === paymentModalRequestId && isPaymentModalVisible();
+    let detailSource = context && context.billLineId ? context : null;
+
+    if (!detailSource && payment?.billLineId) {
+        detailSource = { ...(context || {}), billLineId: payment.billLineId };
+    }
+
+    if (!detailSource && payment) {
+        const matchingBill = getAllGeneratedBills().find(
+            (bill) =>
+                normalizeKey(bill.tenantKey || bill.tenantName) ===
+                    normalizeKey(payment.tenantKey || payment.tenantName) &&
+                normalizeMonthKey(bill.monthKey) === normalizeMonthKey(payment.monthKey) &&
+                (bill.wing || "").toLowerCase() === (payment.wing || "").toLowerCase()
+        );
+        if (matchingBill) detailSource = matchingBill;
+    }
+
+    const needsDetailsFetch =
+        !!detailSource?.billLineId &&
+        typeof detailSource.prevReading === "undefined" &&
+        typeof detailSource.electricityRate === "undefined";
+
+    if (needsDetailsFetch) {
+        setPaymentModalLoading(true);
+        getBillDetailsForModal(detailSource)
+            .then((detailedBill) => {
+                if (!isActiveRequest() || !detailedBill) return;
+                const status = summarizeBillPayments(detailedBill);
+                let updatedContext = { ...detailedBill, remaining: status.remaining };
+                updatedContext = mergePaymentOverrides(updatedContext, payment);
+                applyBillContext(updatedContext);
+                if (payment) {
+                    paymentsState.viewOnly = (updatedContext?.remaining ?? 0) <= 0;
+                    setPaymentFormReadOnly(paymentsState.viewOnly);
+                    updatePaymentModalTitle(modalTitle, payment, updatedContext);
+                }
+            })
+            .finally(() => {
+                if (isActiveRequest()) setPaymentModalLoading(false);
+            });
+    }
 }
 
 async function openPaymentModalFromBill(bill) {
@@ -1130,8 +1185,7 @@ async function openPaymentModalFromBill(bill) {
         ...bill,
         remaining: status.remaining,
     };
-    const detailed = await getBillDetailsForModal(context);
-    openPaymentModal(null, detailed);
+    openPaymentModal(null, context);
 }
 
 function closePaymentModal() {
@@ -1319,8 +1373,7 @@ function renderGeneratedBills() {
                         }
                     }
                     const payment = findPaymentForBill(bill);
-                    const detailed = await getBillDetailsForModal({ ...bill, remaining: status.remaining });
-                    openPaymentModal(payment || null, detailed);
+                    openPaymentModal(payment || null, { ...bill, remaining: status.remaining });
                 });
                 actionCell.appendChild(viewBtn);
             } else {
@@ -1431,7 +1484,7 @@ async function loadGeneratedBills(
                       paymentsState.paidFilters?.fromMonth,
                       paymentsState.paidFilters?.toMonth
                   )
-                : BILL_MONTHS_BACK;
+                : 0;
         const payload = await fetchBillsMinimal(bucket, { monthsBack });
         const bills = payload && payload.bills;
         const normalizedBills = await enrichBillsWithUnits(Array.isArray(bills) ? bills : [], { allowFetch: false });
