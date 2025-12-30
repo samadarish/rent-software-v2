@@ -15,7 +15,8 @@ import {
     deleteAttachment,
 } from "../../api/sheets.js";
 import { ensureTenantDirectoryLoaded, getActiveTenantsForWing } from "../tenants/tenants.js";
-import { formatCurrency as formatCurrencyBase, normalizeMonthKey as normalizeMonthKeyBase } from "../../utils/formatters.js";
+import { formatCurrency as formatCurrencyBase } from "../../utils/formatters.js";
+import { normalizeKey, normalizeMonthKey } from "../../utils/normalizers.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
 const paymentsState = {
@@ -408,14 +409,6 @@ function friendlyMonthLabel(monthKey = "", monthLabel = "") {
     }
 
     return candidate || "-";
-}
-
-function normalizeKey(value) {
-    return (value || "").toString().trim().toLowerCase();
-}
-
-function normalizeMonthKey(value) {
-    return normalizeMonthKeyBase(value, { lowercase: true });
 }
 
 function resolveUnitNumberForBill(bill) {

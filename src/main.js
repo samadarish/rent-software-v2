@@ -22,9 +22,6 @@ import { fetchWingsFromSheet, loadClausesFromSheet } from "./js/api/sheets.js";
 import { initFamilyTable } from "./js/features/tenants/family.js";
 import { initFormOptions, refreshUnitOptions, refreshLandlordOptions } from "./js/features/tenants/form.js";
 import { switchFlow } from "./js/features/navigation/flow.js";
-import { initTenantDirectory } from "./js/features/tenants/tenants.js";
-import { initBillingFeature } from "./js/features/billing/billing.js";
-import { initPaymentsFeature } from "./js/features/billing/payments.js";
 import { attachEventHandlers } from "./js/events.js";
 import { updateConnectionIndicator } from "./js/utils/ui.js";
 import { initDraftUi } from "./js/features/shared/drafts.js";
@@ -43,15 +40,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Attach all event listeners
   attachEventHandlers();
   initDraftUi();
-
-  // Initialize tenant directory controls (search, filters, modal)
-  initTenantDirectory();
-
-  // Initialize billing calendar experience
-  initBillingFeature();
-
-  // Initialize payments feature (modal + table)
-  initPaymentsFeature();
 
   // Check and prompt for App Script URL if not configured
   ensureAppScriptConfigured();

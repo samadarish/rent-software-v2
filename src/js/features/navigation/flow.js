@@ -8,13 +8,41 @@
 
 import { currentFlow, setCurrentFlow } from "../../state.js";
 import { isDraftDirty, loadDraftForFlow, openUnsavedDraftModal, syncDraftUiForFlow } from "../shared/drafts.js";
-import { loadTenantDirectory } from "../tenants/tenants.js";
 import { applyLandlordDefaultsToForm } from "../../api/config.js";
-import { refreshPaymentsIfNeeded } from "../billing/payments.js";
 import { setNoGrnState } from "../tenants/formState.js";
 import { smoothToggle } from "../../utils/ui.js";
 
 const DRAFT_GUARDED_FLOWS = new Set(["agreement", "createTenantNew"]);
+let tenantDirectoryInitialized = false;
+let billingInitialized = false;
+let paymentsInitialized = false;
+
+async function ensureTenantDirectoryInitialized() {
+    const mod = await import("../tenants/tenants.js");
+    if (!tenantDirectoryInitialized) {
+        mod.initTenantDirectory();
+        tenantDirectoryInitialized = true;
+    }
+    return mod;
+}
+
+async function ensureBillingInitialized() {
+    const mod = await import("../billing/billing.js");
+    if (!billingInitialized) {
+        mod.initBillingFeature();
+        billingInitialized = true;
+    }
+    return mod;
+}
+
+async function ensurePaymentsInitialized() {
+    const mod = await import("../billing/payments.js");
+    if (!paymentsInitialized) {
+        mod.initPaymentsFeature();
+        paymentsInitialized = true;
+    }
+    return mod;
+}
 
 /**
  * Switches the application to a different flow/mode
@@ -177,11 +205,15 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     }
 
     if (mode === "payments") {
-        refreshPaymentsIfNeeded();
+        void ensurePaymentsInitialized().then((mod) => mod.refreshPaymentsIfNeeded());
     }
 
     if (mode === "viewTenants") {
-        loadTenantDirectory();
+        void ensureTenantDirectoryInitialized().then((mod) => mod.loadTenantDirectory());
+    }
+
+    if (mode === "generateBill") {
+        void ensureBillingInitialized();
     }
 
     if (isFormFlow) {

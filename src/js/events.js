@@ -22,10 +22,10 @@ import {
     deleteUnitConfig,
     removeWingFromSheet,
     fetchWingsFromSheet,
-    fetchLandlordsFromSheet,
     saveLandlordConfig,
     deleteLandlordConfig,
 } from "./api/sheets.js";
+import { refreshLandlords } from "./store/masters.js";
 import { exportDocxFromTemplate } from "./features/agreements/docx.js";
 import { buildUnitLabel, numberToIndianWords } from "./utils/formatters.js";
 import { clearAllDrafts, promptAndSaveDraft } from "./features/shared/drafts.js";
@@ -233,7 +233,7 @@ export function attachEventHandlers() {
             const landlordId = document.getElementById("landlordExistingSelect")?.value || "";
             await saveLandlordConfig({ landlordId, name, aadhaar, address });
             saveLandlordDefaults();
-            fetchLandlordsFromSheet(true);
+            refreshLandlords(true);
         });
     }
 
@@ -255,7 +255,7 @@ export function attachEventHandlers() {
             const selected = document.getElementById("landlordExistingSelect")?.value;
             if (!selected) return;
             await deleteLandlordConfig(selected);
-            fetchLandlordsFromSheet(true);
+            refreshLandlords(true);
         });
     }
 

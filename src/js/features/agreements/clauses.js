@@ -10,7 +10,6 @@
 
 import { clauseSections } from "../../constants.js";
 import {
-    setClausesDirtyState,
     lastMovedClauseId,
     lastMoveDirection,
     incrementClauseIdCounter,
@@ -31,8 +30,6 @@ function generateClauseId() {
  * @param {boolean} dirty - Whether clauses have been modified
  */
 export function setClausesDirty(dirty = true) {
-    setClausesDirtyState(dirty);
-
     const syncBtn = document.getElementById("saveClausesBtn");
     const dirtyMsg = document.getElementById("clausesDirtyMessage");
 

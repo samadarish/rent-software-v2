@@ -1,22 +1,27 @@
 import {
-    fetchLandlordsFromSheet,
     fetchTenantDirectory,
-    fetchUnitsFromSheet,
     getRentRevisions,
     saveRentRevision,
     updateTenantRecord,
 } from "../../api/sheets.js";
 import { buildUnitLabel, formatCurrency, normalizeMonthKey, toOrdinal } from "../../utils/formatters.js";
 import { cloneSelectOptions, hideModal, showModal, showToast } from "../../utils/ui.js";
-import { createFamilyRow as buildFamilyRow } from "./family.js";
+import { createFamilyRow } from "./family.js";
+import {
+    getUnitCache as getUnitCacheStore,
+    getLandlordCache as getLandlordCacheStore,
+    refreshUnits,
+    refreshLandlords,
+} from "../../store/masters.js";
 
 let tenantCache = [];
 let tenantRowsCache = [];
 let hasLoadedTenants = false;
-let unitCache = [];
-let landlordCache = [];
+let unitCache = getUnitCacheStore();
+let landlordCache = getLandlordCacheStore();
 let currentStatusFilter = "active"; // all | active | inactive
 let currentSearch = "";
+let searchDebounceTimer = null;
 let activeTenantForModal = null;
 let activeRentRevisions = [];
 let activeRentHistoryContext = null;
@@ -610,20 +615,13 @@ export async function loadTenantDirectory(forceReload = false) {
 
     setTenantListLoading(true);
     try {
-        const [unitData, landlordData, data] = await Promise.all([
-            fetchUnitsFromSheet(),
-            fetchLandlordsFromSheet(),
+        const [units, landlords, data] = await Promise.all([
+            refreshUnits(forceReload),
+            refreshLandlords(forceReload),
             fetchTenantDirectory(),
         ]);
-        unitCache = Array.isArray(unitData.units)
-            ? unitData.units.map((u) => ({
-                  ...u,
-                  is_occupied:
-                      u.is_occupied === true ||
-                      (typeof u.is_occupied === "string" && u.is_occupied.toLowerCase() === "true"),
-              }))
-            : [];
-        landlordCache = Array.isArray(landlordData.landlords) ? landlordData.landlords : [];
+        unitCache = Array.isArray(units) ? units : [];
+        landlordCache = Array.isArray(landlords) ? landlords : [];
         const normalizedTenants = Array.isArray(data.tenants)
             ? data.tenants.map((t) => ({
                   ...t,
@@ -633,7 +631,6 @@ export async function loadTenantDirectory(forceReload = false) {
             : [];
         tenantRowsCache = normalizedTenants;
         tenantCache = collapseTenantRows(normalizedTenants);
-        document.dispatchEvent(new CustomEvent("landlords:updated", { detail: landlordCache }));
         hasLoadedTenants = true;
         applyTenantFilters();
     } catch (err) {
@@ -655,19 +652,14 @@ export async function loadTenantDirectory(forceReload = false) {
     }
 }
 
-function createFamilyRow(member = {}) {
-    const tr = buildFamilyRow(member);
-    tr.classList.add("border-b", "last:border-0");
+const modalFamilyRowOptions = {
+    rowClass: "border-b last:border-0",
+    removeLabel: "Remove",
+    removeButtonClass: "text-rose-600 text-[11px] underline tenant-family-remove",
+};
 
-    const removeBtn = tr.querySelector("button");
-    if (removeBtn) {
-        removeBtn.textContent = "Remove";
-        removeBtn.className = "text-rose-600 text-[11px] underline tenant-family-remove";
-        removeBtn.addEventListener("click", () => tr.remove());
-    }
-
-    setTenantModalEditable(tenantModalEditable);
-    return tr;
+function buildModalFamilyRow(member = {}) {
+    return createFamilyRow(member, modalFamilyRowOptions);
 }
 
 function highlightSelectedRow() {
@@ -1187,7 +1179,7 @@ function populateTenantModal(tenant, mode = "tenant") {
     if (familyTbody) {
         familyTbody.innerHTML = "";
         (tenant.family || []).forEach((member) => {
-            familyTbody.appendChild(createFamilyRow(member));
+            familyTbody.appendChild(buildModalFamilyRow(member));
         });
     }
 
@@ -1379,15 +1371,28 @@ export function initTenantDirectory() {
     document.addEventListener("landlords:updated", (e) => {
         if (e?.detail && Array.isArray(e.detail)) {
             landlordCache = e.detail;
+        } else {
+            landlordCache = getLandlordCacheStore();
         }
         syncTenantModalPicklists();
+    });
+
+    document.addEventListener("units:updated", (e) => {
+        if (e?.detail && Array.isArray(e.detail)) {
+            unitCache = e.detail;
+        } else {
+            unitCache = getUnitCacheStore();
+        }
     });
 
     const searchInput = document.getElementById("tenantSearchInput");
     if (searchInput) {
         searchInput.addEventListener("input", (e) => {
             currentSearch = (e.target.value || "").trim();
-            applyTenantFilters();
+            if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                applyTenantFilters();
+            }, 150);
         });
     }
 
@@ -1442,7 +1447,10 @@ export function initTenantDirectory() {
     if (addFamilyBtn) {
         addFamilyBtn.addEventListener("click", () => {
             const tbody = document.getElementById("tenantFamilyTableBody");
-            if (tbody) tbody.appendChild(createFamilyRow());
+            if (tbody) {
+                tbody.appendChild(buildModalFamilyRow());
+                setTenantModalEditable(tenantModalEditable);
+            }
         });
     }
 

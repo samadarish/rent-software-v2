@@ -1009,21 +1009,6 @@ function upsertTenancyRentRevision_(payload = {}) {
   return record;
 }
 
-function deleteTenancyRentRevision_(revisionId) {
-  if (!revisionId) return false;
-  const remaining = readTable_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS).filter(
-    (r) => r.revision_id !== revisionId
-  );
-  const sheet = getSheetWithHeaders_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS);
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, TENANCY_RENT_REVISION_HEADERS.length).clearContent();
-  if (remaining.length) {
-    const rows = remaining.map((r) => TENANCY_RENT_REVISION_HEADERS.map((key) => r[key] ?? ''));
-    sheet.getRange(2, 1, rows.length, TENANCY_RENT_REVISION_HEADERS.length).setValues(rows);
-  }
-  return true;
-}
-
 function getLatestRentForTenancy_(tenancyId, revisionCache) {
   if (!tenancyId) return null;
   const revisions = revisionCache ? revisionCache[tenancyId] || [] : listTenancyRentRevisions_(tenancyId);
@@ -1860,8 +1845,7 @@ function doGet(e) {
 
     if (action === 'clauses') {
       const unified = readUnifiedClauses_();
-      const sections = unified || readLegacyClauses_();
-      return jsonResponse({ ok: true, tenant: sections.tenant || [], landlord: sections.landlord || [], penalties: sections.penalties || [], misc: sections.misc || [] });
+      return jsonResponse({ ok: true, tenant: unified.tenant || [], landlord: unified.landlord || [], penalties: unified.penalties || [], misc: unified.misc || [] });
     }
 
     if (action === 'tenants') {
@@ -1956,11 +1940,6 @@ function doPost(e) {
       } catch (err) {
         return jsonResponse({ ok: false, error: String(err) });
       }
-    }
-    if (action === 'deleteRentRevision') {
-      const revisionId = body.payload && (body.payload.revisionId || body.payload.revision_id);
-      const ok = deleteTenancyRentRevision_(revisionId);
-      return jsonResponse({ ok, revisionId });
     }
     if (action === 'addWing') {
       const wing = (body.payload && body.payload.wing || '').toString().trim();

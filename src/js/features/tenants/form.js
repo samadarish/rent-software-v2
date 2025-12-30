@@ -13,20 +13,15 @@ import { htmlToMarkedText } from "../../utils/htmlUtils.js";
 import { getSelectedClauses } from "../agreements/clauses.js";
 import { getFamilyMembersFromTable } from "./family.js";
 import { currentFlow } from "../../state.js";
-import { fetchUnitsFromSheet, fetchLandlordsFromSheet } from "../../api/sheets.js";
-
-let unitCache = [];
-let unitsLoaded = false;
-let landlordCache = [];
-let landlordsLoaded = false;
-
-function normalizeOccupiedFlag(raw) {
-    if (raw === true || raw === false) return raw;
-    if (typeof raw === "string") return raw.toLowerCase() === "true";
-    return !!raw;
-}
+import {
+    refreshUnits,
+    refreshLandlords,
+    getUnitCache as getUnitCacheStore,
+    getLandlordCache as getLandlordCacheStore,
+} from "../../store/masters.js";
 
 function getLandlordById(landlordId) {
+    const landlordCache = getLandlordCacheStore();
     return landlordCache.find((l) => l.landlord_id === landlordId);
 }
 
@@ -40,6 +35,7 @@ export function applyLandlordToForm(landlord) {
 }
 
 function getUnitById(unitId) {
+    const unitCache = getUnitCacheStore();
     return unitCache.find((u) => u.unit_id === unitId);
 }
 
@@ -58,6 +54,7 @@ export function applyUnitToPremises(unit) {
 }
 
 function populateLandlordSelect() {
+    const landlordCache = getLandlordCacheStore();
     const select = document.getElementById("landlord_selector");
     if (!select) return;
     const previous = select.value;
@@ -83,13 +80,14 @@ function populateLandlordSelect() {
 }
 
 function populateUnitSelectForFlow() {
+    const unitCache = getUnitCacheStore();
     const select = document.getElementById("unit_selector");
     if (!select) return;
 
     const allowOccupied = currentFlow !== "createTenantNew";
     const available = allowOccupied
         ? unitCache
-        : unitCache.filter((u) => !normalizeOccupiedFlag(u.is_occupied));
+        : unitCache.filter((u) => !u.is_occupied);
 
     const previous = select.value;
     select.innerHTML = '<option value="">Select a unit to auto-fill details</option>';
@@ -114,13 +112,6 @@ function populateUnitSelectForFlow() {
 }
 
 function syncUnitsFromEvent(event) {
-    if (event?.detail && Array.isArray(event.detail)) {
-        unitCache = event.detail.map((u) => ({
-            ...u,
-            is_occupied: normalizeOccupiedFlag(u.is_occupied),
-        }));
-        unitsLoaded = true;
-    }
     populateUnitSelectForFlow();
 }
 
@@ -131,46 +122,23 @@ function getSelectedUnitForForm() {
 }
 
 export function getUnitCache() {
-    return unitCache.slice();
+    return getUnitCacheStore();
 }
 
 export function getLandlordCache() {
-    return landlordCache.slice();
+    return getLandlordCacheStore();
 }
 
 export async function refreshUnitOptions(force = false) {
-    if (unitsLoaded && !force) {
-        populateUnitSelectForFlow();
-        return unitCache;
-    }
-
-    const data = await fetchUnitsFromSheet(force);
-    unitCache = Array.isArray(data.units)
-        ? data.units.map((u) => ({
-              ...u,
-              is_occupied: normalizeOccupiedFlag(u.is_occupied),
-          }))
-        : [];
-    unitsLoaded = true;
+    const units = await refreshUnits(force);
     populateUnitSelectForFlow();
-    document.dispatchEvent(new CustomEvent("units:updated", { detail: unitCache }));
-    return unitCache;
+    return units;
 }
 
 export async function refreshLandlordOptions(force = false) {
-    if (landlordsLoaded && !force) {
-        populateLandlordSelect();
-        return landlordCache;
-    }
-
-    const data = await fetchLandlordsFromSheet(force);
-    landlordCache = Array.isArray(data.landlords)
-        ? data.landlords.map((l) => ({ ...l }))
-        : [];
-    landlordsLoaded = true;
+    const landlords = await refreshLandlords(force);
     populateLandlordSelect();
-    document.dispatchEvent(new CustomEvent("landlords:updated", { detail: landlordCache }));
-    return landlordCache;
+    return landlords;
 }
 
 /**

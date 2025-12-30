@@ -7,6 +7,7 @@
  */
 
 import { formatCurrency as formatCurrencyBase, normalizeMonthKey, numberToIndianWords } from "../../utils/formatters.js";
+import { normalizeWing } from "../../utils/normalizers.js";
 import { cloneSelectOptions, hideModal, showModal, showToast, smoothToggle } from "../../utils/ui.js";
 import { ensureTenantDirectoryLoaded, getActiveTenantsForWing } from "../tenants/tenants.js";
 import { fetchBillingRecord, fetchGeneratedBills, saveBillingRecord } from "../../api/sheets.js";
@@ -33,6 +34,16 @@ const billingState = {
 };
 
 const billingRecordCache = new Map();
+let billingRenderHandle = null;
+
+function scheduleBillingRender() {
+    if (billingRenderHandle !== null) return;
+    billingRenderHandle = requestAnimationFrame(() => {
+        billingRenderHandle = null;
+        renderTenantTable();
+        renderMotorSummary();
+    });
+}
 const formatCurrency = (amount) =>
     formatCurrencyBase(amount, {
         useGrouping: false,
@@ -55,10 +66,6 @@ function getWingVariants(rawWing) {
     if (!canonical) return [];
     if (canonical.toLowerCase() === normalized) return [canonical];
     return [canonical, normalized];
-}
-
-function normalizeWing(value) {
-    return (value || "").toString().trim().toLowerCase();
 }
 
 function getSelectedWingNormalized() {
@@ -419,15 +426,13 @@ function renderTenantTable() {
         if (prevInput) {
             prevInput.addEventListener("change", (e) => {
                 tenant.prevReading = e.target.value;
-                renderTenantTable();
-                renderMotorSummary();
+                scheduleBillingRender();
             });
         }
         if (newInput) {
             newInput.addEventListener("change", (e) => {
                 tenant.newReading = e.target.value;
-                renderTenantTable();
-                renderMotorSummary();
+                scheduleBillingRender();
             });
         }
 
@@ -436,8 +441,7 @@ function renderTenantTable() {
             includeCheckbox.addEventListener("change", (e) => {
                 tenant.included = e.target.checked;
                 tenant.hasBill = false;
-                renderTenantTable();
-                renderMotorSummary();
+                scheduleBillingRender();
             });
         }
 
@@ -492,8 +496,7 @@ function applyMetaListeners() {
         if (!input) return;
         input.addEventListener("input", (e) => {
             billingState.meta[key] = e.target.value;
-            renderTenantTable();
-            renderMotorSummary();
+            scheduleBillingRender();
             applyMotorValidation();
         });
     });

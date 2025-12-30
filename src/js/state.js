@@ -19,16 +19,6 @@ export function setCurrentFlow(mode) {
     currentFlow = mode;
 }
 
-let clausesDirty = false;
-
-/**
- * Updates the clauses dirty state
- * @param {boolean} dirty - Whether clauses have been modified
- */
-export function setClausesDirtyState(dirty) {
-    clausesDirty = dirty;
-}
-
 /**
  * ID of the last clause that was moved (for animation purposes)
  * @type {string | null}

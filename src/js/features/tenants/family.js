@@ -30,10 +30,28 @@ export function syncTenantToFamilyTable() {
  * @param {string} data.aadhaar - Aadhaar number
  * @param {string} data.address - Permanent address
  * @param {boolean} data.lockSelf - If true, makes the row read-only (for tenant's own row)
+ * @param {Object} options - Row rendering overrides
+ * @param {string} options.removeLabel - Label for the remove button
+ * @param {string} options.removeButtonClass - Class list for the remove button
+ * @param {string} options.rowClass - Class list to apply to the row
+ * @param {(row: HTMLTableRowElement) => void} options.onRemove - Optional remove handler override
  * @returns {HTMLTableRowElement} The created table row
  */
-export function createFamilyRow(data = {}) {
+export function createFamilyRow(data = {}, options = {}) {
+    const {
+        removeLabel = "A-",
+        removeButtonClass = "text-xs px-2 py-0.5 rounded border border-red-400 text-red-600 hover:bg-red-50",
+        rowClass = "",
+        onRemove = null,
+    } = options;
     const tr = document.createElement("tr");
+    if (rowClass) {
+        rowClass
+            .split(" ")
+            .map((cls) => cls.trim())
+            .filter(Boolean)
+            .forEach((cls) => tr.classList.add(cls));
+    }
 
     // Name column
     const nameTd = document.createElement("td");
@@ -90,14 +108,17 @@ export function createFamilyRow(data = {}) {
     delTd.className = "border px-2 py-1 text-center";
     const delBtn = document.createElement("button");
     delBtn.type = "button";
-    delBtn.textContent = "×";
-    delBtn.className =
-        "text-xs px-2 py-0.5 rounded border border-red-400 text-red-600 hover:bg-red-50";
+    delBtn.textContent = removeLabel;
+    delBtn.className = removeButtonClass;
     if (data.lockSelf) {
         delBtn.disabled = true;
         delBtn.classList.add("opacity-40", "cursor-not-allowed");
     } else {
         delBtn.addEventListener("click", () => {
+            if (typeof onRemove === "function") {
+                onRemove(tr);
+                return;
+            }
             tr.remove();
         });
     }
@@ -178,3 +199,7 @@ export function setFamilyMembersInTable(members = []) {
         tbody.appendChild(row);
     });
 }
+
+
+
+
