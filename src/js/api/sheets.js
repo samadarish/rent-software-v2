@@ -302,10 +302,18 @@ export async function fetchGeneratedBills(options = {}) {
         typeof options === "string"
             ? options
             : (options && typeof options === "object" ? options.status : "");
-    const params = status ? { status } : undefined;
+    const fromMonth =
+        options && typeof options === "object" ? options.fromMonth : "";
+    const toMonth =
+        options && typeof options === "object" ? options.toMonth : "";
+    const params = {};
+    if (status) params.status = status;
+    if (fromMonth) params.fromMonth = fromMonth;
+    if (toMonth) params.toMonth = toMonth;
+    const finalParams = Object.keys(params).length ? params : undefined;
 
     try {
-        return await callAppScript({ url, action: "generatedbills", params });
+        return await callAppScript({ url, action: "generatedbills", params: finalParams });
     } catch (e) {
         console.error("fetchGeneratedBills error", e);
         showToast("Could not fetch generated bills", "error");

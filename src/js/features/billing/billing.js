@@ -12,6 +12,8 @@ import { cloneSelectOptions, hideModal, showModal, showToast, smoothToggle } fro
 import { ensureTenantDirectoryLoaded, getActiveTenantsForWing } from "../tenants/tenants.js";
 import { fetchBillingRecord, fetchGeneratedBills, saveBillingRecord } from "../../api/sheets.js";
 
+const CALENDAR_PAGE_SIZE = 12;
+
 const billingState = {
     selectedMonthKey: null,
     selectedMonthLabel: "",
@@ -21,8 +23,11 @@ const billingState = {
     lastGeneratedSummaries: [],
     sendStatus: new Map(),
     calendarCoverage: new Map(),
+    calendarCoverageCache: new Map(),
     availableWings: [],
     coverageLoaded: false,
+    calendarPage: 0,
+    calendarRangeKey: "",
     motorSnapshot: null,
     meta: {
         electricityRate: "",
@@ -108,19 +113,42 @@ function getIncludedTenants() {
     return billingState.tenants.filter((t) => isTenantIncluded(t));
 }
 
-function getLastTwelveMonths() {
-    const months = [];
+function buildMonthEntry(date) {
+    const monthNumber = `${date.getMonth() + 1}`.padStart(2, "0");
+    return {
+        key: `${date.getFullYear()}-${monthNumber}`,
+        label: date.toLocaleString("default", { month: "long", year: "numeric" }),
+    };
+}
+
+function getBillingCalendarPageInfo(pageIndex = 0) {
+    const page = Math.max(0, Number(pageIndex) || 0);
     const now = new Date();
-    // Include the current month and the previous 11 months
-    for (let i = 11; i >= 0; i -= 1) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const monthNumber = `${d.getMonth() + 1}`.padStart(2, "0");
-        months.push({
-            key: `${d.getFullYear()}-${monthNumber}`,
-            label: d.toLocaleString("default", { month: "long", year: "numeric" }),
-        });
+    const endOffset = -1 - page * CALENDAR_PAGE_SIZE;
+    const startOffset = endOffset - (CALENDAR_PAGE_SIZE - 1);
+    const months = [];
+
+    for (let offset = startOffset; offset <= endOffset; offset += 1) {
+        const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+        months.push(buildMonthEntry(d));
     }
-    return months;
+
+    const fromMonth = months[0]?.key || "";
+    const toMonth = months[months.length - 1]?.key || "";
+    const rangeLabel =
+        months.length > 0 ? `${months[0].label} - ${months[months.length - 1].label}` : "Last 12 months";
+
+    return {
+        page,
+        months,
+        fromMonth,
+        toMonth,
+        rangeLabel,
+    };
+}
+
+function getCalendarRangeKey(rangeInfo) {
+    return `${rangeInfo.fromMonth || ""}__${rangeInfo.toMonth || ""}`;
 }
 
 function getAvailableWings() {
@@ -279,6 +307,56 @@ function getMonthGenerationStatus(monthKey) {
     };
 }
 
+function getBillingCalendarControlNodes() {
+    return {
+        labels: Array.from(document.querySelectorAll("[data-billing-months-label]")),
+        prevButtons: Array.from(document.querySelectorAll("[data-billing-months-prev]")),
+        nextButtons: Array.from(document.querySelectorAll("[data-billing-months-next]")),
+    };
+}
+
+function updateBillingCalendarControls(rangeInfo) {
+    const isNewest = rangeInfo.page === 0;
+    const { labels, prevButtons, nextButtons } = getBillingCalendarControlNodes();
+
+    labels.forEach((label) => {
+        label.textContent = rangeInfo.rangeLabel || "Last 12 months";
+    });
+
+    nextButtons.forEach((nextBtn) => {
+        nextBtn.disabled = isNewest;
+        nextBtn.classList.toggle("opacity-50", isNewest);
+        nextBtn.classList.toggle("cursor-not-allowed", isNewest);
+    });
+
+    prevButtons.forEach((prevBtn) => {
+        prevBtn.disabled = false;
+        prevBtn.classList.remove("opacity-50", "cursor-not-allowed");
+    });
+}
+
+function setBillingCalendarPage(pageIndex) {
+    const nextPage = Math.max(0, Number(pageIndex) || 0);
+    if (nextPage === billingState.calendarPage) return;
+    billingState.calendarPage = nextPage;
+
+    const pageInfo = getBillingCalendarPageInfo(nextPage);
+    const rangeKey = getCalendarRangeKey(pageInfo);
+    const cached = billingState.calendarCoverageCache.get(rangeKey);
+
+    if (cached) {
+        billingState.calendarCoverage = cached;
+        billingState.coverageLoaded = true;
+    } else {
+        billingState.coverageLoaded = false;
+    }
+
+    renderBillingCalendar();
+    if (!cached) {
+        refreshBillingCalendarCoverage();
+    }
+}
+
 function markCoverageForSelection() {
     const monthKey = normalizeMonthKey(billingState.selectedMonthKey);
     const wing = getSelectedWingNormalized();
@@ -293,6 +371,9 @@ function markCoverageForSelection() {
     coverage.add(wing);
     billingState.calendarCoverage.set(monthKey, coverage);
     billingState.coverageLoaded = true;
+    if (billingState.calendarRangeKey) {
+        billingState.calendarCoverageCache.set(billingState.calendarRangeKey, billingState.calendarCoverage);
+    }
     renderBillingCalendar();
 }
 
@@ -305,7 +386,10 @@ function renderBillingCalendar() {
     }
 
     grid.innerHTML = "";
-    const months = getLastTwelveMonths();
+    const pageInfo = getBillingCalendarPageInfo(billingState.calendarPage);
+    billingState.calendarRangeKey = getCalendarRangeKey(pageInfo);
+    updateBillingCalendarControls(pageInfo);
+    const months = pageInfo.months;
 
     months.forEach((month) => {
         const card = document.createElement("button");
@@ -335,11 +419,30 @@ function renderBillingCalendar() {
     });
 }
 
-async function refreshBillingCalendarCoverage() {
-    const { bills, coverage } = await fetchGeneratedBills();
+async function refreshBillingCalendarCoverage(pageIndex = billingState.calendarPage) {
+    const pageInfo = getBillingCalendarPageInfo(pageIndex);
+    const rangeKey = getCalendarRangeKey(pageInfo);
+
+    billingState.calendarRangeKey = rangeKey;
     billingState.availableWings = getAvailableWings();
+
+    const cached = billingState.calendarCoverageCache.get(rangeKey);
+    if (cached) {
+        billingState.calendarCoverage = cached;
+        billingState.coverageLoaded = true;
+        renderBillingCalendar();
+        return;
+    }
+
+    const { bills, coverage } = await fetchGeneratedBills({
+        fromMonth: pageInfo.fromMonth,
+        toMonth: pageInfo.toMonth,
+    });
     const coverageSource = Array.isArray(coverage) && coverage.length ? coverage : bills;
-    billingState.calendarCoverage = buildMonthCoverage(Array.isArray(coverageSource) ? coverageSource : []);
+    const coverageMap = buildMonthCoverage(Array.isArray(coverageSource) ? coverageSource : []);
+
+    billingState.calendarCoverage = coverageMap;
+    billingState.calendarCoverageCache.set(rangeKey, coverageMap);
     billingState.coverageLoaded = true;
     renderBillingCalendar();
 }
@@ -799,11 +902,14 @@ async function handleSaveBills() {
 
     const normalizedMonthKey = normalizeMonthKey(billingState.selectedMonthKey);
     const normalizedWing = getSelectedWingNormalized();
+    const calendarRange = getBillingCalendarPageInfo(billingState.calendarPage);
     const payload = {
         monthKey: normalizedMonthKey,
         monthLabel: billingState.selectedMonthLabel,
         wing: normalizedWing,
         wingLabel: billingState.selectedWingLabel || billingState.selectedWing,
+        coverageFrom: calendarRange.fromMonth,
+        coverageTo: calendarRange.toMonth,
         meta: { ...billingState.meta },
         tenants: billingState.tenants.map((t) => ({
             tenantKey: getTenantIdentityKey(t),
@@ -882,9 +988,12 @@ async function handleSaveBills() {
         // Refresh coverage directly from the latest saved bills to keep calendar accurate
         const coverageSource = Array.isArray(res.coverage) && res.coverage.length ? res.coverage : res.bills;
         if (Array.isArray(coverageSource)) {
+            const coverageMap = buildMonthCoverage(coverageSource);
+            const rangeKey = getCalendarRangeKey(calendarRange);
             billingState.availableWings = getAvailableWings();
-            billingState.calendarCoverage = buildMonthCoverage(coverageSource);
+            billingState.calendarCoverage = coverageMap;
             billingState.coverageLoaded = true;
+            billingState.calendarCoverageCache.set(rangeKey, coverageMap);
             renderBillingCalendar();
         }
         billingState.sendStatus = new Map();
@@ -1133,6 +1242,18 @@ export function initBillingFeature() {
     cloneSelectOptions("wing", "billingWingSelect");
     setupModalEvents();
     refreshBillingCalendarCoverage();
+
+    const { prevButtons, nextButtons } = getBillingCalendarControlNodes();
+    prevButtons.forEach((prevBtn) => {
+        prevBtn.addEventListener("click", () => {
+            setBillingCalendarPage(billingState.calendarPage + 1);
+        });
+    });
+    nextButtons.forEach((nextBtn) => {
+        nextBtn.addEventListener("click", () => {
+            setBillingCalendarPage(billingState.calendarPage - 1);
+        });
+    });
 
     document.addEventListener("wings:updated", () => {
         cloneSelectOptions("wing", "billingWingSelect");

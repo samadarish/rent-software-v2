@@ -548,7 +548,6 @@
               <p class="text-[11px] text-slate-500">Pick a past month (oldest to newest) and choose a wing to start bill
                 creation.</p>
             </div>
-            <div class="text-[11px] text-slate-600 bg-slate-100 px-3 py-1 rounded-full w-fit">Last 12 months</div>
           </div>
 
           <div
@@ -566,7 +565,29 @@
               </div>
             </div>
 
+            <div class="flex items-center justify-center gap-2 text-[11px] text-slate-600">
+              <button type="button" data-billing-months-prev
+                class="px-2.5 py-1 rounded-full border border-slate-200 text-[11px] font-semibold bg-white hover:bg-slate-50">&larr;
+                Older</button>
+              <div data-billing-months-label
+                class="text-[11px] text-slate-600 bg-slate-100 px-3 py-1 rounded-full">Last 12 months</div>
+              <button type="button" data-billing-months-next
+                class="px-2.5 py-1 rounded-full border border-slate-200 text-[11px] font-semibold bg-white hover:bg-slate-50">Newer
+                &rarr;</button>
+            </div>
+
             <div id="billingMonthsGrid" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+
+            <div class="flex items-center justify-center gap-2 text-[11px] text-slate-600">
+              <button type="button" data-billing-months-prev
+                class="px-2.5 py-1 rounded-full border border-slate-200 text-[11px] font-semibold bg-white hover:bg-slate-50">&larr;
+                Older</button>
+              <div data-billing-months-label
+                class="text-[11px] text-slate-600 bg-slate-100 px-3 py-1 rounded-full">Last 12 months</div>
+              <button type="button" data-billing-months-next
+                class="px-2.5 py-1 rounded-full border border-slate-200 text-[11px] font-semibold bg-white hover:bg-slate-50">Newer
+                &rarr;</button>
+            </div>
           </div>
         </section>
 

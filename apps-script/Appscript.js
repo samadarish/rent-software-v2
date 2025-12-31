@@ -515,6 +515,30 @@ function isWithinRecentMonths_(monthKey, monthsBack) {
   return idx >= currentIdx - (limit - 1);
 }
 
+function normalizeMonthRange_(fromRaw, toRaw) {
+  const fromMonth = normalizeMonthKey_(fromRaw || '');
+  const toMonth = normalizeMonthKey_(toRaw || '');
+  if (fromMonth && toMonth) {
+    const fromIdx = getMonthIndex_(fromMonth);
+    const toIdx = getMonthIndex_(toMonth);
+    if (fromIdx !== null && toIdx !== null && fromIdx > toIdx) {
+      return { fromMonth: toMonth, toMonth: fromMonth };
+    }
+  }
+  return { fromMonth, toMonth };
+}
+
+function isMonthWithinRange_(monthKey, fromMonth, toMonth) {
+  if (!fromMonth && !toMonth) return true;
+  const idx = getMonthIndex_(monthKey);
+  if (idx === null) return false;
+  const fromIdx = fromMonth ? getMonthIndex_(fromMonth) : null;
+  const toIdx = toMonth ? getMonthIndex_(toMonth) : null;
+  if (fromIdx !== null && idx < fromIdx) return false;
+  if (toIdx !== null && idx > toIdx) return false;
+  return true;
+}
+
 function writeTableRows_(sheetName, headers, rows) {
   const sheet = getSheetWithHeaders_(sheetName, headers);
   const mapped = rows.map((record) => headers.map((key) => record[key] ?? ''));
@@ -1354,7 +1378,9 @@ function handleSaveBillingRecord_(payload) {
   persistUniqueByKeys_(TENANT_READINGS_SHEET, TENANT_READING_HEADERS, ['month_key', 'tenancy_id'], readingRows);
   persistUniqueByKeys_(BILL_LINES_SHEET, BILL_LINE_HEADERS, ['month_key', 'tenancy_id'], billRows);
 
-  const { bills, coverage } = handleFetchGeneratedBills_();
+  const coverageFrom = payload.coverageFrom || payload.fromMonth || '';
+  const coverageTo = payload.coverageTo || payload.toMonth || '';
+  const { bills, coverage } = handleFetchGeneratedBills_('', coverageFrom, coverageTo);
   return jsonResponse({ ok: true, message: 'Billing saved', bills, coverage });
 }
 
@@ -1648,13 +1674,24 @@ function handleFetchBillDetails_(billLineIdRaw) {
   };
 }
 
-function handleFetchGeneratedBills_(statusRaw) {
-  const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
+function handleFetchGeneratedBills_(statusRaw, fromMonthRaw, toMonthRaw) {
+  const range = normalizeMonthRange_(fromMonthRaw, toMonthRaw);
+  const fromMonth = range.fromMonth;
+  const toMonth = range.toMonth;
+  const inRange = (monthKey) => isMonthWithinRange_(monthKey, fromMonth, toMonth);
+
+  const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS).filter((bill) =>
+    inRange(bill.month_key)
+  );
   const tenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
   const tenants = readTable_(TENANTS_SHEET, TENANTS_HEADERS);
   const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
-  const readings = readTable_(TENANT_READINGS_SHEET, TENANT_READING_HEADERS);
-  const config = readTable_(WING_MONTHLY_SHEET, WING_MONTHLY_HEADERS);
+  const readings = readTable_(TENANT_READINGS_SHEET, TENANT_READING_HEADERS).filter((reading) =>
+    inRange(reading.month_key)
+  );
+  const config = readTable_(WING_MONTHLY_SHEET, WING_MONTHLY_HEADERS).filter((row) =>
+    inRange(row.month_key)
+  );
 
   const tenancyMap = tenancies.reduce((m, t) => {
     m[t.tenancy_id] = t;
@@ -2034,7 +2071,8 @@ function doGet(e) {
     }
 
     if (action === 'generatedbills') {
-      const { bills, coverage } = handleFetchGeneratedBills_(e.parameter && e.parameter.status);
+      const params = e.parameter || {};
+      const { bills, coverage } = handleFetchGeneratedBills_(params.status, params.fromMonth, params.toMonth);
       return jsonResponse({ ok: true, bills, coverage });
     }
 

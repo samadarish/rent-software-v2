@@ -1298,7 +1298,7 @@ function setRecordButtonLoading(button, isLoading) {
     if (!button) return;
     if (isLoading) {
         if (!button.dataset.label) {
-            button.dataset.label = button.textContent || "Record payment";
+            button.dataset.label = button.textContent || "Record";
         }
         button.disabled = true;
         button.classList.add("opacity-75", "cursor-wait");
@@ -1312,7 +1312,7 @@ function setRecordButtonLoading(button, isLoading) {
     }
     button.disabled = false;
     button.classList.remove("opacity-75", "cursor-wait");
-    button.textContent = button.dataset.label || "Record payment";
+    button.textContent = button.dataset.label || "Record";
 }
 
 function renderGeneratedBills() {
@@ -1372,7 +1372,7 @@ function renderGeneratedBills() {
             } else {
                 const btn = document.createElement("button");
                 btn.className = "px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500";
-                btn.textContent = "Record payment";
+                btn.textContent = "Record";
                 btn.addEventListener("click", async () => {
                     if (btn.disabled) return;
                     setRecordButtonLoading(btn, true);
