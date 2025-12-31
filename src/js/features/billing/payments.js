@@ -691,8 +691,8 @@ function renderPaymentHistory(context = {}) {
     }
 
     const sorted = [...matches].sort((a, b) => {
-        const aTime = new Date(a.createdAt || a.date || 0).getTime();
-        const bTime = new Date(b.createdAt || b.date || 0).getTime();
+        const aTime = new Date(a.date || a.createdAt || 0).getTime();
+        const bTime = new Date(b.date || b.createdAt || 0).getTime();
         return aTime - bTime;
     });
 
@@ -725,7 +725,7 @@ function renderPaymentHistory(context = {}) {
         card.className = "border border-slate-200 rounded-lg bg-white shadow-sm overflow-hidden";
 
         const amountLabel = formatCurrency(p.amount);
-        const dateLabel = p.createdAt || p.date || "-";
+        const dateLabel = p.date || p.createdAt || "-";
         const modeLabel = p.mode || "-";
         const notesLabel = p.notes || "";
         const rawUrl = p.attachmentUrl || "";
