@@ -867,6 +867,7 @@ function applyBillContext(context = {}) {
         tenantName: context.tenantName || "",
         tenantKey: context.tenantKey || context.grn || "",
         wing: context.wing || "",
+        unitNumber: context.unitNumber || context.unit_number || "",
         rentAmount,
         electricityAmount,
         motorAmount,
@@ -1582,6 +1583,7 @@ async function handleSavePayment() {
         tenantKey: context.tenantKey || context.tenantName,
         tenantName: context.tenantName,
         wing: context.wing || "",
+        unitNumber: context.unitNumber || context.unit_number || "",
         monthKey: context.monthKey,
         monthLabel: context.monthLabel,
         billTotal: context.billTotal,
@@ -2159,10 +2161,12 @@ async function updateAttachmentFromFile(file, options = {}) {
     const uploadResult = await uploadPaymentAttachment(
         {
             dataUrl,
-            attachmentName: uploadName || file.name || "",
             tenantName: context.tenantName,
             monthKey: context.monthKey,
-            paymentId: paymentsState.editingId || `temp-${Date.now()}`,
+            wing: context.wing || "",
+            unitNumber: context.unitNumber || context.unit_number || "",
+            billLineId: context.billLineId || "",
+            tenancyId: context.tenancyId || "",
         },
         {
             uploadId,
