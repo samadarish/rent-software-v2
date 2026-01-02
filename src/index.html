@@ -38,8 +38,8 @@
 
   <div class="min-h-screen flex flex-col">
     <!-- HEADER -->
-    <header class="bg-slate-900 text-white px-3 md:px-6 py-2.5 flex items-center justify-between">
-      <div>
+    <header class="bg-slate-900 text-white px-3 md:px-6 py-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+      <div class="min-w-0">
         <h1 class="text-base md:text-lg font-bold tracking-tight">
           Khurshid Tenant Management
         </h1>
@@ -47,7 +47,14 @@
           Google Sheets DataBase | Made by Arish
         </p>
       </div>
-      <div>
+      <div class="flex justify-center">
+        <div id="syncIndicator"
+          class="flex items-center gap-2 text-[11px] px-3 py-1 rounded-full border bg-slate-700">
+          <span class="sync-dot w-2 h-2 rounded-full bg-slate-500"></span>
+          <span class="sync-label">Synced</span>
+        </div>
+      </div>
+      <div class="flex justify-end">
         <div id="connectionIndicator"
           class="flex items-center gap-2 text-[11px] px-3 py-1 rounded-full border bg-slate-700">
           <span class="status-dot w-2 h-2 rounded-full bg-slate-500"></span>
@@ -55,6 +62,15 @@
         </div>
       </div>
     </header>
+    <div id="syncProgressWrap" class="hidden bg-white border-b border-slate-200 px-3 md:px-6 py-2">
+      <div class="flex items-center justify-between text-[11px] text-slate-600">
+        <span id="syncProgressLabel">Syncing data...</span>
+        <span id="syncProgressPercent">0%</span>
+      </div>
+      <div class="mt-1.5 h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
+        <div id="syncProgressBar" class="h-full w-0 bg-emerald-500"></div>
+      </div>
+    </div>
 
     <!-- MAIN CONTENT -->
     <main class="flex-1 overflow-y-auto p-2 md:p-4">

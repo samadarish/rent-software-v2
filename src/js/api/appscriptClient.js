@@ -5,11 +5,13 @@
  */
 import { getAppScriptUrl } from "./config.js";
 import { showModal } from "../utils/ui.js";
+import { cacheGet, cacheSet } from "./localDb.js";
 
 const inflightGets = new Map();
 const timingBuffer = globalThis.__appscriptTimings || [];
 globalThis.__appscriptTimings = timingBuffer;
 const TIMING_LIMIT = 50;
+const LOCAL_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function recordTiming({ action, method, url, ok, durationMs }) {
     try {
@@ -46,6 +48,15 @@ function buildCacheKey({ url, action, params }) {
     return `${url}|${action}|${paramString}`;
 }
 
+async function readLocalCache(cacheKey, ttlMs, allowStale) {
+    if (!cacheKey) return null;
+    const entry = await cacheGet(cacheKey);
+    if (!entry || typeof entry !== "object") return null;
+    const updatedAt = Number(entry.updated_at || entry.updatedAt || 0);
+    if (ttlMs && updatedAt && Date.now() - updatedAt > ttlMs && !allowStale) return null;
+    return entry.value ?? null;
+}
+
 /**
  * Opens the Apps Script URL configuration modal when the user needs to set it up.
  */
@@ -74,10 +85,16 @@ export function ensureAppScriptUrl({ onMissing, promptForConfig = false } = {}) 
  * @param {{ url: string, action: string, method?: string, params?: object, payload?: any }} options
  * @returns {Promise<any>} Parsed JSON response.
  */
-export async function callAppScript({ url, action, method = "GET", params = {}, payload }) {
+export async function callAppScript({
+    url,
+    action,
+    method = "GET",
+    params = {},
+    payload,
+    cache = {},
+}) {
     if (!url) return null;
 
-    const start = (performance && performance.now && performance.now()) || Date.now();
     const search = new URLSearchParams({ action, ...params });
     const target = method === "GET" ? `${url}?${search.toString()}` : url;
     const options = {
@@ -104,31 +121,60 @@ export async function callAppScript({ url, action, method = "GET", params = {}, 
 
     const isCacheableGet = method === "GET";
     const cacheKey = isCacheableGet ? buildCacheKey({ url, action, params }) : null;
+    const cacheOptions = cache && typeof cache === "object" ? cache : {};
+    const allowLocalCache = cacheOptions.useLocal !== false;
+    const writeLocalCache = cacheOptions.write !== false;
+    const ttlMs =
+        typeof cacheOptions.ttlMs === "number" ? cacheOptions.ttlMs : LOCAL_CACHE_TTL_MS;
+    const revalidate = cacheOptions.revalidate !== false;
+    const allowStale = cacheOptions.allowStale === true || !navigator.onLine;
+
+    const runFetch = () => {
+        const start = (performance && performance.now && performance.now()) || Date.now();
+        return fetch(target, options)
+            .then(async (res) => {
+                if (!res.ok) throw new Error(`Non-200: ${res.status}`);
+                return res.json();
+            })
+            .then((data) => {
+                const durationMs =
+                    ((performance && performance.now && performance.now()) || Date.now()) - start;
+                recordTiming({ action, method, url: target, ok: true, durationMs });
+                if (isCacheableGet && cacheKey && writeLocalCache) {
+                    cacheSet(cacheKey, data);
+                }
+                return data;
+            })
+            .catch((err) => {
+                const durationMs =
+                    ((performance && performance.now && performance.now()) || Date.now()) - start;
+                recordTiming({ action, method, url: target, ok: false, durationMs });
+                throw err;
+            });
+    };
+
+    if (isCacheableGet && allowLocalCache && cacheKey) {
+        const cached = await readLocalCache(cacheKey, ttlMs, allowStale);
+        if (cached) {
+            if (revalidate && !inflightGets.has(cacheKey)) {
+                const refreshPromise = runFetch().finally(() => inflightGets.delete(cacheKey));
+                inflightGets.set(cacheKey, refreshPromise);
+                refreshPromise.catch(() => null);
+            }
+            return cached;
+        }
+    }
+
     if (isCacheableGet && inflightGets.has(cacheKey)) {
         return inflightGets.get(cacheKey);
     }
 
-    const fetchPromise = fetch(target, options)
-        .then(async (res) => {
-            if (!res.ok) throw new Error(`Non-200: ${res.status}`);
-            return res.json();
-        })
-        .then((data) => {
-            const durationMs = ((performance && performance.now && performance.now()) || Date.now()) - start;
-            recordTiming({ action, method, url: target, ok: true, durationMs });
-            return data;
-        })
-        .catch((err) => {
-            const durationMs = ((performance && performance.now && performance.now()) || Date.now()) - start;
-            recordTiming({ action, method, url: target, ok: false, durationMs });
-            throw err;
-        });
-
-    if (isCacheableGet) inflightGets.set(cacheKey, fetchPromise);
+    const fetchPromise = runFetch();
+    if (isCacheableGet && cacheKey) inflightGets.set(cacheKey, fetchPromise);
 
     try {
         return await fetchPromise;
     } finally {
-        if (isCacheableGet) inflightGets.delete(cacheKey);
+        if (isCacheableGet && cacheKey) inflightGets.delete(cacheKey);
     }
 }

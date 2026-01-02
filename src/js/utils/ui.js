@@ -86,6 +86,60 @@ export function updateConnectionIndicator(status = "checking", message = "") {
 }
 
 /**
+ * Updates the sync status badge in the header.
+ * @param {"synced" | "pending" | "syncing" | "error"} status - Sync state.
+ * @param {string} message - Optional label override.
+ */
+export function updateSyncIndicator(status = "synced", message = "") {
+    const indicator = document.getElementById("syncIndicator");
+    if (!indicator) return;
+
+    const dot = indicator.querySelector(".sync-dot");
+    const label = indicator.querySelector(".sync-label");
+
+    const tickSvg = `
+        <svg viewBox="0 0 16 16" class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+    `;
+
+    const variants = {
+        synced: {
+            wrap: "bg-emerald-50 text-emerald-800 border-emerald-200",
+            dot: "inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-100 text-emerald-600",
+            dotHtml: tickSvg,
+            label: "Synced",
+        },
+        pending: {
+            wrap: "bg-amber-50 text-amber-800 border-amber-200",
+            dot: "w-2 h-2 rounded-full bg-amber-500",
+            dotHtml: "",
+            label: "Not synced",
+        },
+        syncing: {
+            wrap: "bg-amber-50 text-amber-800 border-amber-200",
+            dot: "inline-block h-3 w-3 rounded-full border-2 border-amber-500 border-t-transparent animate-spin",
+            dotHtml: "",
+            label: "Syncing",
+        },
+        error: {
+            wrap: "bg-rose-50 text-rose-800 border-rose-200",
+            dot: "w-2 h-2 rounded-full bg-rose-500",
+            dotHtml: "",
+            label: "Sync error",
+        },
+    };
+
+    const variant = variants[status] || variants.synced;
+    indicator.className = `flex items-center gap-2 text-[11px] px-3 py-1 rounded-full border ${variant.wrap}`;
+    if (dot) {
+        dot.className = `sync-dot ${variant.dot}`;
+        dot.innerHTML = variant.dotHtml || "";
+    }
+    if (label) label.textContent = message || variant.label;
+}
+
+/**
  * Clones option elements from one select to another while preserving selection.
  * @param {string} sourceId
  * @param {string} targetId

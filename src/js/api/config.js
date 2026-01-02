@@ -65,6 +65,9 @@ export function saveAppScriptUrl() {
     if (modal) hideModal(modal);
 
     updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Internet online");
+    document.dispatchEvent(
+        new CustomEvent("appscript:url-updated", { detail: { url: normalizedUrl } })
+    );
 
     // Refresh data after URL is saved
     import("./sheets.js").then(({ fetchWingsFromSheet, loadClausesFromSheet }) => {

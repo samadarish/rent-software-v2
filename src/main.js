@@ -25,6 +25,7 @@ import { switchFlow } from "./js/features/navigation/flow.js";
 import { attachEventHandlers } from "./js/events.js";
 import { updateConnectionIndicator } from "./js/utils/ui.js";
 import { initDraftUi } from "./js/features/shared/drafts.js";
+import { flushSyncQueue, initSyncManager, startInitialSync } from "./js/api/syncManager.js";
 
 /**
  * Application initialization
@@ -45,6 +46,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   ensureAppScriptConfigured();
 
   applyLandlordDefaultsToForm();
+  initSyncManager();
+  if (navigator.onLine) {
+    flushSyncQueue();
+  }
+  document.addEventListener("appscript:url-updated", () => {
+    startInitialSync();
+  });
 
   // Fire all initial data fetches in parallel
   const initialFetches = [
@@ -61,5 +69,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   updateConnectionIndicator(navigator.onLine ? "online" : "offline");
 
   window.addEventListener("online", () => updateConnectionIndicator("online", "Internet connected"));
+  window.addEventListener("online", () => flushSyncQueue());
   window.addEventListener("offline", () => updateConnectionIndicator("offline", "No internet"));
 });

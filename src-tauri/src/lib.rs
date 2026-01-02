@@ -1,9 +1,12 @@
 use serde::Serialize;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
+use rusqlite::{Connection, params};
 use std::collections::HashMap;
 use std::io::{self, Read};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +20,23 @@ struct UploadProgress {
 #[derive(Default)]
 struct UploadState {
     cancel_flags: Mutex<HashMap<String, Arc<AtomicBool>>>,
+}
+
+#[derive(Serialize)]
+struct CacheEntry {
+    value: serde_json::Value,
+    updated_at: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SyncJob {
+    id: i64,
+    action: String,
+    payload: serde_json::Value,
+    method: String,
+    params: serde_json::Value,
+    created_at: i64,
 }
 
 impl UploadState {
@@ -40,6 +60,48 @@ impl UploadState {
         let mut guard = self.cancel_flags.lock().unwrap();
         guard.remove(upload_id);
     }
+}
+
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+fn get_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("rent_software.sqlite"))
+}
+
+fn init_db(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS local_cache (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sync_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            method TEXT NOT NULL,
+            params TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );",
+    )?;
+    Ok(())
+}
+
+fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
+    let path = get_db_path(app)?;
+    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    init_db(&conn).map_err(|e| e.to_string())?;
+    Ok(conn)
 }
 
 struct ProgressReader<R: Read> {
@@ -104,6 +166,135 @@ impl<R: Read> Read for ProgressReader<R> {
 }
 
 #[tauri::command]
+fn cache_get(app: tauri::AppHandle, key: String) -> Result<Option<CacheEntry>, String> {
+    let conn = open_db(&app)?;
+    let mut stmt = conn
+        .prepare("SELECT value, updated_at FROM local_cache WHERE key = ?1")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt.query(params![key]).map_err(|e| e.to_string())?;
+    if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        let value_raw: String = row.get(0).map_err(|e| e.to_string())?;
+        let updated_at: i64 = row.get(1).map_err(|e| e.to_string())?;
+        let value = serde_json::from_str(&value_raw).unwrap_or(serde_json::Value::Null);
+        return Ok(Some(CacheEntry { value, updated_at }));
+    }
+    Ok(None)
+}
+
+#[tauri::command]
+fn cache_set(app: tauri::AppHandle, key: String, value: serde_json::Value) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    let payload = serde_json::to_string(&value).map_err(|e| e.to_string())?;
+    let updated_at = now_ms();
+    conn.execute(
+        "INSERT OR REPLACE INTO local_cache (key, value, updated_at) VALUES (?1, ?2, ?3)",
+        params![key, payload, updated_at],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn cache_delete(app: tauri::AppHandle, key: String) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    conn.execute("DELETE FROM local_cache WHERE key = ?1", params![key])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn cache_delete_prefix(app: tauri::AppHandle, prefix: String) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    let pattern = format!("{}%", prefix);
+    conn.execute(
+        "DELETE FROM local_cache WHERE key LIKE ?1",
+        params![pattern],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn queue_add(
+    app: tauri::AppHandle,
+    action: String,
+    payload: serde_json::Value,
+    method: Option<String>,
+    params: Option<serde_json::Value>,
+) -> Result<i64, String> {
+    let conn = open_db(&app)?;
+    let payload_json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+    let method_value = method.unwrap_or_else(|| "POST".to_string());
+    let params_value = params.unwrap_or_else(|| serde_json::json!({}));
+    let params_json = serde_json::to_string(&params_value).map_err(|e| e.to_string())?;
+    let created_at = now_ms();
+
+    conn.execute(
+        "INSERT INTO sync_queue (action, method, params, payload, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![action, method_value, params_json, payload_json, created_at],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(conn.last_insert_rowid())
+}
+
+#[tauri::command]
+fn queue_list(app: tauri::AppHandle, limit: Option<u32>) -> Result<Vec<SyncJob>, String> {
+    let conn = open_db(&app)?;
+    let limit_value = limit.unwrap_or(200);
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, action, method, params, payload, created_at FROM sync_queue ORDER BY id ASC LIMIT ?1",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![limit_value], |row| {
+            let params_raw: String = row.get(3)?;
+            let payload_raw: String = row.get(4)?;
+            let params_value = serde_json::from_str(&params_raw).unwrap_or(serde_json::Value::Null);
+            let payload_value = serde_json::from_str(&payload_raw).unwrap_or(serde_json::Value::Null);
+            Ok(SyncJob {
+                id: row.get(0)?,
+                action: row.get(1)?,
+                method: row.get(2)?,
+                params: params_value,
+                payload: payload_value,
+                created_at: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    let mut jobs = Vec::new();
+    for job in rows {
+        jobs.push(job.map_err(|e| e.to_string())?);
+    }
+    Ok(jobs)
+}
+
+#[tauri::command]
+fn queue_delete(app: tauri::AppHandle, id: i64) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    conn.execute("DELETE FROM sync_queue WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn queue_clear(app: tauri::AppHandle) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    conn.execute("DELETE FROM sync_queue", [])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn queue_count(app: tauri::AppHandle) -> Result<i64, String> {
+    let conn = open_db(&app)?;
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM sync_queue", [], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
+#[tauri::command]
 fn upload_payment_attachment(
     app: tauri::AppHandle,
     state: tauri::State<UploadState>,
@@ -155,6 +346,15 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(UploadState::default())
         .invoke_handler(tauri::generate_handler![
+            cache_get,
+            cache_set,
+            cache_delete,
+            cache_delete_prefix,
+            queue_add,
+            queue_list,
+            queue_delete,
+            queue_clear,
+            queue_count,
             upload_payment_attachment,
             cancel_upload
         ])

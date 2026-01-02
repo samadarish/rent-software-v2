@@ -19,6 +19,21 @@ function normalizeUnit(raw) {
     };
 }
 
+if (typeof document !== "undefined") {
+    document.addEventListener("units:updated", (e) => {
+        if (Array.isArray(e?.detail)) {
+            unitCache = e.detail.map(normalizeUnit).filter(Boolean);
+            unitsLoaded = true;
+        }
+    });
+    document.addEventListener("landlords:updated", (e) => {
+        if (Array.isArray(e?.detail)) {
+            landlordCache = e.detail.map((l) => ({ ...l }));
+            landlordsLoaded = true;
+        }
+    });
+}
+
 export function getUnitCache() {
     return unitCache.slice();
 }
@@ -58,4 +73,3 @@ export async function ensureLandlordsLoaded() {
     if (landlordsLoaded) return landlordCache;
     return refreshLandlords();
 }
-

@@ -943,7 +943,6 @@ async function handleSaveBills() {
 
     const res = await saveBillingRecord(payload);
     if (res?.ok) {
-        showToast("Bills saved to Google Sheets", "success");
         billingState.tenants = billingState.tenants.map((t) => ({
             ...t,
             hasBill: isTenantIncluded(t),

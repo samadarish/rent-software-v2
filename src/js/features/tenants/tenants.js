@@ -1385,6 +1385,20 @@ export function initTenantDirectory() {
         }
     });
 
+    document.addEventListener("tenants:updated", (e) => {
+        const rows = Array.isArray(e?.detail)
+            ? e.detail.map((t) => ({
+                  ...t,
+                  tenancyHistory: Array.isArray(t.tenancyHistory) ? t.tenancyHistory : [],
+                  family: Array.isArray(t.family) ? t.family : [],
+              }))
+            : [];
+        tenantRowsCache = rows;
+        tenantCache = collapseTenantRows(rows);
+        hasLoadedTenants = true;
+        applyTenantFilters();
+    });
+
     const searchInput = document.getElementById("tenantSearchInput");
     if (searchInput) {
         searchInput.addEventListener("input", (e) => {

@@ -1825,21 +1825,30 @@ function handleSavePayment_(payload = {}) {
   return { ok: true, payment: mapPaymentRow_(record) };
 }
 
-function mapPaymentRow_(record) {
+function buildPaymentsContext_() {
   const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
   const tenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
   const tenants = readTable_(TENANTS_SHEET, TENANTS_HEADERS);
   const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
-  const attachmentLookup = readTable_(ATTACHMENTS_SHEET, ATTACHMENT_HEADERS).reduce((m, a) => {
-    m[a.attachment_id] = a;
-    return m;
-  }, {});
+  const attachments = readTable_(ATTACHMENTS_SHEET, ATTACHMENT_HEADERS);
 
-  const bill = bills.find((b) => b.bill_line_id == record.bill_line_id) || {};
-  const tenancy = tenancies.find((t) => t.tenancy_id == bill.tenancy_id) || {};
-  const tenant = tenants.find((t) => t.tenant_id == (record.tenant_id || tenancy.tenant_id)) || {};
-  const unit = units.find((u) => u.unit_id == tenancy.unit_id) || {};
-  const attachment = attachmentLookup[record.attachment_id] || {};
+  return {
+    billById: buildLookupByKey_(bills, 'bill_line_id'),
+    tenancyById: buildLookupByKey_(tenancies, 'tenancy_id'),
+    tenantById: buildLookupByKey_(tenants, 'tenant_id'),
+    unitById: buildLookupByKey_(units, 'unit_id'),
+    attachmentById: buildLookupByKey_(attachments, 'attachment_id'),
+  };
+}
+
+function mapPaymentRow_(record, context) {
+  const ctx = context || buildPaymentsContext_();
+  const bill = (ctx.billById && ctx.billById[record.bill_line_id]) || {};
+  const tenancy = (ctx.tenancyById && ctx.tenancyById[bill.tenancy_id]) || {};
+  const tenantId = record.tenant_id || tenancy.tenant_id;
+  const tenant = (ctx.tenantById && ctx.tenantById[tenantId]) || {};
+  const unit = (ctx.unitById && ctx.unitById[tenancy.unit_id]) || {};
+  const attachment = (ctx.attachmentById && ctx.attachmentById[record.attachment_id]) || {};
 
   return {
     id: record.payment_id,
@@ -1870,11 +1879,48 @@ function mapPaymentRow_(record) {
 
 function handleFetchPayments_() {
   const payments = readTable_(PAYMENTS_SHEET, PAYMENT_HEADERS);
-  return payments.map((p) => mapPaymentRow_(p)).sort((a, b) => {
+  const context = buildPaymentsContext_();
+  return payments.map((p) => mapPaymentRow_(p, context)).sort((a, b) => {
     const aTime = a.createdAt ? new Date(a.createdAt).getTime() : (a.date ? new Date(a.date).getTime() : 0);
     const bTime = b.createdAt ? new Date(b.createdAt).getTime() : (b.date ? new Date(b.date).getTime() : 0);
     return bTime - aTime;
   });
+}
+
+function handleExportAll_() {
+  const wingRows = readTable_(WINGS_SHEET, ['Wing']);
+  const wings = wingRows.map((r) => (r.Wing || '').toString().trim()).filter(Boolean);
+  const rentRevisions = readTable_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS)
+    .map((r) => ({
+      ...r,
+      effective_month: normalizeMonthKey_(r.effective_month),
+      rent_amount: Number(r.rent_amount) || 0,
+    }))
+    .sort((a, b) => {
+      const monthCompare = (b.effective_month || '').localeCompare(a.effective_month || '');
+      if (monthCompare !== 0) return monthCompare;
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTime - aTime;
+    });
+
+  return {
+    ok: true,
+    wings,
+    units: readTable_(UNITS_SHEET, UNITS_HEADERS),
+    landlords: readTable_(LANDLORDS_SHEET, LANDLORD_HEADERS),
+    tenants: buildTenantDirectory_(),
+    tenancies: readTable_(TENANCIES_SHEET, TENANCIES_HEADERS),
+    familyMembers: readTable_(FAMILY_SHEET, FAMILY_HEADERS),
+    clauses: readUnifiedClauses_(),
+    wingMonthlyConfig: readTable_(WING_MONTHLY_SHEET, WING_MONTHLY_HEADERS),
+    tenantMonthlyReadings: readTable_(TENANT_READINGS_SHEET, TENANT_READING_HEADERS),
+    billLines: readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS),
+    payments: handleFetchPayments_(),
+    attachments: readTable_(ATTACHMENTS_SHEET, ATTACHMENT_HEADERS),
+    rentRevisions,
+    generatedBills: handleFetchGeneratedBills_(),
+  };
 }
 
 /********* HTTP ENTRY POINTS *********/
@@ -1935,6 +1981,27 @@ function doGet(e) {
     if (action === 'payments') {
       const payments = handleFetchPayments_();
       return jsonResponse({ ok: true, payments });
+    }
+
+    if (action === 'rentrevisions') {
+      const revisions = readTable_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS)
+        .map((r) => ({
+          ...r,
+          effective_month: normalizeMonthKey_(r.effective_month),
+          rent_amount: Number(r.rent_amount) || 0,
+        }))
+        .sort((a, b) => {
+          const monthCompare = (b.effective_month || '').localeCompare(a.effective_month || '');
+          if (monthCompare !== 0) return monthCompare;
+          const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return bTime - aTime;
+        });
+      return jsonResponse({ ok: true, revisions });
+    }
+
+    if (action === 'exportall') {
+      return jsonResponse(handleExportAll_());
     }
 
     if (action === 'attachmentpreview') {

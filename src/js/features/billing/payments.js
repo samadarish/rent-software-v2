@@ -2216,6 +2216,7 @@ async function updateAttachmentFromFile(file, options = {}) {
 
     const { attachment_id, attachmentUrl, attachmentName } = uploadResult.attachment;
     clearAttachmentState();
+    paymentsState.attachmentDataUrl = dataUrl || "";
     paymentsState.attachmentId = attachment_id || "";
     paymentsState.attachmentName = attachmentName || uploadName || file.name || "";
     paymentsState.attachmentUrl = attachmentUrl || "";
