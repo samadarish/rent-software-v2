@@ -326,6 +326,19 @@ export async function startInitialSync() {
     if (!url) return { ok: false, reason: "missing-url" };
 
     initialSyncRunning = true;
+    const pending = await queueCount();
+    if (pending > 0) {
+        const confirmed = window.confirm(
+            `You have ${pending} unsynced change${pending === 1 ? "" : "s"}. Resyncing will discard them. Continue?`
+        );
+        if (!confirmed) {
+            initialSyncRunning = false;
+            updateSyncIndicator("pending", "Sync paused");
+            setProgressVisible(false);
+            return { ok: false, reason: "cancelled" };
+        }
+    }
+
     updateSyncIndicator("syncing");
     setProgressVisible(true);
     updateSyncProgress(0, "Preparing sync...");

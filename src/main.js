@@ -68,7 +68,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   updateConnectionIndicator(navigator.onLine ? "online" : "offline");
 
-  window.addEventListener("online", () => updateConnectionIndicator("online", "Internet connected"));
-  window.addEventListener("online", () => flushSyncQueue());
+  const handleOnline = () => {
+    updateConnectionIndicator("online", "Internet connected");
+    flushSyncQueue();
+  };
+  window.addEventListener("online", handleOnline);
   window.addEventListener("offline", () => updateConnectionIndicator("offline", "No internet"));
 });

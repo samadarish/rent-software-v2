@@ -20,6 +20,9 @@ import {
     getLandlordCache as getLandlordCacheStore,
 } from "../../store/masters.js";
 
+const getValue = (id) => document.getElementById(id)?.value ?? "";
+const getTrimmedValue = (id) => getValue(id).trim();
+
 function getLandlordById(landlordId) {
     const landlordCache = getLandlordCacheStore();
     return landlordCache.find((l) => l.landlord_id === landlordId);
@@ -111,14 +114,10 @@ function populateUnitSelectForFlow() {
     }
 }
 
-function syncUnitsFromEvent(event) {
-    populateUnitSelectForFlow();
-}
-
 function getSelectedUnitForForm() {
-    const select = document.getElementById("unit_selector");
-    if (!select || !select.value) return null;
-    return getUnitById(select.value);
+    const unitId = getValue("unit_selector");
+    if (!unitId) return null;
+    return getUnitById(unitId);
 }
 
 export function getUnitCache() {
@@ -183,17 +182,15 @@ export function initFormOptions() {
     const noticeTenant = document.getElementById("notice_num_t");
     const noticeLandlord = document.getElementById("notice_num_l");
 
-    for (let i = 0; i <= 12; i++) {
+    for (let i = 1; i <= 12; i++) {
         const label = i.toString();
-        if (i > 0) {
-            if (noticeTenant) {
-                const opt2 = new Option(label, label);
-                noticeTenant.appendChild(opt2);
-            }
-            if (noticeLandlord) {
-                const opt3 = new Option(label, label);
-                noticeLandlord.appendChild(opt3);
-            }
+        if (noticeTenant) {
+            const opt2 = new Option(label, label);
+            noticeTenant.appendChild(opt2);
+        }
+        if (noticeLandlord) {
+            const opt3 = new Option(label, label);
+            noticeLandlord.appendChild(opt3);
         }
     }
 
@@ -213,7 +210,7 @@ export function initFormOptions() {
         });
     }
 
-    document.addEventListener("units:updated", syncUnitsFromEvent);
+    document.addEventListener("units:updated", populateUnitSelectForFlow);
     document.addEventListener("flow:changed", populateUnitSelectForFlow);
     document.addEventListener("landlords:updated", () => populateLandlordSelect());
 }
@@ -223,13 +220,12 @@ export function initFormOptions() {
  * @returns {Object} Formatted data object for template generation
  */
 export function collectFormDataForTemplate() {
-    const agreementDate = document.getElementById("agreement_date").value;
-    const tenancyComm = document.getElementById("tenancy_comm").value;
-    const tenancyEndEl = document.getElementById("tenancy_end");
-    const tenancyEnd = tenancyEndEl ? tenancyEndEl.value : "";
+    const agreementDate = getValue("agreement_date");
+    const tenancyComm = getValue("tenancy_comm");
+    const tenancyEnd = getValue("tenancy_end");
     const selectedUnit = getSelectedUnitForForm();
-    const landlordSelect = document.getElementById("landlord_selector");
-    const selectedLandlord = landlordSelect && landlordSelect.value ? getLandlordById(landlordSelect.value) : null;
+    const landlordId = getValue("landlord_selector");
+    const selectedLandlord = landlordId ? getLandlordById(landlordId) : null;
 
     const clausesBySection = getSelectedClauses();
 
@@ -255,18 +251,18 @@ export function collectFormDataForTemplate() {
         .map(
             (f, i) =>
                 `${i + 1}. ${f.name} (${f.relationship || "-"}, ${f.occupation || "-"}) ` +
-                `– Aadhaar: ${f.aadhaar || "-"}, Address: ${f.address || "-"}`
+                `- Aadhaar: ${f.aadhaar || "-"}, Address: ${f.address || "-"}`
         )
         .join("\n");
 
     // Calculate rent increase amount in words
-    const rentIncreaseRaw = document.getElementById("rent_inc").value.trim();
+    const rentIncreaseRaw = getTrimmedValue("rent_inc");
     const rentIncreaseVal = parseInt(rentIncreaseRaw, 10);
     const increaseAmountWord =
         !isNaN(rentIncreaseVal) && rentIncreaseVal > 0
             ? `${numberToIndianWords(rentIncreaseVal)} only`
-            : document.getElementById("increase_amount_word").value.trim();
-    const rentRevisionUnitRaw = document.getElementById("rent_rev_unit").value.trim();
+            : getTrimmedValue("increase_amount_word");
+    const rentRevisionUnitRaw = getTrimmedValue("rent_rev_unit");
     const rentRevisionUnitForDoc =
         rentRevisionUnitRaw === "YEAR"
             ? "year(s)"
@@ -274,12 +270,13 @@ export function collectFormDataForTemplate() {
                 ? "month(s)"
                 : rentRevisionUnitRaw;
 
-    const landlordName = selectedLandlord?.name ?? document.getElementById("Landlord_name").value;
-    const landlordAddress = selectedLandlord?.address ?? document.getElementById("landlord_address").value;
-    const landlordAadhaar = selectedLandlord?.aadhaar ?? document.getElementById("landlord_aadhar").value;
+    const landlordName = selectedLandlord?.name ?? getValue("Landlord_name");
+    const landlordAddress = selectedLandlord?.address ?? getValue("landlord_address");
+    const landlordAadhaar = selectedLandlord?.aadhaar ?? getValue("landlord_aadhar");
+    const payableDateRaw = getTrimmedValue("payable_date");
 
     const data = {
-        "GRN number": document.getElementById("grn_number").value.trim(),
+        "GRN number": getTrimmedValue("grn_number"),
         agreement_date: formatDateForDoc(agreementDate),
         agreement_date_raw: agreementDate || "",
 
@@ -292,43 +289,35 @@ export function collectFormDataForTemplate() {
         tenancy_comm_raw: tenancyComm || "",
         tenancy_end: formatDateForDoc(tenancyEnd),
         tenancy_end_raw: tenancyEnd || "",
-        notice_num_t: document.getElementById("notice_num_t").value.trim(),
-        notice_num_l: document.getElementById("notice_num_l").value.trim(),
+        notice_num_t: getTrimmedValue("notice_num_t"),
+        notice_num_l: getTrimmedValue("notice_num_l"),
 
-        Tenant_Full_Name: document.getElementById("Tenant_Full_Name").value.trim(),
-        Tenant_Permanent_Address: document
-            .getElementById("Tenant_Permanent_Address")
-            .value.trim(),
-        tenant_Aadhar: document.getElementById("tenant_Aadhar").value.trim(),
-        tenant_mobile: document.getElementById("tenant_mobile").value.trim(),
+        Tenant_Full_Name: getTrimmedValue("Tenant_Full_Name"),
+        Tenant_Permanent_Address: getTrimmedValue("Tenant_Permanent_Address"),
+        tenant_Aadhar: getTrimmedValue("tenant_Aadhar"),
+        tenant_mobile: getTrimmedValue("tenant_mobile"),
         unit_id: selectedUnit?.unit_id || "",
         unit_number: selectedUnit?.unit_number || "",
 
-        "floor_of_building": document.getElementById("floor_of_building").value,
-        direction_build: document.getElementById("direction_build").value,
-        meter_number: document.getElementById("meter_number").value.trim(),
+        "floor_of_building": getValue("floor_of_building"),
+        direction_build: getValue("direction_build"),
+        meter_number: getTrimmedValue("meter_number"),
 
-        rent_amount: document.getElementById("rent_amount").value.trim(),
-        rent_amount_words: document
-            .getElementById("rent_amount_words")
-            .value.trim(),
+        rent_amount: getTrimmedValue("rent_amount"),
+        rent_amount_words: getTrimmedValue("rent_amount_words"),
 
-        payable_date_raw: document.getElementById("payable_date").value.trim(),
-        payable_date: document.getElementById("payable_date").value
-            ? toOrdinal(parseInt(document.getElementById("payable_date").value, 10))
-            : "",
+        payable_date_raw: payableDateRaw,
+        payable_date: payableDateRaw ? toOrdinal(parseInt(payableDateRaw, 10)) : "",
 
-        secu_depo: document.getElementById("secu_depo").value.trim(),
-        secu_amount_words: document
-            .getElementById("secu_amount_words")
-            .value.trim(),
-        rent_inc: document.getElementById("rent_inc").value.trim(),
-        rent_rev_number: document.getElementById("rent_rev_number").value.trim(),
+        secu_depo: getTrimmedValue("secu_depo"),
+        secu_amount_words: getTrimmedValue("secu_amount_words"),
+        rent_inc: getTrimmedValue("rent_inc"),
+        rent_rev_number: getTrimmedValue("rent_rev_number"),
         "rent_rev year_mon": rentRevisionUnitForDoc,
 
-        pet_text_area: document.getElementById("pet_text_area").value.trim(),
-        late_rent: document.getElementById("late_rent").value.trim(),
-        late_days: document.getElementById("late_days").value.trim(),
+        pet_text_area: getTrimmedValue("pet_text_area"),
+        late_rent: getTrimmedValue("late_rent"),
+        late_days: getTrimmedValue("late_days"),
 
         tenant_clauses: tenantClausesArray,
         landlord_clauses: landlordClausesArray,
@@ -355,15 +344,15 @@ export function collectFormDataForTemplate() {
 export function collectFullPayloadForDb() {
     const templateData = collectFormDataForTemplate();
     const sanitizedTemplate = { ...templateData };
-    sanitizedTemplate["rent_rev year_mon"] = document.getElementById("rent_rev_unit").value.trim();
+    sanitizedTemplate["rent_rev year_mon"] = getTrimmedValue("rent_rev_unit");
     delete sanitizedTemplate.rent_amount_words;
     delete sanitizedTemplate.secu_amount_words;
     const selectedUnit = getSelectedUnitForForm();
     return {
         templateData: sanitizedTemplate,
-        Tenant_occupation: document.getElementById("Tenant_occupation").value.trim(),
-        wing: document.getElementById("wing").value.trim(),
-        floor_of_building: document.getElementById("floor_of_building").value,
+        Tenant_occupation: getTrimmedValue("Tenant_occupation"),
+        wing: getTrimmedValue("wing"),
+        floor_of_building: getValue("floor_of_building"),
         familyMembers: getFamilyMembersFromTable(),
         unitId: selectedUnit?.unit_id || "",
         unit_number: selectedUnit?.unit_number || templateData.unit_number || "",

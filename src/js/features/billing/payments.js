@@ -17,6 +17,7 @@ import {
 import { ensureTenantDirectoryLoaded, getActiveTenantsForWing } from "../tenants/tenants.js";
 import { formatCurrency as formatCurrencyBase } from "../../utils/formatters.js";
 import { normalizeKey, normalizeMonthKey } from "../../utils/normalizers.js";
+import { escapeHtml } from "../../utils/htmlUtils.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
 const paymentsState = {
@@ -214,14 +215,15 @@ function resolveBillPaidFlag(bill = {}) {
 
 function trimBillForList(bill = {}) {
     if (!bill || typeof bill !== "object") return bill;
+    const billLineId = bill.billLineId || bill.bill_line_id || "";
     return {
-        tenantName: bill.tenantName,
-        tenantKey: bill.tenantKey,
+        tenantName: bill.tenantName || bill.tenant_name,
+        tenantKey: bill.tenantKey || bill.tenant_key,
         wing: bill.wing,
         unitNumber: bill.unitNumber,
         unit_number: bill.unit_number,
-        monthKey: bill.monthKey,
-        monthLabel: bill.monthLabel,
+        monthKey: bill.monthKey || bill.month_key,
+        monthLabel: bill.monthLabel || bill.month_label,
         totalAmount: bill.totalAmount,
         total_amount: bill.total_amount,
         remainingAmount: bill.remainingAmount,
@@ -232,9 +234,10 @@ function trimBillForList(bill = {}) {
         is_paid: bill.is_paid,
         hasPaid: bill.hasPaid,
         has_paid: bill.has_paid,
-        payableDate: bill.payableDate,
-        billLineId: bill.billLineId,
-        tenancyId: bill.tenancyId,
+        payableDate: bill.payableDate || bill.payable_date,
+        billLineId,
+        bill_line_id: bill.bill_line_id || bill.billLineId,
+        tenancyId: bill.tenancyId || bill.tenancy_id,
     };
 }
 
@@ -732,15 +735,18 @@ function renderPaymentHistory(context = {}) {
         const thumbUrl = rawUrl ? normalizeAttachmentUrl(rawUrl) : "";
         const hasAttachment = !!thumbUrl;
         const noteText = notesLabel || "No notes";
+        const safeDateLabel = escapeHtml(dateLabel);
+        const safeModeLabel = escapeHtml(modeLabel);
+        const safeNoteText = escapeHtml(noteText);
 
         card.innerHTML = `
             <div class="grid grid-cols-[32px,1fr,1fr,1fr,auto] gap-3 items-center px-3 py-2">
                 <div class="text-[10px] font-semibold text-slate-500">#${idx + 1}</div>
                 <div class="text-[12px] font-semibold text-slate-900">${amountLabel}</div>
                 <div class="text-[11px] text-slate-700">
-                    ${modeLabel !== "-" ? `<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${modeLabel}</span>` : "-"}
+                    ${modeLabel !== "-" ? `<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${safeModeLabel}</span>` : "-"}
                 </div>
-                <div class="text-[10px] text-slate-500 whitespace-nowrap">${dateLabel}</div>
+                <div class="text-[10px] text-slate-500 whitespace-nowrap">${safeDateLabel}</div>
                 <div class="flex items-center justify-end gap-2">
                     <div class="receipt-shell w-14 h-14 rounded-lg border bg-slate-50 flex items-center justify-center overflow-hidden">
                         <img class="receipt-thumb ${hasAttachment ? "" : "hidden"} w-full h-full object-cover" alt="Receipt preview" />
@@ -758,7 +764,7 @@ function renderPaymentHistory(context = {}) {
             </div>
             <div class="border-t bg-slate-50 px-3 py-2 text-[10px] text-slate-600">
                 <span class="uppercase text-[9px] font-semibold text-slate-500">Note</span>
-                <span class="ml-1">${noteText}</span>
+                <span class="ml-1">${safeNoteText}</span>
             </div>
         `;
 
@@ -1316,6 +1322,57 @@ function setRecordButtonLoading(button, isLoading) {
     button.textContent = button.dataset.label || "Record";
 }
 
+function bindGeneratedBillsActions() {
+    ["pendingBillsBody", "paidBillsBody"].forEach((id) => {
+        const body = document.getElementById(id);
+        if (!body || body.dataset.bound === "true") return;
+        body.dataset.bound = "true";
+        body.addEventListener("click", handleGeneratedBillAction);
+    });
+}
+
+async function handleGeneratedBillAction(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const btn = target.closest("button[data-bill-action]");
+    if (!btn) return;
+
+    const row = btn.closest("tr");
+    const billId = btn.dataset.billId || row?.dataset?.billId || "";
+    if (!billId) return;
+
+    const bill = getAllGeneratedBills().find(
+        (entry) => String(entry.billLineId || entry.bill_line_id) === String(billId)
+    );
+    if (!bill) return;
+
+    const status = summarizeBillPayments(bill);
+    const action = btn.dataset.billAction;
+
+    if (action === "view") {
+        if (!paymentsState.loaded) {
+            try {
+                await loadPayments();
+            } catch (err) {
+                console.error("Failed to load payments for details", err);
+            }
+        }
+        const payment = findPaymentForBill(bill);
+        openPaymentModal(payment || null, { ...bill, remaining: status.remaining });
+        return;
+    }
+
+    if (action === "record") {
+        if (btn.disabled) return;
+        setRecordButtonLoading(btn, true);
+        try {
+            await openPaymentModalFromBill({ ...bill, remaining: status.remaining });
+        } finally {
+            setRecordButtonLoading(btn, false);
+        }
+    }
+}
+
 function renderGeneratedBills() {
     const pendingBody = document.getElementById("pendingBillsBody");
     const paidBody = document.getElementById("paidBillsBody");
@@ -1324,6 +1381,7 @@ function renderGeneratedBills() {
     if (!pendingBody || !paidBody) return;
 
     if (loader) loader.classList.add("hidden");
+    bindGeneratedBillsActions();
 
     const makeRow = (targetBody, { bill, status }, isPaid) => {
         const tr = document.createElement("tr");
@@ -1333,17 +1391,26 @@ function renderGeneratedBills() {
         const remainingLabel = status.remaining > 0 ? `${formatCurrency(status.remaining)} due` : "Paid";
         const totalLabel = formatCurrency(bill.totalAmount ?? bill.total_amount);
         const dueInfo = getDueInfo(bill);
+        const billId = String(bill.billLineId || bill.bill_line_id || "");
+        const safeTenantName = escapeHtml(bill.tenantName || "-");
+        const safeUnit = escapeHtml(bill.unitNumber || bill.unit_number || "-");
+        const safeWing = escapeHtml(bill.wing || "-");
+        const safeMonthLabel = escapeHtml(monthLabel);
+        const safeDueLabel = escapeHtml(dueInfo.label || "");
+        const safeTotalLabel = escapeHtml(totalLabel);
+        const safeRemainingLabel = escapeHtml(remainingLabel);
         const dueBadge = bill.payableDate
-            ? `<div class="text-[10px] ${dueInfo.overdue && !isPaid ? "text-rose-700" : "text-slate-500"}">${dueInfo.label}</div>`
+            ? `<div class="text-[10px] ${dueInfo.overdue && !isPaid ? "text-rose-700" : "text-slate-500"}">${safeDueLabel}</div>`
             : "";
 
+        tr.dataset.billId = billId;
         tr.innerHTML = `
-            <td class="px-3 py-2 text-[11px] font-semibold">${bill.tenantName || "-"}</td>
-            <td class="px-3 py-2 text-[11px]">${bill.unitNumber || bill.unit_number || "-"}</td>
-            <td class="px-3 py-2 text-[11px]">${bill.wing || "-"}</td>
-            <td class="px-3 py-2 text-[11px]">${monthLabel}${dueBadge}</td>
-            <td class="px-3 py-2 text-[11px] text-right">${totalLabel}</td>
-            <td class="px-3 py-2 text-[11px] text-right ${status.remaining > 0 ? "text-amber-700" : "text-emerald-700"}">${remainingLabel}</td>
+            <td class="px-3 py-2 text-[11px] font-semibold">${safeTenantName}</td>
+            <td class="px-3 py-2 text-[11px]">${safeUnit}</td>
+            <td class="px-3 py-2 text-[11px]">${safeWing}</td>
+            <td class="px-3 py-2 text-[11px]">${safeMonthLabel}${dueBadge}</td>
+            <td class="px-3 py-2 text-[11px] text-right">${safeTotalLabel}</td>
+            <td class="px-3 py-2 text-[11px] text-right ${status.remaining > 0 ? "text-amber-700" : "text-emerald-700"}">${safeRemainingLabel}</td>
             <td class="px-3 py-2 text-[11px] text-right"></td>
         `;
 
@@ -1358,31 +1425,15 @@ function renderGeneratedBills() {
                 viewBtn.className =
                     "px-3 py-1.5 rounded-lg bg-slate-200 text-slate-800 text-[11px] font-semibold hover:bg-slate-300";
                 viewBtn.textContent = "View details";
-                viewBtn.addEventListener("click", async () => {
-                    if (!paymentsState.loaded) {
-                        try {
-                            await loadPayments();
-                        } catch (err) {
-                            console.error("Failed to load payments for details", err);
-                        }
-                    }
-                    const payment = findPaymentForBill(bill);
-                    openPaymentModal(payment || null, { ...bill, remaining: status.remaining });
-                });
+                viewBtn.dataset.billAction = "view";
+                viewBtn.dataset.billId = billId;
                 actionCell.appendChild(viewBtn);
             } else {
                 const btn = document.createElement("button");
                 btn.className = "px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500";
                 btn.textContent = "Record";
-                btn.addEventListener("click", async () => {
-                    if (btn.disabled) return;
-                    setRecordButtonLoading(btn, true);
-                    try {
-                        await openPaymentModalFromBill({ ...bill, remaining: status.remaining });
-                    } finally {
-                        setRecordButtonLoading(btn, false);
-                    }
-                });
+                btn.dataset.billAction = "record";
+                btn.dataset.billId = billId;
                 actionCell.appendChild(btn);
             }
         }

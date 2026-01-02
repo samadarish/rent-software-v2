@@ -161,8 +161,8 @@ export function normalizeMonthKey(value, options = {}) {
     if (!value) return "";
 
     if (value instanceof Date && !Number.isNaN(value.getTime())) {
-        const month = `${value.getUTCMonth() + 1}`.padStart(2, "0");
-        const result = `${value.getUTCFullYear()}-${month}`;
+        const month = `${value.getMonth() + 1}`.padStart(2, "0");
+        const result = `${value.getFullYear()}-${month}`;
         return lowercase ? result.toLowerCase() : result;
     }
 
@@ -187,46 +187,50 @@ export function normalizeMonthKey(value, options = {}) {
         return lowercase ? result.toLowerCase() : result;
     }
 
-    const ymd = str.match(/^(\d{4})[-/.](\d{1,2})/);
-    if (ymd) {
-        const month = `${ymd[2]}`.padStart(2, "0");
-        const result = `${ymd[1]}-${month}`;
-        return lowercase ? result.toLowerCase() : result;
-    }
+    const hasTime = /[T\s]\d{1,2}:\d{2}/.test(str) || /GMT|UTC/i.test(str);
 
-    const my = str.match(/^(\d{1,2})[-/.](\d{4})$/);
-    if (my) {
-        const month = `${my[1]}`.padStart(2, "0");
-        const result = `${my[2]}-${month}`;
-        return lowercase ? result.toLowerCase() : result;
-    }
-
-    const mdy = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
-    if (mdy) {
-        const rawYear = mdy[3].length === 2 ? `20${mdy[3]}` : mdy[3];
-        const first = parseInt(mdy[1], 10);
-        const second = parseInt(mdy[2], 10);
-        const monthNum = first > 12 && second <= 12 ? second : first;
-        const month = `${monthNum}`.padStart(2, "0");
-        const result = `${rawYear}-${month}`;
-        return lowercase ? result.toLowerCase() : result;
-    }
-
-    const monthName = str.match(/^([A-Za-z]{3,})\s+(\d{2,4})$/);
-    if (monthName) {
-        const monthIdx = new Date(`${monthName[1]} 1, 2000`).getMonth();
-        if (!Number.isNaN(monthIdx)) {
-            const month = `${monthIdx + 1}`.padStart(2, "0");
-            const year = monthName[2].length === 2 ? `20${monthName[2]}` : monthName[2];
-            const result = `${year}-${month}`;
+    if (!hasTime) {
+        const ymd = str.match(/^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2}))?$/);
+        if (ymd) {
+            const month = `${ymd[2]}`.padStart(2, "0");
+            const result = `${ymd[1]}-${month}`;
             return lowercase ? result.toLowerCase() : result;
+        }
+
+        const my = str.match(/^(\d{1,2})[-/.](\d{4})$/);
+        if (my) {
+            const month = `${my[1]}`.padStart(2, "0");
+            const result = `${my[2]}-${month}`;
+            return lowercase ? result.toLowerCase() : result;
+        }
+
+        const mdy = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
+        if (mdy) {
+            const rawYear = mdy[3].length === 2 ? `20${mdy[3]}` : mdy[3];
+            const first = parseInt(mdy[1], 10);
+            const second = parseInt(mdy[2], 10);
+            const monthNum = first > 12 && second <= 12 ? second : first;
+            const month = `${monthNum}`.padStart(2, "0");
+            const result = `${rawYear}-${month}`;
+            return lowercase ? result.toLowerCase() : result;
+        }
+
+        const monthName = str.match(/^([A-Za-z]{3,})\s+(\d{2,4})$/);
+        if (monthName) {
+            const monthIdx = new Date(`${monthName[1]} 1, 2000`).getMonth();
+            if (!Number.isNaN(monthIdx)) {
+                const month = `${monthIdx + 1}`.padStart(2, "0");
+                const year = monthName[2].length === 2 ? `20${monthName[2]}` : monthName[2];
+                const result = `${year}-${month}`;
+                return lowercase ? result.toLowerCase() : result;
+            }
         }
     }
 
     const parsedDate = new Date(str);
     if (!Number.isNaN(parsedDate.getTime())) {
-        const month = `${parsedDate.getUTCMonth() + 1}`.padStart(2, "0");
-        const result = `${parsedDate.getUTCFullYear()}-${month}`;
+        const month = `${parsedDate.getMonth() + 1}`.padStart(2, "0");
+        const result = `${parsedDate.getFullYear()}-${month}`;
         return lowercase ? result.toLowerCase() : result;
     }
 

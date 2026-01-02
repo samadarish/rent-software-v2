@@ -39,6 +39,11 @@ export async function getLocalData(key, fallback = null) {
     return entry.value ?? fallback;
 }
 
+export async function getLocalList(key, fallback = []) {
+    const data = await getLocalData(key, fallback);
+    return coerceArray(data);
+}
+
 export async function setLocalData(key, value) {
     if (!key) return null;
     await cacheSet(key, value ?? null);

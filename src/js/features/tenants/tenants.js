@@ -5,6 +5,7 @@ import {
     updateTenantRecord,
 } from "../../api/sheets.js";
 import { buildUnitLabel, formatCurrency, normalizeMonthKey, toOrdinal } from "../../utils/formatters.js";
+import { escapeHtml } from "../../utils/htmlUtils.js";
 import { cloneSelectOptions, hideModal, showModal, showToast } from "../../utils/ui.js";
 import { createFamilyRow } from "./family.js";
 import {
@@ -16,6 +17,7 @@ import {
 
 let tenantCache = [];
 let tenantRowsCache = [];
+let tenantRenderCache = [];
 let hasLoadedTenants = false;
 let unitCache = getUnitCacheStore();
 let landlordCache = getLandlordCacheStore();
@@ -219,10 +221,13 @@ function renderRentHistory(baseRent) {
         empty.classList.add("hidden");
         revisions.forEach((rev) => {
             const tr = document.createElement("tr");
+            const monthLabel = escapeHtml(formatMonthLabel(rev.effective_month));
+            const rentLabel = escapeHtml(formatRent(rev.rent_amount));
+            const noteLabel = escapeHtml(rev.note || "");
             tr.innerHTML = `
-                <td class="px-2 py-1 text-[11px] text-slate-700">${formatMonthLabel(rev.effective_month)}</td>
-                <td class="px-2 py-1 text-[11px] font-semibold">₹${(Number(rev.rent_amount) || 0).toLocaleString("en-IN")}</td>
-                <td class="px-2 py-1 text-[11px] text-slate-600">${rev.note || ""}</td>
+                <td class="px-2 py-1 text-[11px] text-slate-700">${monthLabel}</td>
+                <td class="px-2 py-1 text-[11px] font-semibold">${rentLabel}</td>
+                <td class="px-2 py-1 text-[11px] text-slate-600">${noteLabel}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -235,7 +240,7 @@ function renderRentHistory(baseRent) {
         currentRentEl.textContent =
             effective === null || typeof effective === "undefined"
                 ? "-"
-                : `₹${(Number(effective) || 0).toLocaleString("en-IN")}`;
+                : formatRent(effective);
     }
 }
 
@@ -479,6 +484,33 @@ function renderStatusPill(active) {
     return span;
 }
 
+function bindTenantTableEvents() {
+    const tbody = document.getElementById("tenantTableBody");
+    if (!tbody || tbody.dataset.bound === "true") return;
+    tbody.dataset.bound = "true";
+    tbody.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const row = target.closest("tr[data-index]");
+        if (!row) return;
+        const idx = Number(row.dataset.index);
+        if (Number.isNaN(idx)) return;
+        const tenant = tenantRenderCache[idx];
+        if (!tenant) return;
+
+        const editBtn = target.closest('button[data-action="edit"]');
+        if (editBtn) {
+            event.preventDefault();
+            event.stopPropagation();
+            setSidebarSelection(tenant);
+            openTenantModal(tenant);
+            return;
+        }
+
+        setSidebarSelection(tenant);
+    });
+}
+
 /**
  * Renders tenant rows into the directory table and binds actions.
  * @param {Array} rows
@@ -488,57 +520,49 @@ function renderTenantRows(rows) {
     const emptyState = document.getElementById("tenantListEmpty");
     if (!tbody) return;
 
+    tenantRenderCache = Array.isArray(rows) ? rows : [];
+    bindTenantTableEvents();
     tbody.innerHTML = "";
 
-    if (!rows || rows.length === 0) {
+    if (!tenantRenderCache.length) {
         if (emptyState) emptyState.classList.remove("hidden");
         return;
     }
 
     if (emptyState) emptyState.classList.add("hidden");
 
-    rows.forEach((t) => {
+    tenantRenderCache.forEach((t, idx) => {
         const tr = document.createElement("tr");
         tr.className = "border-b last:border-0 hover:bg-slate-50 cursor-pointer";
         tr.dataset.grn = t.grnNumber || "";
+        tr.dataset.index = String(idx);
 
         const activeHistory = Array.isArray(t.tenancyHistory)
             ? t.tenancyHistory.filter((h) => (h.status || "").toLowerCase() === "active")
             : [];
         const activeCount = activeHistory.length;
-        const unitLabels = activeHistory.map((h) => h.unitLabel).filter(Boolean).join(", ") || "—";
+        const unitLabels = activeHistory.map((h) => h.unitLabel).filter(Boolean).join(", ") || "-";
+        const safeName = escapeHtml(t.tenantFullName || "Unnamed");
+        const safeUnitLabels = escapeHtml(unitLabels);
         const isActive = activeCount > 0 || !!t.activeTenant;
         const statusCell = renderStatusPill(isActive);
 
         tr.innerHTML = `
             <td class="px-2 py-1.5">
-                <div class="font-semibold text-xs leading-tight">${t.tenantFullName || "Unnamed"}</div>
+                <div class="font-semibold text-xs leading-tight">${safeName}</div>
             </td>
             <td class="px-2 py-1.5 text-xs">${activeCount}</td>
-            <td class="px-2 py-1.5 text-xs">${unitLabels}</td>
+            <td class="px-2 py-1.5 text-xs">${safeUnitLabels}</td>
             <td class="px-2 py-1.5 text-xs">
                 <div class="flex items-center gap-1 status-slot"></div>
             </td>
             <td class="px-2 py-1.5 text-xs">
-                <button class="text-indigo-600 hover:text-indigo-800 font-semibold text-[11px] underline">Edit Tenant</button>
+                <button data-action="edit" class="text-indigo-600 hover:text-indigo-800 font-semibold text-[11px] underline">Edit Tenant</button>
             </td>
         `;
 
         const statusSlot = tr.querySelector(".status-slot");
         if (statusSlot) statusSlot.appendChild(statusCell);
-
-        const actionBtn = tr.querySelector("button");
-        if (actionBtn) {
-            actionBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                setSidebarSelection(t);
-                openTenantModal(t);
-            });
-        }
-
-        tr.addEventListener("click", () => {
-            setSidebarSelection(t);
-        });
 
         tbody.appendChild(tr);
     });
@@ -763,7 +787,7 @@ function updateSidebarSnapshot() {
         familyList.innerHTML = "";
         (t.family || []).forEach((member) => {
             const li = document.createElement("li");
-            li.textContent = `${member.name || "Member"} – ${member.relationship || "Relation"}`;
+            li.textContent = `${member.name || "Member"} - ${member.relationship || "Relation"}`;
             familyList.appendChild(li);
         });
         if (!(t.family || []).length) {
@@ -802,15 +826,18 @@ function updateSidebarSnapshot() {
                 statusPill.textContent = h.status || "-";
                 const dates = [formatDateForInput(h.startDate) || "", formatTenancyEndDate(h.endDate) || "Present"]
                     .filter(Boolean)
-                    .join(" → ");
+                    .join(" - ");
+                const safeUnitLabel = escapeHtml(h.unitLabel || "Unit");
+                const safeDates = escapeHtml(dates);
+                const safeRent = escapeHtml(
+                    formatRent(h.currentRent ?? t.currentRent ?? t.rentAmount)
+                );
                 card.innerHTML = `
                     <div class="flex items-center justify-between gap-2">
                         <div>
-                            <p class="font-semibold text-[12px]">${h.unitLabel || "Unit"}</p>
-                            <p class="text-[10px] text-slate-500">${dates}</p>
-                            <p class="text-[10px] text-slate-500">Current rent: ${formatRent(
-                                h.currentRent ?? t.currentRent ?? t.rentAmount
-                            )}</p>
+                            <p class="font-semibold text-[12px]">${safeUnitLabel}</p>
+                            <p class="text-[10px] text-slate-500">${safeDates}</p>
+                            <p class="text-[10px] text-slate-500">Current rent: ${safeRent}</p>
                         </div>
                         <div class="flex flex-col gap-1 items-end">
                             <span class="self-end">${statusPill.outerHTML}</span>
@@ -823,11 +850,7 @@ function updateSidebarSnapshot() {
                 `;
                 const pillHolder = card.querySelector("span.self-end");
                 if (pillHolder) pillHolder.replaceWith(statusPill);
-                const editBtn = card.querySelector(".tenancy-edit-btn");
                 const rentBtn = card.querySelector(".rent-history-btn");
-                if (editBtn) {
-                    editBtn.addEventListener("click", () => openTenancyModal(h, t));
-                }
                 if (rentBtn) {
                     rentBtn.dataset.tenancyId =
                         card.dataset.tenancyId ||
@@ -842,7 +865,6 @@ function updateSidebarSnapshot() {
                     rentBtn.dataset.status = h.status || t.status || "";
                     rentBtn.dataset.currentRent =
                         h.currentRent || h.rentAmount || t.currentRent || t.rentAmount || t.templateData?.rent_amount || "";
-                    rentBtn.addEventListener("click", (event) => handleRentHistoryClick(event, t));
                 }
                 historyList.appendChild(card);
             });
@@ -989,7 +1011,7 @@ function openRentHistoryModal(tenancy, tenant) {
     if (title) {
         const unitLabel =
             resolvedTenancy.unitLabel || baseTenant.unitNumber || baseTenant.templateData?.unit_number || "Unit";
-        title.textContent = `Rent History — ${unitLabel}`;
+        title.textContent = `Rent History - ${unitLabel}`;
     }
 
     activeRentHistoryContext = {
@@ -1038,6 +1060,18 @@ function handleRentHistoryClick(event, fallbackTenant) {
     }
 
     openRentHistoryModal(resolvedTenancy, contextTenant);
+}
+
+function handleTenancyViewClick(event, fallbackTenant) {
+    const btn = event?.target?.closest?.(".tenancy-edit-btn");
+    if (!btn) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const { tenancy, tenant } = buildRentHistoryContext(btn, fallbackTenant);
+    if (!tenancy) return;
+    openTenancyModal(tenancy, tenant || fallbackTenant);
 }
 
 function startNewTenancyFromSidebar() {
@@ -1492,12 +1526,16 @@ export function initTenantDirectory() {
 
     const sidebarHistory = document.getElementById("sidebarUnitHistory");
     if (sidebarHistory) {
-        sidebarHistory.addEventListener("click", (event) => handleRentHistoryClick(event));
+        sidebarHistory.addEventListener("click", (event) => {
+            handleTenancyViewClick(event);
+            handleRentHistoryClick(event);
+        });
     }
 
     document.addEventListener("click", (event) => {
         const modal = document.getElementById("rentHistoryModal");
         if (modal && !modal.classList.contains("hidden")) return;
+        handleTenancyViewClick(event);
         handleRentHistoryClick(event);
     });
 

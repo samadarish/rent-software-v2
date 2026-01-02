@@ -8,6 +8,7 @@
 
 import { formatCurrency as formatCurrencyBase, normalizeMonthKey, numberToIndianWords } from "../../utils/formatters.js";
 import { normalizeWing } from "../../utils/normalizers.js";
+import { escapeHtml } from "../../utils/htmlUtils.js";
 import { cloneSelectOptions, hideModal, showModal, showToast, smoothToggle } from "../../utils/ui.js";
 import { ensureTenantDirectoryLoaded, getActiveTenantsForWing } from "../tenants/tenants.js";
 import { fetchBillingRecord, fetchGeneratedBills, saveBillingRecord } from "../../api/sheets.js";
@@ -47,6 +48,38 @@ function scheduleBillingRender() {
         billingRenderHandle = null;
         renderTenantTable();
         renderMotorSummary();
+    });
+}
+
+function bindTenantTableEvents() {
+    const tbody = document.getElementById("billingTenantTableBody");
+    if (!tbody || tbody.dataset.bound === "true") return;
+    tbody.dataset.bound = "true";
+    tbody.addEventListener("change", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const row = target.closest("tr");
+        if (!row) return;
+        const idx = Number(row.dataset.index);
+        if (Number.isNaN(idx)) return;
+        const tenant = billingState.tenants[idx];
+        if (!tenant) return;
+
+        if (target.classList.contains("tenant-prev")) {
+            tenant.prevReading = target.value;
+            scheduleBillingRender();
+            return;
+        }
+        if (target.classList.contains("tenant-new")) {
+            tenant.newReading = target.value;
+            scheduleBillingRender();
+            return;
+        }
+        if (target.classList.contains("tenant-include")) {
+            tenant.included = target.checked;
+            tenant.hasBill = false;
+            scheduleBillingRender();
+        }
     });
 }
 const formatCurrency = (amount) =>
@@ -471,6 +504,7 @@ function renderTenantTable() {
     const emptyState = document.getElementById("billingTenantEmpty");
     if (!tbody || !emptyState) return;
 
+    bindTenantTableEvents();
     tbody.innerHTML = "";
     if (!billingState.tenants.length) {
         emptyState.classList.remove("hidden");
@@ -483,6 +517,10 @@ function renderTenantTable() {
 
     const fragment = document.createDocumentFragment();
     billingState.tenants.forEach((tenant, idx) => {
+        const safeName = escapeHtml(tenant.name || "");
+        const safeUnit = escapeHtml(tenant.unitNumber || "-");
+        const safePrev = escapeHtml(tenant.prevReading ?? "");
+        const safeNew = escapeHtml(tenant.newReading ?? "");
         const charges = calculateChargesForTenant(tenant, motorPerTenant);
         const prevVal = parseNumber(tenant.prevReading, false);
         const newVal = parseNumber(tenant.newReading, false);
@@ -494,6 +532,7 @@ function renderTenantTable() {
         const tr = document.createElement("tr");
         tr.className = `border-b last:border-0 hover:bg-slate-50 ${rowHighlight}`;
         tr.dataset.grn = tenant.grn || "";
+        tr.dataset.index = String(idx);
         tr.innerHTML = `
             <td class="px-2 py-2 text-center text-xs align-middle w-8">
                 ${
@@ -505,12 +544,12 @@ function renderTenantTable() {
                 }
             </td>
             <td class="px-2 py-2 text-xs">
-                <div class="font-semibold text-[12px] leading-tight">${tenant.name}</div>
+                <div class="font-semibold text-[12px] leading-tight">${safeName}</div>
             </td>
-            <td class="px-2 py-2 text-xs">${tenant.unitNumber || "-"}</td>
+            <td class="px-2 py-2 text-xs">${safeUnit}</td>
             <td class="px-2 py-2 text-xs font-semibold">${formatCurrency(tenant.rentAmount)}</td>
-            <td class="px-2 py-2 text-xs"><input type="number" inputmode="numeric" step="1" min="0" pattern="[0-9]*" class="w-full border rounded px-2 py-1 text-xs tenant-prev input-no-spinner ${invalidReading ? "border-rose-500 bg-rose-50 text-rose-700" : "border-slate-200"}" value="${tenant.prevReading ?? ""}" /></td>
-            <td class="px-2 py-2 text-xs"><input type="number" inputmode="numeric" step="1" min="0" pattern="[0-9]*" class="w-full border rounded px-2 py-1 text-xs tenant-new input-no-spinner ${invalidReading ? "border-rose-500 bg-rose-50 text-rose-700" : "border-slate-200"}" value="${tenant.newReading ?? ""}" /></td>
+            <td class="px-2 py-2 text-xs"><input type="number" inputmode="numeric" step="1" min="0" pattern="[0-9]*" class="w-full border rounded px-2 py-1 text-xs tenant-prev input-no-spinner ${invalidReading ? "border-rose-500 bg-rose-50 text-rose-700" : "border-slate-200"}" value="${safePrev}" /></td>
+            <td class="px-2 py-2 text-xs"><input type="number" inputmode="numeric" step="1" min="0" pattern="[0-9]*" class="w-full border rounded px-2 py-1 text-xs tenant-new input-no-spinner ${invalidReading ? "border-rose-500 bg-rose-50 text-rose-700" : "border-slate-200"}" value="${safeNew}" /></td>
             <td class="px-2 py-2 text-xs font-semibold text-indigo-700">${formatCurrency(charges.electricity)}</td>
             <td class="px-2 py-2 text-xs">${formatCurrency(charges.motorShare)}</td>
             <td class="px-2 py-2 text-xs">${formatCurrency(charges.sweepAmount)}</td>
@@ -518,35 +557,11 @@ function renderTenantTable() {
             <td class="px-2 py-2 text-xs text-right">
                 ${
                     isConfirmed
-                        ? '<span class="inline-flex items-center gap-1 text-emerald-700 font-semibold">✓</span>'
+                        ? '<span class="inline-flex items-center gap-1 text-emerald-700 font-semibold">OK</span>'
                         : ""
                 }
             </td>
         `;
-
-        const prevInput = tr.querySelector(".tenant-prev");
-        const newInput = tr.querySelector(".tenant-new");
-        if (prevInput) {
-            prevInput.addEventListener("change", (e) => {
-                tenant.prevReading = e.target.value;
-                scheduleBillingRender();
-            });
-        }
-        if (newInput) {
-            newInput.addEventListener("change", (e) => {
-                tenant.newReading = e.target.value;
-                scheduleBillingRender();
-            });
-        }
-
-        const includeCheckbox = tr.querySelector(".tenant-include");
-        if (includeCheckbox) {
-            includeCheckbox.addEventListener("change", (e) => {
-                tenant.included = e.target.checked;
-                tenant.hasBill = false;
-                scheduleBillingRender();
-            });
-        }
 
         fragment.appendChild(tr);
     });
@@ -1105,12 +1120,40 @@ async function openWhatsappExternally(url) {
     return true;
 }
 
+function bindSendListEvents() {
+    const tbody = document.getElementById("billingSendTableBody");
+    if (!tbody || tbody.dataset.bound === "true") return;
+    tbody.dataset.bound = "true";
+    tbody.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const btn = target.closest(".send-bill-btn");
+        if (!btn) return;
+        const id = btn.dataset.id || "";
+        const summary = billingState.lastGeneratedSummaries.find((item) => String(item.id) === String(id));
+        if (!summary) return;
+        const number = getPrimaryMobile(summary.mobile).replace(/\D/g, "");
+        if (!number) {
+            showToast(`Missing mobile number for ${summary.name}`, "error");
+            return;
+        }
+        const message = formatWhatsappMessage(summary);
+        const url = `https://web.whatsapp.com/send?phone=${number}&text=${encodeURIComponent(message)}&app_absent=0`;
+        openWhatsappExternally(url).then((opened) => {
+            if (!opened) return;
+            billingState.sendStatus.set(summary.id, true);
+            renderSendList();
+        });
+    });
+}
+
 function renderSendList() {
     const tbody = document.getElementById("billingSendTableBody");
     const header = document.getElementById("billingSendMonthLabel");
     const empty = document.getElementById("billingSendEmpty");
     if (!tbody || !header || !empty) return;
 
+    bindSendListEvents();
     header.textContent = billingState.selectedMonthLabel || "Selected month";
     tbody.innerHTML = "";
 
@@ -1125,9 +1168,12 @@ function renderSendList() {
         const tr = document.createElement("tr");
         tr.className = "border-b last:border-0";
         const sent = billingState.sendStatus.get(summary.id);
+        const safeName = escapeHtml(summary.name || "");
+        const safeId = escapeHtml(summary.id || "");
+        const totalValue = Number(summary.total) || 0;
         tr.innerHTML = `
-            <td class="px-3 py-2 text-[12px] font-semibold text-slate-800">${summary.name}</td>
-            <td class="px-3 py-2 text-[12px] font-semibold text-slate-700">₹${summary.total.toFixed(2)}</td>
+            <td class="px-3 py-2 text-[12px] font-semibold text-slate-800">${safeName}</td>
+            <td class="px-3 py-2 text-[12px] font-semibold text-slate-700">Rs. ${totalValue.toFixed(2)}</td>
             <td class="px-3 py-2 text-right text-[12px]">
                 <div class="inline-flex items-center gap-2">
                     ${
@@ -1135,33 +1181,10 @@ function renderSendList() {
                             ? '<span class="text-[11px] text-emerald-700 font-semibold">Sent</span>'
                             : ''
                     }
-                    <button class="send-bill-btn px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500" data-id="${
-                        summary.id
-                    }">Send Bill (WhatsApp)</button>
+                    <button class="send-bill-btn px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500" data-id="${safeId}">Send Bill (WhatsApp)</button>
                 </div>
             </td>
         `;
-
-        const sendBtn = tr.querySelector(".send-bill-btn");
-        if (sendBtn) {
-            sendBtn.addEventListener("click", () => {
-                const number = getPrimaryMobile(summary.mobile).replace(/\D/g, "");
-                if (!number) {
-                    showToast(`Missing mobile number for ${summary.name}`, "error");
-                    return;
-                }
-                const message = formatWhatsappMessage(summary);
-                const url = `https://web.whatsapp.com/send?phone=${number}&text=${encodeURIComponent(
-                    message
-                )}&app_absent=0`;
-                openWhatsappExternally(url).then((opened) => {
-                    if (!opened) return;
-                    billingState.sendStatus.set(summary.id, true);
-                    renderSendList();
-                });
-            });
-        }
-
         tbody.appendChild(tr);
     });
 }

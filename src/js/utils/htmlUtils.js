@@ -16,6 +16,21 @@ export function stripHtml(html) {
 }
 
 /**
+ * Escapes HTML special characters for safe string interpolation.
+ * @param {string} value
+ * @returns {string}
+ */
+export function escapeHtml(value) {
+    const raw = value === null || value === undefined ? "" : String(value);
+    return raw
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+/**
  * Applies bold formatting to the currently selected text within a container
  * @param {HTMLElement} container - The container element to apply bold formatting within
  */

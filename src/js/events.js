@@ -68,7 +68,7 @@ function syncUnitConfigList(units) {
             row.className = "flex items-center justify-between border border-slate-200 rounded px-2 py-1 bg-white";
             const label = document.createElement("div");
             const unitLabel = buildUnitLabel(u);
-            label.textContent = `${unitLabel} • ${u.floor || ""} ${u.direction || ""}`.trim();
+            label.textContent = `${unitLabel} - ${u.floor || ""} ${u.direction || ""}`.trim();
             const actions = document.createElement("div");
             actions.className = "flex gap-2";
             const loadBtn = document.createElement("button");

@@ -14,6 +14,7 @@ import {
     LOCAL_KEYS,
     getLocalData,
     getLocalEntry,
+    getLocalList,
     setLocalData,
     upsertLocalListItem,
     removeLocalListItem,
@@ -45,6 +46,23 @@ function normalizeMonthRange(fromMonth, toMonth) {
         [from, to] = [to, from];
     }
     return { from, to };
+}
+
+function isBlank(value) {
+    if (value === null || value === undefined) return true;
+    if (typeof value === "string") return value.trim() === "";
+    return false;
+}
+
+function isValidMonthKey(value) {
+    const normalized = normalizeMonthKey(value || "");
+    return !!normalized && /^\d{4}-\d{2}$/.test(normalized);
+}
+
+function extractDriveFileId(url) {
+    const raw = (url || "").toString();
+    const match = raw.match(/\/d\/([^/]+)/) || raw.match(/[?&]id=([^&#]+)/);
+    return match && match[1] ? match[1] : "";
 }
 
 function getBillMonthKey(bill) {
@@ -715,9 +733,9 @@ async function buildLocalBillsFromPayload(payload = {}) {
         if (key) existingByKey.set(key, bill);
     });
 
-    const tenantDirectory = await getLocalData(LOCAL_KEYS.tenants, []);
+    const tenantDirectory = await getLocalList(LOCAL_KEYS.tenants);
     const tenancyMap = new Map();
-    (Array.isArray(tenantDirectory) ? tenantDirectory : []).forEach((t) => {
+    tenantDirectory.forEach((t) => {
         if (t && t.tenancyId) tenancyMap.set(t.tenancyId, t);
     });
 
@@ -1188,8 +1206,8 @@ export async function addWingToSheet(wing) {
 
     try {
         const localUpdate = async () => {
-            const existing = await getLocalData(LOCAL_KEYS.wings, []);
-            const next = Array.isArray(existing) ? existing.slice() : [];
+            const existing = await getLocalList(LOCAL_KEYS.wings);
+            const next = existing.slice();
             const normalized = normalizeWingValue(cleaned);
             const hasWing = next.some((w) => normalizeWingValue(w) === normalized);
             if (!hasWing) next.push(cleaned);
@@ -1238,11 +1256,9 @@ export async function removeWingFromSheet(wing) {
 
     try {
         const localUpdate = async () => {
-            const existing = await getLocalData(LOCAL_KEYS.wings, []);
+            const existing = await getLocalList(LOCAL_KEYS.wings);
             const normalized = normalizeWingValue(cleaned);
-            const next = Array.isArray(existing)
-                ? existing.filter((w) => normalizeWingValue(w) !== normalized)
-                : [];
+            const next = existing.filter((w) => normalizeWingValue(w) !== normalized);
             await updateLocalWingsList(next);
             return { ok: true, wing: cleaned, wings: next };
         };
@@ -1367,19 +1383,24 @@ export async function deleteLandlordConfig(landlordId) {
         promptForConfig: true,
         onMissing: () => alert("Please configure the Apps Script URL first."),
     });
+    const cleaned = (landlordId || "").toString().trim();
+    if (!cleaned) {
+        showToast("Landlord ID missing", "error");
+        return { ok: false };
+    }
 
     try {
         const localUpdate = async () => {
-            const next = await removeLocalListItem(LOCAL_KEYS.landlords, "landlord_id", landlordId);
+            const next = await removeLocalListItem(LOCAL_KEYS.landlords, "landlord_id", cleaned);
             await updateLocalLandlordsList(next);
-            return { ok: true, landlordId };
+            return { ok: true, landlordId: cleaned };
         };
         const data = await runWriteAction({
             url,
             action: "deleteLandlord",
-            payload: { landlordId },
+            payload: { landlordId: cleaned },
             queuedMessage: "Landlord removal queued. Sync pending.",
-            fallback: { ok: true, queued: true, landlordId },
+            fallback: { ok: true, queued: true, landlordId: cleaned },
             localUpdate,
         });
         return data;
@@ -1492,7 +1513,7 @@ export async function fetchGeneratedBills(options = {}) {
  */
 export async function fetchBillDetails(billLineId) {
     const cleaned = (billLineId || "").toString().trim();
-    if (!cleaned) return { ok: false };
+    if (!cleaned) return { ok: false, error: "Missing billLineId" };
 
     const base = await loadGeneratedBillsBase();
     if (base && Array.isArray(base.bills)) {
@@ -1501,6 +1522,9 @@ export async function fetchBillDetails(billLineId) {
         );
         if (match) {
             return { ok: true, bill: match };
+        }
+        if (base.bills.length) {
+            return { ok: false, error: "Bill not found" };
         }
     }
 
@@ -1531,7 +1555,7 @@ export async function fetchBillDetails(billLineId) {
  * @returns {Promise<object>} Billing payload (charges, meta, tenants) or empty object.
  */
 export async function fetchBillingRecord(monthKey, wing) {
-    if (!monthKey || !wing) return {};
+    if (!monthKey || !wing) return { ok: false, error: "Missing month or wing" };
 
     const localRecord = await buildBillingRecordFromLocalData(monthKey, wing);
     if (localRecord && (localRecord.hasConfig || localRecord.hasReadings)) {
@@ -1630,18 +1654,22 @@ export async function saveBillingRecord(payload) {
         onMissing: () => alert("Please configure the Apps Script URL first."),
     });
     const nextPayload = payload && typeof payload === "object" ? { ...payload } : {};
+    const monthKey = normalizeMonthKey(nextPayload.monthKey || "");
+    const wing = (nextPayload.wing || "").toString().trim();
+    if (isBlank(monthKey) || isBlank(wing)) {
+        showToast("Month and wing are required to save billing", "error");
+        return { ok: false };
+    }
+    nextPayload.monthKey = monthKey;
+    nextPayload.wing = wing;
 
     try {
         const localUpdate = async () => {
             const generated = await buildLocalBillsFromPayload(nextPayload);
             const stored = await updateLocalGeneratedBills(generated);
-            const monthKey = normalizeMonthKey(nextPayload.monthKey || "");
-            const wing = nextPayload.wing || "";
             const meta = nextPayload.meta || {};
             if (monthKey && wing) {
-                const wingConfigs = Array.isArray(await getLocalData(LOCAL_KEYS.wingMonthlyConfig, []))
-                    ? await getLocalData(LOCAL_KEYS.wingMonthlyConfig, [])
-                    : [];
+                const wingConfigs = await getLocalList(LOCAL_KEYS.wingMonthlyConfig);
                 const existingConfig = wingConfigs.find(
                     (cfg) =>
                         normalizeMonthKey(cfg.month_key) === monthKey &&
@@ -1673,9 +1701,7 @@ export async function saveBillingRecord(payload) {
 
             const tenantsPayload = Array.isArray(nextPayload.tenants) ? nextPayload.tenants : [];
             if (monthKey && tenantsPayload.length) {
-                const readings = Array.isArray(await getLocalData(LOCAL_KEYS.tenantMonthlyReadings, []))
-                    ? await getLocalData(LOCAL_KEYS.tenantMonthlyReadings, [])
-                    : [];
+                const readings = await getLocalList(LOCAL_KEYS.tenantMonthlyReadings);
                 const readingKeys = new Set();
                 const nextReadings = tenantsPayload.map((tenant) => {
                     const tenancyId = tenant.tenancyId || tenant.tenancy_id || "";
@@ -1704,9 +1730,7 @@ export async function saveBillingRecord(payload) {
             }
 
             if (monthKey && Array.isArray(stored.bills)) {
-                const billLines = Array.isArray(await getLocalData(LOCAL_KEYS.billLines, []))
-                    ? await getLocalData(LOCAL_KEYS.billLines, [])
-                    : [];
+                const billLines = await getLocalList(LOCAL_KEYS.billLines);
                 const tenantMap = new Map();
                 tenantsPayload.forEach((tenant) => {
                     const tenancyId = tenant.tenancyId || tenant.tenancy_id || "";
@@ -1806,13 +1830,11 @@ export async function saveUnitConfig(payload) {
             const next = await upsertLocalListItem(LOCAL_KEYS.units, "unit_id", unit);
             await updateLocalUnitsList(next);
             if (unit.wing) {
-                const existingWings = await getLocalData(LOCAL_KEYS.wings, []);
+                const existingWings = await getLocalList(LOCAL_KEYS.wings);
                 const normalized = normalizeWingValue(unit.wing);
-                const hasWing = Array.isArray(existingWings)
-                    ? existingWings.some((w) => normalizeWingValue(w) === normalized)
-                    : false;
+                const hasWing = existingWings.some((w) => normalizeWingValue(w) === normalized);
                 if (!hasWing) {
-                    await updateLocalWingsList([...(existingWings || []), unit.wing]);
+                    await updateLocalWingsList([...existingWings, unit.wing]);
                 }
             }
             return { ok: true, unit };
@@ -1843,19 +1865,24 @@ export async function deleteUnitConfig(unitId) {
         promptForConfig: true,
         onMissing: () => alert("Please configure the Apps Script URL first."),
     });
+    const cleaned = (unitId || "").toString().trim();
+    if (!cleaned) {
+        showToast("Unit ID missing", "error");
+        return { ok: false };
+    }
 
     try {
         const localUpdate = async () => {
-            const next = await removeLocalListItem(LOCAL_KEYS.units, "unit_id", unitId);
+            const next = await removeLocalListItem(LOCAL_KEYS.units, "unit_id", cleaned);
             await updateLocalUnitsList(next);
-            return { ok: true, unitId };
+            return { ok: true, unitId: cleaned };
         };
         const data = await runWriteAction({
             url,
             action: "deleteUnit",
-            payload: { unitId },
+            payload: { unitId: cleaned },
             queuedMessage: "Unit removal queued. Sync pending.",
-            fallback: { ok: true, queued: true, unitId },
+            fallback: { ok: true, queued: true, unitId: cleaned },
             localUpdate,
         });
         return data;
@@ -1926,11 +1953,20 @@ export async function fetchAttachmentPreview(attachmentUrl) {
         return { ok: true, previewUrl: cleaned, attachmentUrl: cleaned };
     }
 
+    if (!cleaned) {
+        return { ok: false, previewUrl: "", attachmentUrl: "" };
+    }
+
+    const fileId = extractDriveFileId(cleaned);
+    if (!fileId) {
+        return { ok: false, previewUrl: "", attachmentUrl: cleaned };
+    }
+
     const url = ensureAppScriptUrl({
         onMissing: () => showToast("Configure Apps Script URL to view attachments", "warning"),
     });
 
-    if (!url || !cleaned) return {};
+    if (!url) return {};
 
     try {
         return await callAppScript({
@@ -1968,17 +2004,15 @@ export async function savePaymentRecord(payload) {
     try {
         const localUpdate = async () => {
             const payment = buildLocalPaymentRecord({ ...nextPayload, billLineId: localBillLineId });
-            const existingPayments = await getLocalData(LOCAL_KEYS.payments, []);
-            const nextPayments = Array.isArray(existingPayments)
-                ? existingPayments.filter((p) => String(p.id) !== String(payment.id)).concat(payment)
-                : [payment];
+            const existingPayments = await getLocalList(LOCAL_KEYS.payments);
+            const nextPayments = existingPayments
+                .filter((p) => String(p.id) !== String(payment.id))
+                .concat(payment);
             await updateLocalPaymentsList(nextPayments);
 
             if (payment.attachmentId || payment.attachment_id) {
                 const attachmentId = payment.attachmentId || payment.attachment_id;
-                const attachments = Array.isArray(await getLocalData(LOCAL_KEYS.attachments, []))
-                    ? await getLocalData(LOCAL_KEYS.attachments, [])
-                    : [];
+                const attachments = await getLocalList(LOCAL_KEYS.attachments);
                 const record = {
                     attachment_id: attachmentId,
                     file_name: payment.attachmentName || "",
@@ -1998,9 +2032,7 @@ export async function savePaymentRecord(payload) {
                 const updatedBills = updateBillsWithPayment(bills, nextPayments, payment.billLineId);
                 await updateLocalGeneratedBills({ ...generated, bills: updatedBills });
 
-                const billLines = Array.isArray(await getLocalData(LOCAL_KEYS.billLines, []))
-                    ? await getLocalData(LOCAL_KEYS.billLines, [])
-                    : [];
+                const billLines = await getLocalList(LOCAL_KEYS.billLines);
                 const paidTotal = nextPayments
                     .filter((p) => String(p.billLineId || p.bill_line_id || "") === String(payment.billLineId))
                     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
@@ -2266,9 +2298,7 @@ export async function deleteAttachment(attachmentId) {
     if (!attachmentId) return { ok: false };
     try {
         const localUpdate = async () => {
-            const payments = Array.isArray(await getLocalData(LOCAL_KEYS.payments, []))
-                ? await getLocalData(LOCAL_KEYS.payments, [])
-                : [];
+            const payments = await getLocalList(LOCAL_KEYS.payments);
             const next = payments.map((p) => {
                 if ((p.attachmentId || p.attachment_id) !== attachmentId) return p;
                 return {
@@ -2280,9 +2310,7 @@ export async function deleteAttachment(attachmentId) {
                 };
             });
             await updateLocalPaymentsList(next);
-            const attachments = Array.isArray(await getLocalData(LOCAL_KEYS.attachments, []))
-                ? await getLocalData(LOCAL_KEYS.attachments, [])
-                : [];
+            const attachments = await getLocalList(LOCAL_KEYS.attachments);
             const nextAttachments = attachments.filter((a) => a.attachment_id !== attachmentId);
             await setLocalData(LOCAL_KEYS.attachments, nextAttachments);
             return { ok: true, attachmentId };
@@ -2426,15 +2454,9 @@ export async function updateTenantRecord(payload) {
 
     try {
         const localUpdate = async () => {
-            const tenants = Array.isArray(await getLocalData(LOCAL_KEYS.tenants, []))
-                ? (await getLocalData(LOCAL_KEYS.tenants, []))
-                : [];
-            const units = Array.isArray(await getLocalData(LOCAL_KEYS.units, []))
-                ? (await getLocalData(LOCAL_KEYS.units, []))
-                : [];
-            const landlords = Array.isArray(await getLocalData(LOCAL_KEYS.landlords, []))
-                ? (await getLocalData(LOCAL_KEYS.landlords, []))
-                : [];
+            const tenants = await getLocalList(LOCAL_KEYS.tenants);
+            const units = await getLocalList(LOCAL_KEYS.units);
+            const landlords = await getLocalList(LOCAL_KEYS.landlords);
 
             const tenantId = nextPayload.tenantId;
             const tenancyId = nextPayload.forceNewTenancyId || nextPayload.tenancyId;
@@ -2520,9 +2542,7 @@ export async function updateTenantRecord(payload) {
             await updateLocalUnitsList(units);
             await updateLocalLandlordsList(landlords);
             await updateLocalTenantsList(list);
-            const tenancies = Array.isArray(await getLocalData(LOCAL_KEYS.tenancies, []))
-                ? await getLocalData(LOCAL_KEYS.tenancies, [])
-                : [];
+            const tenancies = await getLocalList(LOCAL_KEYS.tenancies);
             let nextTenancies = tenancies
                 .filter((t) => t.tenancy_id !== tenancyId)
                 .concat(
@@ -2545,9 +2565,7 @@ export async function updateTenantRecord(payload) {
             }
             await setLocalData(LOCAL_KEYS.tenancies, nextTenancies);
 
-            const familyMembers = Array.isArray(await getLocalData(LOCAL_KEYS.familyMembers, []))
-                ? await getLocalData(LOCAL_KEYS.familyMembers, [])
-                : [];
+            const familyMembers = await getLocalList(LOCAL_KEYS.familyMembers);
             const updatedFamily = buildFamilyRecordsFromEntry(updated, tenantId);
             const nextFamily = familyMembers
                 .filter((m) => m.tenant_id !== tenantId)
@@ -2672,20 +2690,35 @@ export async function saveRentRevision(payload) {
     if (!nextPayload.tenancyId && nextPayload.tenancy_id) {
         nextPayload.tenancyId = nextPayload.tenancy_id;
     }
+    const tenancyId = (nextPayload.tenancyId || "").toString().trim();
+    if (!tenancyId) {
+        showToast("Tenancy ID is required", "error");
+        return { ok: false };
+    }
+    const effectiveMonthRaw = nextPayload.effectiveMonth || nextPayload.effective_month || "";
+    const effectiveMonth = normalizeMonthKey(effectiveMonthRaw);
+    if (!isValidMonthKey(effectiveMonth)) {
+        showToast("Effective month must be in YYYY-MM format", "error");
+        return { ok: false };
+    }
+    const rentAmount = Number(nextPayload.rentAmount ?? nextPayload.rent_amount);
+    if (Number.isNaN(rentAmount) || rentAmount < 0) {
+        showToast("Rent amount must be a non-negative number", "error");
+        return { ok: false };
+    }
+    nextPayload.tenancyId = tenancyId;
+    nextPayload.effectiveMonth = effectiveMonth;
+    nextPayload.rentAmount = rentAmount;
 
     try {
         const localUpdate = async () => {
-            const tenancyId = nextPayload.tenancyId || "";
             const key = LOCAL_KEYS.rentRevisions(tenancyId);
-            const revisions = Array.isArray(await getLocalData(key, []))
-                ? await getLocalData(key, [])
-                : [];
-            const effectiveMonth = nextPayload.effectiveMonth || nextPayload.effective_month || "";
+            const revisions = await getLocalList(key);
             const record = {
                 revision_id: nextPayload.revision_id || createLocalId("revision"),
                 tenancy_id: tenancyId,
                 effective_month: effectiveMonth,
-                rent_amount: Number(nextPayload.rentAmount ?? nextPayload.rent_amount) || 0,
+                rent_amount: rentAmount,
                 note: nextPayload.note || "",
                 created_at: nextPayload.created_at || new Date().toISOString(),
             };
@@ -2694,9 +2727,7 @@ export async function saveRentRevision(payload) {
             );
             next.push(record);
             await setLocalData(key, next);
-            const allRevisions = Array.isArray(await getLocalData(LOCAL_KEYS.rentRevisionsAll, []))
-                ? await getLocalData(LOCAL_KEYS.rentRevisionsAll, [])
-                : [];
+            const allRevisions = await getLocalList(LOCAL_KEYS.rentRevisionsAll);
             const nextAll = allRevisions.filter(
                 (r) =>
                     (r?.tenancy_id || r?.tenancyId) !== tenancyId ||
@@ -2705,9 +2736,7 @@ export async function saveRentRevision(payload) {
             nextAll.push(record);
             await setLocalData(LOCAL_KEYS.rentRevisionsAll, nextAll);
 
-            const tenants = Array.isArray(await getLocalData(LOCAL_KEYS.tenants, []))
-                ? await getLocalData(LOCAL_KEYS.tenants, [])
-                : [];
+            const tenants = await getLocalList(LOCAL_KEYS.tenants);
             const rentAmount = getLatestRentFromRevisions(
                 nextAll.filter((rev) => (rev?.tenancy_id || rev?.tenancyId) === tenancyId)
             );
@@ -2774,15 +2803,9 @@ export async function saveTenantToDb() {
         }
 
         const localUpdate = async () => {
-            const tenants = Array.isArray(await getLocalData(LOCAL_KEYS.tenants, []))
-                ? await getLocalData(LOCAL_KEYS.tenants, [])
-                : [];
-            const units = Array.isArray(await getLocalData(LOCAL_KEYS.units, []))
-                ? await getLocalData(LOCAL_KEYS.units, [])
-                : [];
-            const landlords = Array.isArray(await getLocalData(LOCAL_KEYS.landlords, []))
-                ? await getLocalData(LOCAL_KEYS.landlords, [])
-                : [];
+            const tenants = await getLocalList(LOCAL_KEYS.tenants);
+            const units = await getLocalList(LOCAL_KEYS.units);
+            const landlords = await getLocalList(LOCAL_KEYS.landlords);
 
             const tenantId = nextPayload.tenantId;
             const tenancyId = nextPayload.tenancyId;
@@ -2839,9 +2862,7 @@ export async function saveTenantToDb() {
             await updateLocalUnitsList(units);
             await updateLocalLandlordsList(landlords);
             await updateLocalTenantsList(nextTenants);
-            const tenancies = Array.isArray(await getLocalData(LOCAL_KEYS.tenancies, []))
-                ? await getLocalData(LOCAL_KEYS.tenancies, [])
-                : [];
+            const tenancies = await getLocalList(LOCAL_KEYS.tenancies);
             const tenancyRecord = buildTenancyRecordFromEntry(entry, {
                 tenantId,
                 tenancyId,
@@ -2853,22 +2874,18 @@ export async function saveTenantToDb() {
                 .concat(tenancyRecord);
             await setLocalData(LOCAL_KEYS.tenancies, nextTenancies);
 
-            const familyMembers = Array.isArray(await getLocalData(LOCAL_KEYS.familyMembers, []))
-                ? await getLocalData(LOCAL_KEYS.familyMembers, [])
-                : [];
+            const familyMembers = await getLocalList(LOCAL_KEYS.familyMembers);
             const updatedFamily = buildFamilyRecordsFromEntry(entry, tenantId);
             const nextFamily = familyMembers
                 .filter((m) => m.tenant_id !== tenantId)
                 .concat(updatedFamily);
             await setLocalData(LOCAL_KEYS.familyMembers, nextFamily);
             if (entry.wing) {
-                const existingWings = await getLocalData(LOCAL_KEYS.wings, []);
+                const existingWings = await getLocalList(LOCAL_KEYS.wings);
                 const normalized = normalizeWingValue(entry.wing);
-                const hasWing = Array.isArray(existingWings)
-                    ? existingWings.some((w) => normalizeWingValue(w) === normalized)
-                    : false;
+                const hasWing = existingWings.some((w) => normalizeWingValue(w) === normalized);
                 if (!hasWing) {
-                    await updateLocalWingsList([...(existingWings || []), entry.wing]);
+                    await updateLocalWingsList([...existingWings, entry.wing]);
                 }
             }
             return { ok: true, tenantId, tenancyId };

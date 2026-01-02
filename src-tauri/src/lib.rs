@@ -22,6 +22,10 @@ struct UploadState {
     cancel_flags: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
+struct DbState {
+    conn: Mutex<Connection>,
+}
+
 #[derive(Serialize)]
 struct CacheEntry {
     value: serde_json::Value,
@@ -97,9 +101,16 @@ fn init_db(conn: &Connection) -> Result<(), rusqlite::Error> {
     Ok(())
 }
 
-fn open_db(app: &tauri::AppHandle) -> Result<Connection, String> {
+fn setup_db(app: &tauri::AppHandle) -> Result<Connection, String> {
     let path = get_db_path(app)?;
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    conn.execute_batch(
+        "PRAGMA journal_mode=WAL;
+         PRAGMA synchronous=NORMAL;
+         PRAGMA temp_store=MEMORY;
+         PRAGMA foreign_keys=ON;",
+    )
+    .map_err(|e| e.to_string())?;
     init_db(&conn).map_err(|e| e.to_string())?;
     Ok(conn)
 }
@@ -166,8 +177,8 @@ impl<R: Read> Read for ProgressReader<R> {
 }
 
 #[tauri::command]
-fn cache_get(app: tauri::AppHandle, key: String) -> Result<Option<CacheEntry>, String> {
-    let conn = open_db(&app)?;
+fn cache_get(state: tauri::State<DbState>, key: String) -> Result<Option<CacheEntry>, String> {
+    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
     let mut stmt = conn
         .prepare("SELECT value, updated_at FROM local_cache WHERE key = ?1")
         .map_err(|e| e.to_string())?;
@@ -182,8 +193,8 @@ fn cache_get(app: tauri::AppHandle, key: String) -> Result<Option<CacheEntry>, S
 }
 
 #[tauri::command]
-fn cache_set(app: tauri::AppHandle, key: String, value: serde_json::Value) -> Result<(), String> {
-    let conn = open_db(&app)?;
+fn cache_set(state: tauri::State<DbState>, key: String, value: serde_json::Value) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
     let payload = serde_json::to_string(&value).map_err(|e| e.to_string())?;
     let updated_at = now_ms();
     conn.execute(
@@ -195,16 +206,16 @@ fn cache_set(app: tauri::AppHandle, key: String, value: serde_json::Value) -> Re
 }
 
 #[tauri::command]
-fn cache_delete(app: tauri::AppHandle, key: String) -> Result<(), String> {
-    let conn = open_db(&app)?;
+fn cache_delete(state: tauri::State<DbState>, key: String) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
     conn.execute("DELETE FROM local_cache WHERE key = ?1", params![key])
         .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-fn cache_delete_prefix(app: tauri::AppHandle, prefix: String) -> Result<(), String> {
-    let conn = open_db(&app)?;
+fn cache_delete_prefix(state: tauri::State<DbState>, prefix: String) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
     let pattern = format!("{}%", prefix);
     conn.execute(
         "DELETE FROM local_cache WHERE key LIKE ?1",
@@ -216,13 +227,13 @@ fn cache_delete_prefix(app: tauri::AppHandle, prefix: String) -> Result<(), Stri
 
 #[tauri::command]
 fn queue_add(
-    app: tauri::AppHandle,
+    state: tauri::State<DbState>,
     action: String,
     payload: serde_json::Value,
     method: Option<String>,
     params: Option<serde_json::Value>,
 ) -> Result<i64, String> {
-    let conn = open_db(&app)?;
+    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
     let payload_json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
     let method_value = method.unwrap_or_else(|| "POST".to_string());
     let params_value = params.unwrap_or_else(|| serde_json::json!({}));
@@ -238,8 +249,8 @@ fn queue_add(
 }
 
 #[tauri::command]
-fn queue_list(app: tauri::AppHandle, limit: Option<u32>) -> Result<Vec<SyncJob>, String> {
-    let conn = open_db(&app)?;
+fn queue_list(state: tauri::State<DbState>, limit: Option<u32>) -> Result<Vec<SyncJob>, String> {
+    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
     let limit_value = limit.unwrap_or(200);
     let mut stmt = conn
         .prepare(
@@ -270,24 +281,24 @@ fn queue_list(app: tauri::AppHandle, limit: Option<u32>) -> Result<Vec<SyncJob>,
 }
 
 #[tauri::command]
-fn queue_delete(app: tauri::AppHandle, id: i64) -> Result<(), String> {
-    let conn = open_db(&app)?;
+fn queue_delete(state: tauri::State<DbState>, id: i64) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
     conn.execute("DELETE FROM sync_queue WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-fn queue_clear(app: tauri::AppHandle) -> Result<(), String> {
-    let conn = open_db(&app)?;
+fn queue_clear(state: tauri::State<DbState>) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
     conn.execute("DELETE FROM sync_queue", [])
         .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-fn queue_count(app: tauri::AppHandle) -> Result<i64, String> {
-    let conn = open_db(&app)?;
+fn queue_count(state: tauri::State<DbState>) -> Result<i64, String> {
+    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM sync_queue", [], |row| row.get(0))
         .map_err(|e| e.to_string())?;
@@ -345,6 +356,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .manage(UploadState::default())
+        .setup(|app| {
+            let conn = setup_db(&app.handle())
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            app.manage(DbState { conn: Mutex::new(conn) });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             cache_get,
             cache_set,
