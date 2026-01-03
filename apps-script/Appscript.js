@@ -783,27 +783,14 @@ function handleSaveTenant_(payload) {
 
 function handleUpdateTenant_(payload) {
   const createNewTenancy = normalizeBoolean_(payload && payload.createNewTenancy);
-  const previousTenancyId = payload.previousTenancyId || payload.tenancyId;
-  const keepPreviousActive = normalizeBoolean_(payload && payload.keepPreviousActive);
   const forcedTenancyId = createNewTenancy ? (payload.forceNewTenancyId || Utilities.getUuid()) : payload.tenancyId;
   const mapped = mapTenantPayload_({ ...(payload || {}), forceNewTenancyId: forcedTenancyId });
-  const existingTenancies = readTable_(TENANCIES_SHEET, TENANCIES_HEADERS);
-  const previousTenancy = existingTenancies.find((t) => t.tenancy_id === previousTenancyId);
 
   upsertUnique_(TENANTS_SHEET, TENANTS_HEADERS, ['tenant_id'], mapped.tenant);
   upsertUnique_(UNITS_SHEET, UNITS_HEADERS, ['unit_id'], mapped.unit);
 
-  if (createNewTenancy && previousTenancy && !keepPreviousActive) {
-    previousTenancy.status = 'ENDED';
-    previousTenancy.end_date = previousTenancy.end_date || formatDateIso_(payload.updates?.tenancyEndRaw || new Date());
-    upsertUnique_(TENANCIES_SHEET, TENANCIES_HEADERS, ['tenancy_id'], previousTenancy);
-  }
-
   upsertUnique_(TENANCIES_SHEET, TENANCIES_HEADERS, ['tenancy_id'], mapped.tenancy);
 
-  if (previousTenancy && previousTenancy.unit_id && previousTenancy.unit_id !== mapped.tenancy.unit_id && !keepPreviousActive) {
-    updateUnitOccupancy_(previousTenancy.unit_id, '', false);
-  }
   updateUnitOccupancy_(mapped.tenancy.unit_id, mapped.tenancy.tenancy_id, (mapped.tenancy.status || '').toUpperCase() === 'ACTIVE');
 
   if (mapped.family) {
@@ -1887,6 +1874,18 @@ function handleFetchPayments_() {
   });
 }
 
+function readAllSheetsSnapshot_() {
+  const ss = getMasterSpreadsheet_();
+  return ss.getSheets().map((sheet) => {
+    const values = sheet.getDataRange().getValues();
+    const hasData = values.some((row) => row.some((cell) => cell !== "" && cell !== null));
+    return {
+      name: sheet.getName(),
+      values: hasData ? values : [],
+    };
+  });
+}
+
 function handleExportAll_() {
   const wingRows = readTable_(WINGS_SHEET, ['Wing']);
   const wings = wingRows.map((r) => (r.Wing || '').toString().trim()).filter(Boolean);
@@ -1907,6 +1906,7 @@ function handleExportAll_() {
   return {
     ok: true,
     wings,
+    allSheets: readAllSheetsSnapshot_(),
     units: readTable_(UNITS_SHEET, UNITS_HEADERS),
     landlords: readTable_(LANDLORDS_SHEET, LANDLORD_HEADERS),
     tenants: buildTenantDirectory_(),
@@ -1943,6 +1943,10 @@ function doGet(e) {
     if (action === 'clauses') {
       const unified = readUnifiedClauses_();
       return jsonResponse({ ok: true, tenant: unified.tenant || [], landlord: unified.landlord || [], penalties: unified.penalties || [], misc: unified.misc || [] });
+    }
+
+    if (action === 'allsheets') {
+      return jsonResponse({ ok: true, allSheets: readAllSheetsSnapshot_() });
     }
 
     if (action === 'tenants') {

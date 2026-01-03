@@ -26,6 +26,7 @@ import { attachEventHandlers } from "./js/events.js";
 import { updateConnectionIndicator } from "./js/utils/ui.js";
 import { initDraftUi } from "./js/features/shared/drafts.js";
 import { flushSyncQueue, initSyncManager, startInitialSync } from "./js/api/syncManager.js";
+import { initCloseGuard } from "./js/utils/closeGuard.js";
 
 /**
  * Application initialization
@@ -47,6 +48,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   applyLandlordDefaultsToForm();
   initSyncManager();
+  initCloseGuard();
   if (navigator.onLine) {
     flushSyncQueue();
   }

@@ -6,6 +6,7 @@ import {
 } from "../../api/sheets.js";
 import { buildUnitLabel, formatCurrency, normalizeMonthKey, toOrdinal } from "../../utils/formatters.js";
 import { escapeHtml } from "../../utils/htmlUtils.js";
+import { generateNoGrnValue } from "../../utils/grn.js";
 import { cloneSelectOptions, hideModal, showModal, showToast } from "../../utils/ui.js";
 import { createFamilyRow } from "./family.js";
 import {
@@ -28,7 +29,6 @@ let activeTenantForModal = null;
 let activeRentRevisions = [];
 let activeRentHistoryContext = null;
 let selectedTenantForSidebar = null;
-let pendingNewTenancyTenant = null;
 let tenantModalEditable = false;
 let tenantModalMode = "tenant"; // tenant | tenancy
 
@@ -94,6 +94,58 @@ function formatDateForInput(raw) {
 function normalizeDateInputValue(raw) {
     const formatted = formatDateForInput(raw);
     return formatted || "";
+}
+
+function getTenantModalGrnElements() {
+    return {
+        input: document.getElementById("tenantModalGrn"),
+        checkbox: document.getElementById("tenantModalGrnNoCheckbox"),
+    };
+}
+
+function setTenantModalNoGrnState({ checked, grnValue = "", source = "user" } = {}) {
+    const { input, checkbox } = getTenantModalGrnElements();
+    if (!input || !checkbox) return;
+
+    const isChecked = Boolean(checked);
+    checkbox.checked = isChecked;
+
+    if (isChecked) {
+        const nextValue = grnValue || generateNoGrnValue();
+        input.value = nextValue;
+        input.disabled = true;
+        input.readOnly = true;
+        input.dataset.noGrn = "1";
+        return;
+    }
+
+    input.readOnly = false;
+    input.dataset.noGrn = "0";
+    input.disabled = !tenantModalEditable;
+    if (source === "user") {
+        input.value = "";
+    } else if (grnValue !== undefined) {
+        input.value = grnValue;
+    }
+}
+
+function syncTenantModalNoGrnState({ source = "sync" } = {}) {
+    const { input, checkbox } = getTenantModalGrnElements();
+    if (!input || !checkbox) return;
+    setTenantModalNoGrnState({
+        checked: checkbox.checked,
+        grnValue: input.value || "",
+        source,
+    });
+}
+
+function setTenantModalGrnToggleVisibility(show) {
+    const wrap = document.getElementById("tenantModalGrnNoWrap");
+    const { checkbox } = getTenantModalGrnElements();
+    if (wrap) wrap.classList.toggle("hidden", !show);
+    if (checkbox && !show) {
+        checkbox.checked = false;
+    }
 }
 
 /**
@@ -719,6 +771,8 @@ function setTenantModalEditable(enabled) {
         el.disabled = !enabled;
     });
 
+    syncTenantModalNoGrnState({ source: "sync" });
+
     modal.querySelectorAll("#tenantFamilyTableBody button").forEach((btn) => {
         btn.disabled = !enabled;
         btn.classList.toggle("opacity-50", !enabled);
@@ -843,7 +897,7 @@ function updateSidebarSnapshot() {
                             <span class="self-end">${statusPill.outerHTML}</span>
                             <div class="flex gap-1">
                                 <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-slate-200 font-semibold tenancy-edit-btn">View</button>
-                                <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-indigo-200 text-indigo-700 font-semibold rent-history-btn">Rent history</button>
+                                <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-indigo-200 text-indigo-700 font-semibold rent-history-btn">Rent revisions</button>
                             </div>
                         </div>
                     </div>
@@ -997,7 +1051,7 @@ function resolveFallbackTenancyContext(tenant) {
 function openRentHistoryModal(tenancy, tenant) {
     const modal = document.getElementById("rentHistoryModal");
     if (!modal) {
-        showToast("Rent history modal is unavailable", "error");
+        showToast("Rent revisions modal is unavailable", "error");
         return;
     }
 
@@ -1011,7 +1065,7 @@ function openRentHistoryModal(tenancy, tenant) {
     if (title) {
         const unitLabel =
             resolvedTenancy.unitLabel || baseTenant.unitNumber || baseTenant.templateData?.unit_number || "Unit";
-        title.textContent = `Rent History - ${unitLabel}`;
+        title.textContent = `Rent revisions - ${unitLabel}`;
     }
 
     activeRentHistoryContext = {
@@ -1079,43 +1133,14 @@ function startNewTenancyFromSidebar() {
         showToast("Select a tenant first", "warning");
         return;
     }
-    pendingNewTenancyTenant = selectedTenantForSidebar;
-    const msg = document.getElementById("newTenancyConfirmMessage");
-    if (msg) {
-        msg.textContent =
-            "Move tenant to a new unit? Click OK to move (previous tenancy ends). Click Cancel to keep previous tenancy active and add another unit.";
-    }
-    openNewTenancyConfirmModal();
-}
-
-function openNewTenancyConfirmModal() {
-    const modal = document.getElementById("newTenancyConfirmModal");
-    if (modal) showModal(modal);
-}
-
-function closeNewTenancyConfirmModal() {
-    const modal = document.getElementById("newTenancyConfirmModal");
-    if (modal) hideModal(modal);
-    pendingNewTenancyTenant = null;
-}
-
-function handleNewTenancyChoice(moveChoice) {
-    const base = pendingNewTenancyTenant || selectedTenantForSidebar;
-    if (!base) {
-        closeNewTenancyConfirmModal();
-        return;
-    }
-
-    const keepPreviousActive = !moveChoice;
+    const base = selectedTenantForSidebar;
     const newTenancyId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `tenancy-${Date.now()}`;
     const templateData = { ...(base.templateData || {}), tenancy_id: newTenancyId };
 
     const draftTenancy = {
         ...base,
         tenancyId: newTenancyId,
-        previousTenancyId: moveChoice ? base.tenancyId : undefined,
         isNewTenancy: true,
-        keepPreviousActive,
         unitId: "",
         wing: "",
         floor: "",
@@ -1126,7 +1151,6 @@ function handleNewTenancyChoice(moveChoice) {
         templateData,
     };
 
-    closeNewTenancyConfirmModal();
     populateTenantModal(draftTenancy, "tenancy");
     setTenantModalEditable(true);
 }
@@ -1204,6 +1228,16 @@ function populateTenantModal(tenant, mode = "tenant") {
         const el = document.getElementById(id);
         if (el) el.value = value;
     });
+
+    const showNoGrnToggle = mode === "tenancy" && !!tenant.isNewTenancy;
+    setTenantModalGrnToggleVisibility(showNoGrnToggle);
+    if (showNoGrnToggle) {
+        const grnValue = fields.tenantModalGrn || "";
+        const autoNoGrn = /^nogrn\d{5}$/i.test(grnValue);
+        setTenantModalNoGrnState({ checked: autoNoGrn, grnValue, source: "sync" });
+    } else {
+        setTenantModalNoGrnState({ checked: false, grnValue: fields.tenantModalGrn || "", source: "sync" });
+    }
 
     if (fields.tenantModalLandlord) {
         applyLandlordSelectionToModal(fields.tenantModalLandlord);
@@ -1306,10 +1340,8 @@ async function saveTenantModal() {
         const res = await updateTenantRecord({
             tenantId: activeTenantForModal.tenantId,
             tenancyId: activeTenantForModal.tenancyId,
-            previousTenancyId: activeTenantForModal.previousTenancyId,
             createNewTenancy: !!activeTenantForModal.isNewTenancy,
             forceNewTenancyId: activeTenantForModal.tenancyId,
-            keepPreviousActive: !!activeTenantForModal.keepPreviousActive,
             unitId: updates.unitId || activeTenantForModal.unitId,
             grn: submittedGrn,
             templateData: activeTenantForModal.templateData,
@@ -1335,7 +1367,6 @@ async function saveTenantModal() {
             unitId: updates.unitId || activeTenantForModal.unitId,
             family: familyMembers,
             isNewTenancy: false,
-            previousTenancyId: undefined,
         };
 
         const historyEntry = {
@@ -1345,30 +1376,25 @@ async function saveTenantModal() {
             endDate: merged.tenancyEndDate,
             status: merged.activeTenant ? "ACTIVE" : "ENDED",
             grnNumber: merged.grnNumber,
+            rentAmount: Number(merged.rentAmount) || 0,
+            currentRent: Number(merged.rentAmount) || 0,
         };
         const existingHistory = Array.isArray(activeTenantForModal.tenancyHistory)
             ? activeTenantForModal.tenancyHistory
             : [];
-        const adjustedHistory = existingHistory.map((h) => {
-            if (
-                activeTenantForModal.previousTenancyId &&
-                !activeTenantForModal.keepPreviousActive &&
-                h.tenancyId === activeTenantForModal.previousTenancyId
-            ) {
-                return { ...h, status: "ENDED", endDate: h.endDate || formatDateForInput(new Date()) };
-            }
-            return h;
-        });
-        merged.tenancyHistory = [historyEntry, ...adjustedHistory.filter((h) => h.tenancyId !== merged.tenancyId)];
+        merged.tenancyHistory = [historyEntry, ...existingHistory.filter((h) => h.tenancyId !== merged.tenancyId)];
 
-        if (activeTenantForModal.isNewTenancy) {
-            tenantCache.push(merged);
-            selectedTenantForSidebar = merged;
+        const nextRows = Array.isArray(tenantRowsCache) ? tenantRowsCache.slice() : [];
+        const rowIdx = nextRows.findIndex((t) => t.tenancyId === merged.tenancyId);
+        if (rowIdx >= 0) {
+            nextRows[rowIdx] = merged;
         } else {
-            Object.assign(activeTenantForModal, merged);
-            const idx = tenantCache.findIndex((t) => t.tenancyId === merged.tenancyId);
-            if (idx >= 0) tenantCache[idx] = merged;
+            nextRows.push(merged);
         }
+        tenantRowsCache = nextRows;
+        tenantCache = collapseTenantRows(nextRows);
+        selectedTenantForSidebar =
+            tenantCache.find((t) => t.grnNumber === merged.grnNumber) || merged;
 
         activeTenantForModal = merged;
 
@@ -1462,20 +1488,6 @@ export function initTenantDirectory() {
         newTenancyBtn.addEventListener("click", startNewTenancyFromSidebar);
     }
 
-    const newTenancyConfirmOkBtn = document.getElementById("newTenancyConfirmOk");
-    if (newTenancyConfirmOkBtn) {
-        newTenancyConfirmOkBtn.addEventListener("click", () => handleNewTenancyChoice(true));
-    }
-
-    const newTenancyConfirmCancelBtn = document.getElementById("newTenancyConfirmCancel");
-    if (newTenancyConfirmCancelBtn) {
-        newTenancyConfirmCancelBtn.addEventListener("click", () => handleNewTenancyChoice(false));
-    }
-
-    document.querySelectorAll(".new-tenancy-confirm-close").forEach((btn) =>
-        btn.addEventListener("click", () => closeNewTenancyConfirmModal())
-    );
-
     const editTenantBtn = document.getElementById("sidebarEditTenantBtn");
     if (editTenantBtn) {
         editTenantBtn.addEventListener("click", () => {
@@ -1515,6 +1527,13 @@ export function initTenantDirectory() {
     const saveBtn = document.getElementById("tenantModalSaveBtn");
     if (saveBtn) {
         saveBtn.addEventListener("click", saveTenantModal);
+    }
+
+    const grnNoCheckbox = document.getElementById("tenantModalGrnNoCheckbox");
+    if (grnNoCheckbox) {
+        grnNoCheckbox.addEventListener("change", () => {
+            setTenantModalNoGrnState({ checked: grnNoCheckbox.checked, source: "user" });
+        });
     }
 
     const rentRevisionSaveBtn = document.getElementById("rentRevisionSaveBtn");

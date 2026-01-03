@@ -64,6 +64,30 @@ function dispatchUpdateEvent(name, detail) {
     document.dispatchEvent(new CustomEvent(name, { detail }));
 }
 
+function emitSyncBusy() {
+    dispatchUpdateEvent("sync:busy", { busy: initialSyncRunning || queueFlushRunning });
+}
+
+export function isSyncBusy() {
+    return initialSyncRunning || queueFlushRunning;
+}
+
+async function refreshAllSheetsSnapshot(url) {
+    if (!url) return;
+    try {
+        const data = await callAppScript({
+            url,
+            action: "allsheets",
+            cache: { useLocal: false, revalidate: false },
+        });
+        if (Array.isArray(data?.allSheets)) {
+            await setLocalData(LOCAL_KEYS.allSheets, data.allSheets);
+        }
+    } catch (err) {
+        console.warn("All-sheets sync failed", err);
+    }
+}
+
 async function storeWingsList(wings = []) {
     const next = Array.isArray(wings)
         ? wings.map((w) => (w || "").toString().trim()).filter(Boolean)
@@ -153,6 +177,9 @@ async function applyExportAll(data) {
     }
     if (data.generatedBills && Array.isArray(data.generatedBills.bills)) {
         await setLocalData(LOCAL_KEYS.generatedBills, data.generatedBills);
+    }
+    if (Array.isArray(data.allSheets)) {
+        await setLocalData(LOCAL_KEYS.allSheets, data.allSheets);
     }
 }
 
@@ -316,6 +343,7 @@ function buildSyncTasks(url) {
 export async function initSyncManager() {
     const pending = await queueCount();
     updateSyncIndicator(pending > 0 ? "pending" : "synced");
+    emitSyncBusy();
 }
 
 export async function startInitialSync() {
@@ -326,54 +354,57 @@ export async function startInitialSync() {
     if (!url) return { ok: false, reason: "missing-url" };
 
     initialSyncRunning = true;
-    const pending = await queueCount();
-    if (pending > 0) {
-        const confirmed = window.confirm(
-            `You have ${pending} unsynced change${pending === 1 ? "" : "s"}. Resyncing will discard them. Continue?`
-        );
-        if (!confirmed) {
-            initialSyncRunning = false;
-            updateSyncIndicator("pending", "Sync paused");
-            setProgressVisible(false);
-            return { ok: false, reason: "cancelled" };
+    emitSyncBusy();
+    try {
+        const pending = await queueCount();
+        if (pending > 0) {
+            const confirmed = window.confirm(
+                `You have ${pending} unsynced change${pending === 1 ? "" : "s"}. Resyncing will discard them. Continue?`
+            );
+            if (!confirmed) {
+                updateSyncIndicator("pending", "Sync paused");
+                setProgressVisible(false);
+                return { ok: false, reason: "cancelled" };
+            }
         }
-    }
 
-    updateSyncIndicator("syncing");
-    setProgressVisible(true);
-    updateSyncProgress(0, "Preparing sync...");
-    await cacheDeletePrefix("");
-    await queueClear();
-    clearLocalStorageCaches();
+        updateSyncIndicator("syncing");
+        setProgressVisible(true);
+        updateSyncProgress(0, "Preparing sync...");
+        await cacheDeletePrefix("");
+        await queueClear();
+        clearLocalStorageCaches();
 
-    const tasks = buildSyncTasks(url);
-    const total = tasks.length;
-    const errors = [];
+        const tasks = buildSyncTasks(url);
+        const total = tasks.length;
+        const errors = [];
 
-    for (let i = 0; i < tasks.length; i += 1) {
-        const task = tasks[i];
-        const percent = ((i) / total) * 100;
-        updateSyncProgress(percent, task.label);
-        try {
-            await task.run();
-        } catch (err) {
-            console.warn("Initial sync task failed", task.label, err);
-            errors.push({ label: task.label, error: String(err) });
+        for (let i = 0; i < tasks.length; i += 1) {
+            const task = tasks[i];
+            const percent = ((i) / total) * 100;
+            updateSyncProgress(percent, task.label);
+            try {
+                await task.run();
+            } catch (err) {
+                console.warn("Initial sync task failed", task.label, err);
+                errors.push({ label: task.label, error: String(err) });
+            }
         }
+
+        updateSyncProgress(100, errors.length ? "Sync finished with errors" : "Sync complete");
+        setTimeout(() => setProgressVisible(false), 600);
+        if (errors.length) {
+            updateSyncIndicator("pending", "Sync incomplete");
+        } else {
+            updateSyncIndicator("synced");
+        }
+
+        await flushSyncQueue();
+        return { ok: errors.length === 0, errors };
+    } finally {
+        initialSyncRunning = false;
+        emitSyncBusy();
     }
-
-    updateSyncProgress(100, errors.length ? "Sync finished with errors" : "Sync complete");
-    setTimeout(() => setProgressVisible(false), 600);
-    initialSyncRunning = false;
-
-    if (errors.length) {
-        updateSyncIndicator("pending", "Sync incomplete");
-    } else {
-        updateSyncIndicator("synced");
-    }
-
-    await flushSyncQueue();
-    return { ok: errors.length === 0, errors };
 }
 
 export async function enqueueSyncJob({ action, payload, method = "POST", params = {} } = {}) {
@@ -395,37 +426,43 @@ export async function flushSyncQueue() {
     }
 
     queueFlushRunning = true;
-    let jobs = await queueList();
-    if (!jobs.length) {
-        queueFlushRunning = false;
-        updateSyncIndicator("synced");
-        return;
-    }
-
-    updateSyncIndicator("syncing");
-    for (const job of jobs) {
-        try {
-            await callAppScript({
-                url,
-                action: job.action,
-                method: job.method || "POST",
-                params: job.params || {},
-                payload: job.payload || {},
-                cache: { useLocal: false, revalidate: false },
-            });
-            await invalidateCachesForWriteAction(url, job.action);
-            await queueDelete(job.id);
-        } catch (err) {
-            console.warn("Sync job failed", job.action, err);
-            updateSyncIndicator("pending", "Sync paused");
-            queueFlushRunning = false;
+    emitSyncBusy();
+    try {
+        let jobs = await queueList();
+        if (!jobs.length) {
+            updateSyncIndicator("synced");
             return;
         }
-    }
 
-    jobs = await queueList();
-    updateSyncIndicator(jobs.length ? "pending" : "synced");
-    queueFlushRunning = false;
+        updateSyncIndicator("syncing");
+        for (const job of jobs) {
+            try {
+                await callAppScript({
+                    url,
+                    action: job.action,
+                    method: job.method || "POST",
+                    params: job.params || {},
+                    payload: job.payload || {},
+                    cache: { useLocal: false, revalidate: false },
+                });
+                await invalidateCachesForWriteAction(url, job.action);
+                await queueDelete(job.id);
+            } catch (err) {
+                console.warn("Sync job failed", job.action, err);
+                updateSyncIndicator("pending", "Sync paused");
+                return;
+            }
+        }
+
+        jobs = await queueList();
+        updateSyncIndicator(jobs.length ? "pending" : "synced");
+        if (!jobs.length) {
+            await refreshAllSheetsSnapshot(url);
+        }
+    } finally {
+        queueFlushRunning = false;
+        emitSyncBusy();
+    }
 }
 
 export async function invalidateCacheForAction(url, action) {

@@ -944,6 +944,8 @@ function buildTenantEntryFromPayload(payload, { existing = {}, unit = {}, landlo
         endDate: tenancyEndDate || "",
         status: activeTenant ? "ACTIVE" : "ENDED",
         grnNumber,
+        rentAmount,
+        currentRent: rentAmount,
     };
 
     const existingHistory = Array.isArray(existing.tenancyHistory) ? existing.tenancyHistory : [];
@@ -2505,8 +2507,9 @@ export async function updateTenantRecord(payload) {
             nextPayload.landlordId = landlordId;
 
             const list = tenants.slice();
+            const isNewTenancy = !!nextPayload.createNewTenancy;
             let idx = list.findIndex((t) => t.tenancyId === tenancyId);
-            if (idx < 0) {
+            if (idx < 0 && !isNewTenancy) {
                 idx = list.findIndex((t) => t.tenantId === tenantId);
             }
             const existing = idx >= 0 ? list[idx] : {};
@@ -2527,18 +2530,6 @@ export async function updateTenantRecord(payload) {
                 list.push(updated);
             }
 
-            if (nextPayload.createNewTenancy && nextPayload.previousTenancyId && !nextPayload.keepPreviousActive) {
-                const prevIdx = list.findIndex((t) => t.tenancyId === nextPayload.previousTenancyId);
-                if (prevIdx >= 0) {
-                    const prev = list[prevIdx];
-                    list[prevIdx] = {
-                        ...prev,
-                        activeTenant: false,
-                        tenancyEndDate: prev.tenancyEndDate || new Date().toISOString().slice(0, 10),
-                    };
-                }
-            }
-
             await updateLocalUnitsList(units);
             await updateLocalLandlordsList(landlords);
             await updateLocalTenantsList(list);
@@ -2553,16 +2544,6 @@ export async function updateTenantRecord(payload) {
                         landlordId,
                     })
                 );
-            if (nextPayload.createNewTenancy && nextPayload.previousTenancyId && !nextPayload.keepPreviousActive) {
-                nextTenancies = nextTenancies.map((t) => {
-                    if (t.tenancy_id !== nextPayload.previousTenancyId) return t;
-                    return {
-                        ...t,
-                        status: "ENDED",
-                        end_date: t.end_date || new Date().toISOString().slice(0, 10),
-                    };
-                });
-            }
             await setLocalData(LOCAL_KEYS.tenancies, nextTenancies);
 
             const familyMembers = await getLocalList(LOCAL_KEYS.familyMembers);
@@ -2672,7 +2653,7 @@ export async function getRentRevisions(tenancyId) {
         return await runFetch();
     } catch (e) {
         console.error("getRentRevisions error", e);
-        showToast("Failed to load rent history", "error");
+        showToast("Failed to load rent revisions", "error");
         return { ok: false, revisions: cached || filteredAll || [] };
     }
 }
