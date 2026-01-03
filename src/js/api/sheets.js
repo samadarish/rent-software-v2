@@ -22,6 +22,7 @@ import {
 import { enqueueSyncJob } from "./syncManager.js";
 
 const LOCAL_REVALIDATE_MS = 5 * 60 * 1000;
+const SHOW_QUEUE_TOASTS = false;
 
 function shouldRevalidate(entry, force) {
     if (force) return true;
@@ -1085,7 +1086,7 @@ async function runWriteAction({
     }
 
     await enqueueSyncJob({ action, payload, params, method });
-    if (queuedMessage) {
+    if (queuedMessage && SHOW_QUEUE_TOASTS) {
         showToast(queuedMessage, "warning");
     }
 

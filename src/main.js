@@ -25,8 +25,9 @@ import { switchFlow } from "./js/features/navigation/flow.js";
 import { attachEventHandlers } from "./js/events.js";
 import { updateConnectionIndicator } from "./js/utils/ui.js";
 import { initDraftUi } from "./js/features/shared/drafts.js";
-import { flushSyncQueue, initSyncManager, startInitialSync } from "./js/api/syncManager.js";
+import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
+import { currentFlow } from "./js/state.js";
 
 /**
  * Application initialization
@@ -43,8 +44,38 @@ document.addEventListener("DOMContentLoaded", async () => {
   attachEventHandlers();
   initDraftUi();
 
+  document.addEventListener("sync:completed", () => {
+    void (async () => {
+      const tasks = [
+        fetchWingsFromSheet(),
+        loadClausesFromSheet(false, true),
+        refreshUnitOptions(),
+        refreshLandlordOptions(),
+      ];
+
+      if (currentFlow === "viewTenants") {
+        const mod = await import("./js/features/tenants/tenants.js");
+        tasks.push(mod.loadTenantDirectory(true));
+      }
+
+      if (currentFlow === "payments") {
+        const mod = await import("./js/features/billing/payments.js");
+        tasks.push(mod.refreshPaymentsIfNeeded(true));
+      }
+
+      if (currentFlow === "generateBill") {
+        const mod = await import("./js/features/billing/billing.js");
+        if (typeof mod.refreshBillingData === "function") {
+          tasks.push(mod.refreshBillingData(true));
+        }
+      }
+
+      await Promise.allSettled(tasks);
+    })();
+  });
+
   // Check and prompt for App Script URL if not configured
-  ensureAppScriptConfigured();
+  await ensureAppScriptConfigured({ autoSync: true });
 
   applyLandlordDefaultsToForm();
   initSyncManager();
@@ -52,9 +83,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (navigator.onLine) {
     flushSyncQueue();
   }
-  document.addEventListener("appscript:url-updated", () => {
-    startInitialSync();
-  });
 
   // Fire all initial data fetches in parallel
   const initialFetches = [

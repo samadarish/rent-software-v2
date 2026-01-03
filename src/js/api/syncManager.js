@@ -10,6 +10,7 @@ import {
 import { callAppScript } from "./appscriptClient.js";
 import { LOCAL_KEYS, setLocalData } from "./localStore.js";
 import { showToast, updateSyncIndicator } from "../utils/ui.js";
+import { STORAGE_KEYS } from "../constants.js";
 
 let initialSyncRunning = false;
 let queueFlushRunning = false;
@@ -186,16 +187,30 @@ async function applyExportAll(data) {
 function setProgressVisible(show) {
     const wrap = document.getElementById("syncProgressWrap");
     if (!wrap) return;
+    if (isGlobalProgressSuppressed_()) {
+        wrap.classList.add("hidden");
+        return;
+    }
     wrap.classList.toggle("hidden", !show);
 }
 
 function updateSyncProgress(percent, label) {
+    dispatchUpdateEvent("sync:progress", { percent, label });
+    if (isGlobalProgressSuppressed_()) return;
     const bar = document.getElementById("syncProgressBar");
     const percentLabel = document.getElementById("syncProgressPercent");
     const textLabel = document.getElementById("syncProgressLabel");
     if (bar) bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
     if (percentLabel) percentLabel.textContent = `${Math.round(percent)}%`;
     if (textLabel && label) textLabel.textContent = label;
+}
+
+function isGlobalProgressSuppressed_() {
+    if (typeof document === "undefined") return false;
+    const modal = document.getElementById("appscriptModal");
+    if (modal?.dataset?.syncState === "syncing") return true;
+    const autoModal = document.getElementById("autoSyncModal");
+    return autoModal?.dataset?.syncState === "syncing";
 }
 
 function buildSyncTasks(url) {
@@ -400,7 +415,16 @@ export async function startInitialSync() {
         }
 
         await flushSyncQueue();
-        return { ok: errors.length === 0, errors };
+        const ok = errors.length === 0;
+        if (ok) {
+            try {
+                localStorage.setItem(STORAGE_KEYS.LAST_FULL_SYNC_AT, String(Date.now()));
+            } catch (err) {
+                console.warn("Failed to persist sync timestamp", err);
+            }
+        }
+        dispatchUpdateEvent("sync:completed", { ok, errors });
+        return { ok, errors };
     } finally {
         initialSyncRunning = false;
         emitSyncBusy();

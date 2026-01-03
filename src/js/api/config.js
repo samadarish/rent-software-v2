@@ -6,8 +6,11 @@
 
 import { STORAGE_KEYS } from "../constants.js";
 import { hideModal, showModal, showToast, updateConnectionIndicator } from "../utils/ui.js";
+import { startInitialSync } from "./syncManager.js";
 
 const APPS_SCRIPT_PATH_REGEX = /^\/macros\/s\/[A-Za-z0-9_-]+\/(exec|dev)(\/)?$/;
+const FULL_SYNC_STALE_MS = 2 * 60 * 60 * 1000;
+let modalProgressBound = false;
 
 /**
  * Retrieves the Google Apps Script URL from local storage
@@ -15,6 +18,92 @@ const APPS_SCRIPT_PATH_REGEX = /^\/macros\/s\/[A-Za-z0-9_-]+\/(exec|dev)(\/)?$/;
  */
 export function getAppScriptUrl() {
     return (localStorage.getItem(STORAGE_KEYS.APP_SCRIPT_URL) || "").trim();
+}
+
+function getLastFullSyncAt() {
+    const raw = localStorage.getItem(STORAGE_KEYS.LAST_FULL_SYNC_AT);
+    const parsed = Number(raw || 0);
+    return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function isFullSyncStale() {
+    const last = getLastFullSyncAt();
+    if (!last) return true;
+    return Date.now() - last > FULL_SYNC_STALE_MS;
+}
+
+function setAppScriptModalMode(mode = "input") {
+    const modal = document.getElementById("appscriptModal");
+    if (!modal) return;
+    const form = document.getElementById("appscriptFormSection");
+    const sync = document.getElementById("appscriptSyncSection");
+    const closeBtn = document.getElementById("appscriptModalClose");
+    const isSync = mode === "syncing";
+    modal.dataset.syncState = isSync ? "syncing" : "idle";
+    if (form) form.classList.toggle("hidden", isSync);
+    if (sync) sync.classList.toggle("hidden", !isSync);
+    if (closeBtn) closeBtn.classList.toggle("hidden", isSync);
+}
+
+function updateAppScriptSyncProgress(percent, label) {
+    const bar = document.getElementById("appscriptSyncBar");
+    const percentLabel = document.getElementById("appscriptSyncPercent");
+    const textLabel = document.getElementById("appscriptSyncLabel");
+    if (bar) bar.style.width = `${Math.max(0, Math.min(100, percent || 0))}%`;
+    if (percentLabel) percentLabel.textContent = `${Math.round(percent || 0)}%`;
+    if (textLabel && label) textLabel.textContent = label;
+}
+
+function bindModalProgress() {
+    if (modalProgressBound || typeof document === "undefined") return;
+    modalProgressBound = true;
+    document.addEventListener("sync:progress", (event) => {
+        const modal = document.getElementById("appscriptModal");
+        if (!modal || modal.dataset.syncState !== "syncing") return;
+        const detail = event?.detail || {};
+        updateAppScriptSyncProgress(detail.percent || 0, detail.label || "");
+    });
+}
+
+export function openAppScriptModal({ mode = "input" } = {}) {
+    const modal = document.getElementById("appscriptModal");
+    if (!modal) return;
+    if (mode !== "syncing") {
+        const input = document.getElementById("appscript_url");
+        if (input) input.value = getAppScriptUrl();
+    }
+    setAppScriptModalMode(mode === "syncing" ? "syncing" : "input");
+    showModal(modal);
+}
+
+async function runFullSyncWithModal({ reason = "manual" } = {}) {
+    const modalVariant = reason === "stale" ? "simple" : "config";
+    const modal =
+        modalVariant === "simple"
+            ? document.getElementById("autoSyncModal")
+            : document.getElementById("appscriptModal");
+    if (!modal) return { ok: false, reason: "missing-modal" };
+    bindModalProgress();
+    if (modalVariant === "config") {
+        setAppScriptModalMode("syncing");
+        showModal(modal);
+        updateAppScriptSyncProgress(0, "Preparing sync...");
+    } else {
+        modal.dataset.syncState = "syncing";
+        showModal(modal);
+    }
+    const result = await startInitialSync();
+    if (modalVariant === "config") {
+        hideModal(modal);
+        setAppScriptModalMode("input");
+    } else {
+        modal.dataset.syncState = "idle";
+        hideModal(modal);
+    }
+    if (result?.ok === false) {
+        showToast("Sync finished with errors. Check your connection.", "warning");
+    }
+    return result;
 }
 
 /**
@@ -61,35 +150,36 @@ export function saveAppScriptUrl() {
     const normalizedUrl = `${parsed.origin}${parsed.pathname}`;
 
     localStorage.setItem(STORAGE_KEYS.APP_SCRIPT_URL, normalizedUrl);
-    const modal = document.getElementById("appscriptModal");
-    if (modal) hideModal(modal);
 
     updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Internet online");
     document.dispatchEvent(
         new CustomEvent("appscript:url-updated", { detail: { url: normalizedUrl } })
     );
 
-    // Refresh data after URL is saved
-    import("./sheets.js").then(({ fetchWingsFromSheet, loadClausesFromSheet }) => {
-        fetchWingsFromSheet(true);
-        loadClausesFromSheet(true, true);
-    });
+    runFullSyncWithModal({ reason: "manual" });
 }
 
 /**
  * Ensures the App Script URL is configured
  * Opens the configuration modal if URL is not set
  */
-export function ensureAppScriptConfigured() {
+export async function ensureAppScriptConfigured({ autoSync = false } = {}) {
+    bindModalProgress();
     const url = getAppScriptUrl();
     const input = document.getElementById("appscript_url");
     if (input && url) input.value = url;
 
     if (!url) {
-        const modal = document.getElementById("appscriptModal");
-        if (modal) showModal(modal);
+        openAppScriptModal({ mode: "input" });
         updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Set Apps Script URL");
+        return { ok: false, reason: "missing-url" };
     }
+
+    if (autoSync && navigator.onLine && isFullSyncStale()) {
+        await runFullSyncWithModal({ reason: "stale" });
+    }
+
+    return { ok: true };
 }
 
 /**

@@ -10,6 +10,7 @@ import { switchFlow } from "./features/navigation/flow.js";
 import {
     saveAppScriptUrl,
     getAppScriptUrl,
+    openAppScriptModal,
     openLandlordConfigModal,
     saveLandlordDefaults,
     saveWingFromLandlordConfig,
@@ -30,7 +31,7 @@ import { exportDocxFromTemplate } from "./features/agreements/docx.js";
 import { buildUnitLabel, numberToIndianWords } from "./utils/formatters.js";
 import { clearAllDrafts, promptAndSaveDraft } from "./features/shared/drafts.js";
 import { handleNoGrnToggle } from "./features/tenants/formState.js";
-import { cloneSelectOptions, hideModal, showModal } from "./utils/ui.js";
+import { cloneSelectOptions, hideModal } from "./utils/ui.js";
 
 let unitConfigCache = [];
 let landlordConfigCache = [];
@@ -211,13 +212,16 @@ export function attachEventHandlers() {
         const url = getAppScriptUrl();
         const input = document.getElementById("appscript_url");
         if (input) input.value = url || "";
-        const modal = document.getElementById("appscriptModal");
-        if (modal) showModal(modal);
+        openAppScriptModal({ mode: "input" });
     });
 
     bindClick("navLandlordConfigBtn", openLandlordConfigModal);
 
     bindClick("appscriptCancelBtn", () => {
+        const modal = document.getElementById("appscriptModal");
+        if (modal) hideModal(modal);
+    });
+    bindClick("appscriptModalClose", () => {
         const modal = document.getElementById("appscriptModal");
         if (modal) hideModal(modal);
     });

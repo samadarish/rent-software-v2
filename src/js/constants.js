@@ -11,6 +11,7 @@
 export const STORAGE_KEYS = {
     APP_SCRIPT_URL: "tenantApp.appscriptUrl",
     LANDLORD_DEFAULTS: "tenantApp.landlordDefaults",
+    LAST_FULL_SYNC_AT: "tenantApp.lastFullSyncAt",
 };
 
 /**

@@ -852,6 +852,14 @@ async function loadBillingData({ force = false } = {}) {
     if (form) form.classList.remove("opacity-50");
 }
 
+export async function refreshBillingData(force = false) {
+    refreshBillingCalendarCoverage();
+    if (!billingState.selectedMonthKey || !getSelectedWingNormalized()) {
+        return;
+    }
+    await loadBillingData({ force });
+}
+
 async function handleNextStep() {
     const wingSelect = document.getElementById("billingWingSelect");
     if (!wingSelect || !wingSelect.value) {

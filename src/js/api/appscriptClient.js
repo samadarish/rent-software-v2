@@ -3,8 +3,7 @@
  * Centralizes URL resolution and JSON fetch/post handling so that
  * feature-specific API wrappers can stay concise.
  */
-import { getAppScriptUrl } from "./config.js";
-import { showModal } from "../utils/ui.js";
+import { getAppScriptUrl, openAppScriptModal } from "./config.js";
 import { cacheGet, cacheSet } from "./localDb.js";
 
 const inflightGets = new Map();
@@ -61,8 +60,7 @@ async function readLocalCache(cacheKey, ttlMs, allowStale) {
  * Opens the Apps Script URL configuration modal when the user needs to set it up.
  */
 function showConfigModal() {
-    const modal = document.getElementById("appscriptModal");
-    if (modal) showModal(modal);
+    openAppScriptModal({ mode: "input" });
 }
 
 /**
