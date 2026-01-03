@@ -1639,7 +1639,9 @@ function savePaymentAttachment_(dataUrl, tenantName, monthKey, wing, unitNumber)
   const safeMonthYear = normalizedMonthKey || sanitizeFileSegment_(monthKey, 'month');
   const safeWing = sanitizeFileSegment_(wing, 'wing');
   const safeUnit = sanitizeFileSegment_(unitNumber, 'unit');
-  const blobName = `${safeTenant}_${safeMonthYear}_${safeWing}_${safeUnit}`;
+  const suffix = Math.random().toString(36).slice(2, 6);
+  const extension = getFileExtension_(mimeType, '');
+  const blobName = `${safeTenant}_${safeMonthYear}_${safeWing}_${safeUnit}_${suffix}${extension ? '.' + extension : ''}`;
   const blob = Utilities.newBlob(bytes, mimeType).setName(blobName);
   const folder = getOrCreateFolder_('Payment Proofs');
   const file = folder.createFile(blob);
@@ -1734,45 +1736,60 @@ function updateBillPaymentStatus_(billLineIds) {
 
 function handleSavePayment_(payload = {}) {
   const paymentId = payload.id || Utilities.getUuid();
-  const paymentDate = parseIsoDate_(payload.date) || new Date();
-  let billLineId = payload.billLineId || '';
-  let tenantId = payload.tenantId || '';
-  let resolvedMonthKey = payload.monthKey || '';
+  const rawDate = payload.date || payload.payment_date;
+  const now = new Date();
+  let paymentDate = parseIsoDate_(rawDate) || now;
+  const hasTime = rawDate instanceof Date
+    ? !!(rawDate.getHours() || rawDate.getMinutes() || rawDate.getSeconds() || rawDate.getMilliseconds())
+    : /[T ]\d{2}:\d{2}/.test((rawDate || '').toString());
+  if (!hasTime && paymentDate instanceof Date && !isNaN(paymentDate.getTime())) {
+    paymentDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+  }
+  let billLineId = payload.billLineId || payload.bill_line_id || '';
+  let tenantId = payload.tenantId || payload.tenant_id || '';
+  const tenancyId = payload.tenancyId || payload.tenancy_id || '';
+  const monthKeyRaw = payload.monthKey || payload.month_key || '';
+  let resolvedMonthKey = monthKeyRaw || '';
   let resolvedTenantName = payload.tenantName || '';
   let resolvedWing = payload.wing || '';
   let resolvedUnitNumber = payload.unitNumber || payload.unit_number || '';
 
-  // Fallback: If billLineId is missing but we have tenancy+month, find the bill
-  if (!billLineId && payload.tenancyId && payload.monthKey) {
-    const bills = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS);
-    const match = bills.find(b =>
-      b.tenancy_id === payload.tenancyId &&
-      normalizeMonthKey_(b.month_key) === normalizeMonthKey_(payload.monthKey)
-    );
-    if (match) billLineId = match.bill_line_id;
+  let billMatch = null;
+  const needsBillLookup = billLineId || (tenancyId && monthKeyRaw);
+  const billLookup = needsBillLookup
+    ? readTableColumns_(BILL_LINES_SHEET, BILL_LINE_HEADERS, ['bill_line_id', 'month_key', 'tenancy_id'])
+    : [];
+
+  if (billLineId && billLookup.length) {
+    billMatch = billLookup.find((b) => b.bill_line_id == billLineId);
+    if (!billMatch) billLineId = '';
   }
 
-  if (billLineId) {
-    const billLookup = readTableColumns_(BILL_LINES_SHEET, BILL_LINE_HEADERS, ['bill_line_id', 'month_key', 'tenancy_id']);
-    const billMatch = billLookup.find((b) => b.bill_line_id == billLineId);
-    if (billMatch) {
-      resolvedMonthKey = normalizeMonthKey_(billMatch.month_key) || resolvedMonthKey || '';
-      if (!tenantId || !resolvedTenantName || !resolvedWing || !resolvedUnitNumber) {
-        const tenancyLookup = readTableColumns_(TENANCIES_SHEET, TENANCIES_HEADERS, ['tenancy_id', 'tenant_id', 'unit_id']);
-        const tenancyMatch = tenancyLookup.find((t) => t.tenancy_id == billMatch.tenancy_id);
-        if (tenancyMatch) {
-          tenantId = tenantId || tenancyMatch.tenant_id || '';
-          if (!resolvedTenantName) {
-            const tenantLookup = readTableColumns_(TENANTS_SHEET, TENANTS_HEADERS, ['tenant_id', 'full_name']);
-            const tenantMatch = tenantLookup.find((t) => t.tenant_id == tenancyMatch.tenant_id);
-            resolvedTenantName = (tenantMatch && tenantMatch.full_name) || resolvedTenantName;
-          }
-          if (!resolvedWing || !resolvedUnitNumber) {
-            const unitLookup = readTableColumns_(UNITS_SHEET, UNITS_HEADERS, ['unit_id', 'wing', 'unit_number']);
-            const unitMatch = unitLookup.find((u) => u.unit_id == tenancyMatch.unit_id);
-            resolvedWing = resolvedWing || (unitMatch && unitMatch.wing) || '';
-            resolvedUnitNumber = resolvedUnitNumber || (unitMatch && unitMatch.unit_number) || '';
-          }
+  if (!billMatch && tenancyId && monthKeyRaw && billLookup.length) {
+    const normalizedMonth = normalizeMonthKey_(monthKeyRaw);
+    billMatch = billLookup.find(
+      (b) => b.tenancy_id == tenancyId && normalizeMonthKey_(b.month_key) === normalizedMonth
+    );
+    if (billMatch) billLineId = billMatch.bill_line_id;
+  }
+
+  if (billMatch) {
+    resolvedMonthKey = normalizeMonthKey_(billMatch.month_key) || resolvedMonthKey || '';
+    if (!tenantId || !resolvedTenantName || !resolvedWing || !resolvedUnitNumber) {
+      const tenancyLookup = readTableColumns_(TENANCIES_SHEET, TENANCIES_HEADERS, ['tenancy_id', 'tenant_id', 'unit_id']);
+      const tenancyMatch = tenancyLookup.find((t) => t.tenancy_id == billMatch.tenancy_id);
+      if (tenancyMatch) {
+        tenantId = tenantId || tenancyMatch.tenant_id || '';
+        if (!resolvedTenantName) {
+          const tenantLookup = readTableColumns_(TENANTS_SHEET, TENANTS_HEADERS, ['tenant_id', 'full_name']);
+          const tenantMatch = tenantLookup.find((t) => t.tenant_id == tenancyMatch.tenant_id);
+          resolvedTenantName = (tenantMatch && tenantMatch.full_name) || resolvedTenantName;
+        }
+        if (!resolvedWing || !resolvedUnitNumber) {
+          const unitLookup = readTableColumns_(UNITS_SHEET, UNITS_HEADERS, ['unit_id', 'wing', 'unit_number']);
+          const unitMatch = unitLookup.find((u) => u.unit_id == tenancyMatch.unit_id);
+          resolvedWing = resolvedWing || (unitMatch && unitMatch.wing) || '';
+          resolvedUnitNumber = resolvedUnitNumber || (unitMatch && unitMatch.unit_number) || '';
         }
       }
     }
@@ -1840,6 +1857,7 @@ function mapPaymentRow_(record, context) {
   return {
     id: record.payment_id,
     date: formatDateIso_(record.payment_date),
+    paymentDateTime: formatDateTime_(record.payment_date),
     amount: Number(record.amount) || 0,
     mode: record.mode || '',
     reference: record.reference || '',

@@ -15,7 +15,7 @@ import {
     deleteAttachment,
 } from "../../api/sheets.js";
 import { ensureTenantDirectoryLoaded, getActiveTenantsForWing } from "../tenants/tenants.js";
-import { formatCurrency as formatCurrencyBase } from "../../utils/formatters.js";
+import { formatCurrency as formatCurrencyBase, formatDateForDoc } from "../../utils/formatters.js";
 import { normalizeKey, normalizeMonthKey } from "../../utils/normalizers.js";
 import { escapeHtml } from "../../utils/htmlUtils.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
@@ -78,9 +78,10 @@ const BILL_MONTHS_BACK = 24;
 const PENDING_PAGE_SIZE = 9;
 const PAID_DEFAULT_LIMIT = 9;
 const RECEIPT_MAX_DIM = 1100;
-const RECEIPT_JPEG_QUALITY = 0.68;
-const RECEIPT_TARGET_BYTES = 350 * 1024;
-const RECEIPT_OUTPUT_MIME = "image/jpeg";
+const RECEIPT_WEBP_QUALITY = 0.68;
+const RECEIPT_TARGET_BYTES = 20 * 1024;
+const RECEIPT_OUTPUT_MIME = "image/webp";
+const RECEIPT_FORCE_WEBP = true;
 
 const attachmentPreviewCache = new Map();
 let paymentHistoryLoading = false;
@@ -169,6 +170,53 @@ function formatCurrency(amount) {
         maximumFractionDigits: 2,
         useGrouping: true,
     });
+}
+
+function normalizePaymentDateString(raw) {
+    const text = (raw || "").toString().trim();
+    if (!text) return "";
+    const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+    const parsed = new Date(text);
+    if (isNaN(parsed.getTime())) return "";
+    return parsed.toISOString().slice(0, 10);
+}
+
+function parsePaymentTimestamp(raw) {
+    const text = (raw || "").toString().trim();
+    if (!text) return 0;
+    let normalized = text;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+        normalized = `${normalized}T00:00:00`;
+    } else if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(normalized)) {
+        normalized = normalized.replace(" ", "T");
+    }
+    const parsed = new Date(normalized);
+    return isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+}
+
+function getPaymentSortTimestamp(payment = {}) {
+    return parsePaymentTimestamp(
+        payment.paymentDateTime ||
+            payment.payment_date ||
+            payment.paymentDate ||
+            payment.date ||
+            payment.createdAt ||
+            payment.created_at ||
+            ""
+    );
+}
+
+function formatPaymentDateLabel(payment = {}) {
+    const raw =
+        payment.date ||
+        payment.paymentDateTime ||
+        payment.payment_date ||
+        payment.createdAt ||
+        payment.created_at ||
+        "";
+    const normalized = normalizePaymentDateString(raw);
+    return normalized ? formatDateForDoc(normalized) : "-";
 }
 
 function normalizeBooleanValue(value) {
@@ -694,9 +742,10 @@ function renderPaymentHistory(context = {}) {
     }
 
     const sorted = [...matches].sort((a, b) => {
-        const aTime = new Date(a.date || a.createdAt || 0).getTime();
-        const bTime = new Date(b.date || b.createdAt || 0).getTime();
-        return aTime - bTime;
+        const aTime = getPaymentSortTimestamp(a);
+        const bTime = getPaymentSortTimestamp(b);
+        if (aTime !== bTime) return aTime - bTime;
+        return String(a.id || "").localeCompare(String(b.id || ""));
     });
 
     const downloadIcon = `
@@ -728,7 +777,7 @@ function renderPaymentHistory(context = {}) {
         card.className = "border border-slate-200 rounded-lg bg-white shadow-sm overflow-hidden";
 
         const amountLabel = formatCurrency(p.amount);
-        const dateLabel = p.date || p.createdAt || "-";
+        const dateLabel = formatPaymentDateLabel(p);
         const modeLabel = p.mode || "-";
         const notesLabel = p.notes || "";
         const rawUrl = p.attachmentUrl || "";
@@ -748,7 +797,10 @@ function renderPaymentHistory(context = {}) {
                 </div>
                 <div class="text-[10px] text-slate-500 whitespace-nowrap">${safeDateLabel}</div>
                 <div class="flex items-center justify-end gap-2">
-                    <div class="receipt-shell w-14 h-14 rounded-lg border bg-slate-50 flex items-center justify-center overflow-hidden">
+                    <div class="receipt-shell relative w-14 h-14 rounded-lg border bg-slate-50 flex items-center justify-center overflow-hidden">
+                        <div class="receipt-loading absolute inset-0 bg-white/70 flex items-center justify-center">
+                            <div class="h-4 w-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin"></div>
+                        </div>
                         <img class="receipt-thumb ${hasAttachment ? "" : "hidden"} w-full h-full object-cover" alt="Receipt preview" />
                         <span class="receipt-placeholder ${hasAttachment ? "hidden" : ""} text-[9px] text-slate-400">No image</span>
                     </div>
@@ -771,6 +823,7 @@ function renderPaymentHistory(context = {}) {
         const thumbShell = card.querySelector(".receipt-shell");
         const img = card.querySelector(".receipt-thumb");
         const placeholder = card.querySelector(".receipt-placeholder");
+        const loadingIndicator = card.querySelector(".receipt-loading");
         const downloadBtn = card.querySelector(".receipt-download");
         const copyBtn = card.querySelector(".receipt-copy");
         let targetUrl = thumbUrl;
@@ -784,25 +837,53 @@ function renderPaymentHistory(context = {}) {
             if (img) img.classList.add("hidden");
             if (placeholder) placeholder.classList.remove("hidden");
         };
-
-        if (hasAttachment) {
-            if (thumbShell) {
-                thumbShell.classList.add("cursor-pointer");
-                thumbShell.addEventListener("click", openTarget);
-            }
+        const setActionsEnabled = (enabled) => {
             if (downloadBtn) {
-                downloadBtn.disabled = false;
-                downloadBtn.addEventListener("click", () =>
-                    downloadAttachment(getTargetUrl(), p.attachmentName || "receipt")
-                );
+                downloadBtn.disabled = !enabled;
+                downloadBtn.classList.toggle("cursor-not-allowed", !enabled);
+                downloadBtn.classList.toggle("text-slate-400", !enabled);
+                downloadBtn.classList.toggle("text-slate-700", enabled);
+                if (!downloadBtn.dataset.bound) {
+                    downloadBtn.addEventListener("click", () =>
+                        downloadAttachment(getTargetUrl(), p.attachmentName || "receipt")
+                    );
+                    downloadBtn.dataset.bound = "true";
+                }
             }
             if (copyBtn) {
-                copyBtn.disabled = false;
-                copyBtn.addEventListener("click", () => copyAttachmentToClipboard(getTargetUrl()));
+                copyBtn.disabled = !enabled;
+                copyBtn.classList.toggle("cursor-not-allowed", !enabled);
+                copyBtn.classList.toggle("text-slate-400", !enabled);
+                copyBtn.classList.toggle("text-slate-700", enabled);
+                if (!copyBtn.dataset.bound) {
+                    copyBtn.addEventListener("click", () => copyAttachmentToClipboard(getTargetUrl()));
+                    copyBtn.dataset.bound = "true";
+                }
             }
+            if (thumbShell) {
+                thumbShell.classList.toggle("cursor-pointer", enabled);
+                thumbShell.classList.toggle("cursor-wait", !enabled);
+                if (!thumbShell.dataset.bound) {
+                    thumbShell.addEventListener("click", () => {
+                        if (thumbShell.dataset.loading === "true") return;
+                        openTarget();
+                    });
+                    thumbShell.dataset.bound = "true";
+                }
+            }
+        };
+        const setLoading = (loading) => {
+            if (loadingIndicator) loadingIndicator.classList.toggle("hidden", !loading);
+            if (thumbShell) thumbShell.dataset.loading = loading ? "true" : "false";
+        };
+
+        if (hasAttachment) {
+            setLoading(true);
+            setActionsEnabled(false);
         } else {
-            if (downloadBtn) downloadBtn.disabled = true;
-            if (copyBtn) copyBtn.disabled = true;
+            setLoading(false);
+            setActionsEnabled(false);
+            if (thumbShell) thumbShell.classList.remove("cursor-wait");
         }
 
         if (img && hasAttachment) {
@@ -820,10 +901,13 @@ function renderPaymentHistory(context = {}) {
                     targetUrl = thumbUrl || rawUrl;
                 })
                 .finally(() => {
+                    setLoading(false);
+                    setActionsEnabled(!!getTargetUrl());
                     if (!targetUrl) showPlaceholder();
                 });
         } else {
             showPlaceholder();
+            setLoading(false);
         }
 
         list.appendChild(card);
@@ -1668,6 +1752,18 @@ async function handleSavePayment() {
     savedPayment.amount = Number(savedPayment.amount) || 0;
     savedPayment.monthKey = normalizeMonthKey(savedPayment.monthKey);
     savedPayment.tenantKey = normalizeKey(savedPayment.tenantKey || savedPayment.tenantName);
+    savedPayment.createdAt =
+        savedPayment.createdAt ||
+        payment?.createdAt ||
+        payment?.created_at ||
+        new Date().toISOString();
+    savedPayment.created_at = savedPayment.created_at || savedPayment.createdAt;
+    savedPayment.paymentDateTime =
+        savedPayment.paymentDateTime ||
+        payment?.paymentDateTime ||
+        payment?.payment_date ||
+        savedPayment.createdAt;
+    savedPayment.payment_date = savedPayment.payment_date || savedPayment.paymentDateTime;
 
     const existingIdx = paymentsState.items.findIndex((p) => p.id === savedPayment.id);
     if (existingIdx >= 0) {
@@ -2064,44 +2160,91 @@ async function compressImageInBrowser(file, controller, mimeTypeHint = "") {
     if (!width || !height) {
         return buildFallback();
     }
-    const scale = Math.min(1, RECEIPT_MAX_DIM / Math.max(width, height));
-    const targetWidth = Math.max(1, Math.round(width * scale));
-    const targetHeight = Math.max(1, Math.round(height * scale));
+    const baseScale = Math.min(1, RECEIPT_MAX_DIM / Math.max(width, height));
+    const minScale = 0.2;
+    const scaleDecay = 0.85;
+    const maxAttempts = 6;
 
-    const canvas = document.createElement("canvas");
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-    const ctx = canvas.getContext("2d", { alpha: false });
-    if (!ctx) {
-        return buildFallback();
-    }
-
-    if (scale < 1) {
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-    }
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, targetWidth, targetHeight);
-    ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+    const renderScaled = async (scaleValue, quality) => {
+        const targetWidth = Math.max(1, Math.round(width * scaleValue));
+        const targetHeight = Math.max(1, Math.round(height * scaleValue));
+        const canvas = document.createElement("canvas");
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext("2d", { alpha: false });
+        if (!ctx) return null;
+        if (scaleValue < 1) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
+        }
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
+        ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+        return canvasToDataUrl(canvas, RECEIPT_OUTPUT_MIME, quality);
+    };
 
     let best = null;
-    const qualities = buildQualityCandidates(RECEIPT_JPEG_QUALITY);
-    for (const quality of qualities) {
-        ensureNotCancelled();
-        const attempt = await canvasToDataUrl(canvas, RECEIPT_OUTPUT_MIME, quality);
-        ensureNotCancelled();
-        if (!attempt?.dataUrl) continue;
-        const attemptBytes = Number(attempt.bytes) || approxBytesFromDataUrl(attempt.dataUrl);
-        const resolved = {
-            dataUrl: attempt.dataUrl,
-            bytes: attemptBytes,
-            mimeType: attempt.mimeType || RECEIPT_OUTPUT_MIME,
-        };
-        if (!best || attemptBytes < best.bytes) {
-            best = resolved;
+    if (RECEIPT_OUTPUT_MIME === "image/png") {
+        let attemptScale = baseScale;
+        for (let i = 0; i < maxAttempts; i += 1) {
+            ensureNotCancelled();
+            const attempt = await renderScaled(attemptScale);
+            ensureNotCancelled();
+            if (!attempt?.dataUrl) break;
+            const attemptBytes = Number(attempt.bytes) || approxBytesFromDataUrl(attempt.dataUrl);
+            const resolved = {
+                dataUrl: attempt.dataUrl,
+                bytes: attemptBytes,
+                mimeType: attempt.mimeType || RECEIPT_OUTPUT_MIME,
+            };
+            if (!best || attemptBytes < best.bytes) {
+                best = resolved;
+            }
+            if (attemptBytes && attemptBytes <= RECEIPT_TARGET_BYTES) {
+                break;
+            }
+            if (attemptScale <= minScale) {
+                break;
+            }
+            const nextScale = Math.max(minScale, attemptScale * scaleDecay);
+            if (Math.abs(nextScale - attemptScale) < 0.01) {
+                break;
+            }
+            attemptScale = nextScale;
         }
-        if (attemptBytes && attemptBytes <= RECEIPT_TARGET_BYTES) {
-            break;
+    } else {
+        const qualities = buildQualityCandidates(RECEIPT_WEBP_QUALITY);
+        let attemptScale = baseScale;
+        for (let i = 0; i < maxAttempts; i += 1) {
+            for (const quality of qualities) {
+                ensureNotCancelled();
+                const attempt = await renderScaled(attemptScale, quality);
+                ensureNotCancelled();
+                if (!attempt?.dataUrl) continue;
+                const attemptBytes = Number(attempt.bytes) || approxBytesFromDataUrl(attempt.dataUrl);
+                const resolved = {
+                    dataUrl: attempt.dataUrl,
+                    bytes: attemptBytes,
+                    mimeType: attempt.mimeType || RECEIPT_OUTPUT_MIME,
+                };
+                if (!best || attemptBytes < best.bytes) {
+                    best = resolved;
+                }
+                if (attemptBytes && attemptBytes <= RECEIPT_TARGET_BYTES) {
+                    break;
+                }
+            }
+            if (best?.bytes && best.bytes <= RECEIPT_TARGET_BYTES) {
+                break;
+            }
+            if (attemptScale <= minScale) {
+                break;
+            }
+            const nextScale = Math.max(minScale, attemptScale * scaleDecay);
+            if (Math.abs(nextScale - attemptScale) < 0.01) {
+                break;
+            }
+            attemptScale = nextScale;
         }
     }
 
@@ -2110,7 +2253,16 @@ async function compressImageInBrowser(file, controller, mimeTypeHint = "") {
     }
 
     const optimizedBytes = best.bytes || approxBytesFromDataUrl(best.dataUrl);
-    if (originalBytes && optimizedBytes && optimizedBytes >= originalBytes) {
+    const originalMime = (file?.type || mimeTypeHint || "").toLowerCase();
+    const isOriginalGif = originalMime === "image/gif";
+    const isOriginalWebp = originalMime === "image/webp";
+    if (isOriginalGif) {
+        return buildFallback();
+    }
+    if (isOriginalWebp && originalBytes && optimizedBytes && optimizedBytes >= originalBytes) {
+        return buildFallback();
+    }
+    if (!RECEIPT_FORCE_WEBP && originalBytes && optimizedBytes && optimizedBytes >= originalBytes) {
         return buildFallback();
     }
 

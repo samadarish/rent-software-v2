@@ -14,6 +14,7 @@ import { STORAGE_KEYS } from "../constants.js";
 
 let initialSyncRunning = false;
 let queueFlushRunning = false;
+let queueFlushRequested = false;
 const SYNC_TIMEOUT_MS = 30000;
 
 const WRITE_INVALIDATIONS = {
@@ -71,6 +72,22 @@ function emitSyncBusy() {
 
 export function isSyncBusy() {
     return initialSyncRunning || queueFlushRunning;
+}
+
+async function updateSyncIndicatorWithCount(status, options = {}) {
+    const count = typeof options.count === "number" ? options.count : await queueCount();
+    let label = options.message;
+    if (!label) {
+        if (status === "syncing") {
+            label = count > 0 ? `Syncing (${count})` : "Syncing";
+        } else if (status === "pending") {
+            label = count > 0 ? `Not synced (${count})` : "Not synced";
+        } else if (status === "synced") {
+            label = "Synced";
+        }
+    }
+    updateSyncIndicator(status, label || "");
+    return count;
 }
 
 async function refreshAllSheetsSnapshot(url) {
@@ -357,7 +374,7 @@ function buildSyncTasks(url) {
 
 export async function initSyncManager() {
     const pending = await queueCount();
-    updateSyncIndicator(pending > 0 ? "pending" : "synced");
+    await updateSyncIndicatorWithCount(pending > 0 ? "pending" : "synced", { count: pending });
     emitSyncBusy();
 }
 
@@ -434,58 +451,78 @@ export async function startInitialSync() {
 export async function enqueueSyncJob({ action, payload, method = "POST", params = {} } = {}) {
     if (!action) return null;
     const id = await queueAdd({ action, payload, method, params });
-    updateSyncIndicator("pending");
+    const pending = await queueCount();
+    void updateSyncIndicatorWithCount(queueFlushRunning ? "syncing" : "pending", { count: pending });
     if (navigator.onLine) {
-        flushSyncQueue();
+        if (queueFlushRunning) {
+            queueFlushRequested = true;
+        } else {
+            flushSyncQueue();
+        }
     }
     return id;
 }
 
 export async function flushSyncQueue() {
-    if (queueFlushRunning) return;
+    if (queueFlushRunning) {
+        queueFlushRequested = true;
+        return;
+    }
     const url = ensureAppScriptUrl();
     if (!url) {
-        updateSyncIndicator("pending", "Sync pending");
+        await updateSyncIndicatorWithCount("pending", { message: "Sync pending" });
         return;
     }
 
     queueFlushRunning = true;
+    queueFlushRequested = false;
     emitSyncBusy();
     try {
-        let jobs = await queueList();
-        if (!jobs.length) {
-            updateSyncIndicator("synced");
+        let pendingCount = await queueCount();
+        if (!pendingCount) {
+            await updateSyncIndicatorWithCount("synced", { count: 0 });
             return;
         }
 
-        updateSyncIndicator("syncing");
-        for (const job of jobs) {
-            try {
-                await callAppScript({
-                    url,
-                    action: job.action,
-                    method: job.method || "POST",
-                    params: job.params || {},
-                    payload: job.payload || {},
-                    cache: { useLocal: false, revalidate: false },
-                });
-                await invalidateCachesForWriteAction(url, job.action);
-                await queueDelete(job.id);
-            } catch (err) {
-                console.warn("Sync job failed", job.action, err);
-                updateSyncIndicator("pending", "Sync paused");
-                return;
+        await updateSyncIndicatorWithCount("syncing", { count: pendingCount });
+        let jobs = await queueList();
+        while (jobs.length) {
+            for (const job of jobs) {
+                try {
+                    await callAppScript({
+                        url,
+                        action: job.action,
+                        method: job.method || "POST",
+                        params: job.params || {},
+                        payload: job.payload || {},
+                        cache: { useLocal: false, revalidate: false },
+                    });
+                    await invalidateCachesForWriteAction(url, job.action);
+                    await queueDelete(job.id);
+                } catch (err) {
+                    console.warn("Sync job failed", job.action, err);
+                    updateSyncIndicator("pending", "Sync paused");
+                    return;
+                }
+
+                pendingCount = await queueCount();
+                if (pendingCount > 0) {
+                    await updateSyncIndicatorWithCount("syncing", { count: pendingCount });
+                }
             }
+
+            jobs = await queueList();
         }
 
-        jobs = await queueList();
-        updateSyncIndicator(jobs.length ? "pending" : "synced");
-        if (!jobs.length) {
-            await refreshAllSheetsSnapshot(url);
-        }
+        await updateSyncIndicatorWithCount("synced", { count: 0 });
+        await refreshAllSheetsSnapshot(url);
     } finally {
         queueFlushRunning = false;
         emitSyncBusy();
+        if (queueFlushRequested && navigator.onLine) {
+            queueFlushRequested = false;
+            setTimeout(() => flushSyncQueue(), 0);
+        }
     }
 }
 

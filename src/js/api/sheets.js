@@ -803,6 +803,7 @@ function buildLocalPaymentRecord(payload = {}) {
     const id = payload.id || createLocalId("payment");
     const date = payload.date || new Date().toISOString().slice(0, 10);
     const createdAt = payload.createdAt || new Date().toISOString();
+    const paymentDateTime = payload.paymentDateTime || payload.payment_date || createdAt;
     return {
         id,
         date,
@@ -828,6 +829,8 @@ function buildLocalPaymentRecord(payload = {}) {
         payableDate: payload.payableDate || "",
         billLineId: payload.billLineId || payload.bill_line_id || "",
         tenancyId: payload.tenancyId || payload.tenancy_id || "",
+        paymentDateTime,
+        payment_date: paymentDateTime,
         createdAt,
     };
 }
