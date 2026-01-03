@@ -7,7 +7,7 @@
 
 /**
  * Current application flow mode
- * @type {"agreement" | "createTenantNew" | "viewTenants" | "generateBill" | "payments"}
+ * @type {"agreement" | "createTenantNew" | "viewTenants" | "generateBill" | "payments" | "exportData"}
  */
 export let currentFlow = "agreement";
 

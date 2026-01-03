@@ -47,7 +47,7 @@ async function ensurePaymentsInitialized() {
 /**
  * Switches the application to a different flow/mode
  * Updates UI elements, button visibility, and form sections based on the mode
- * @param {"dashboard" | "agreement" | "createTenantNew" | "viewTenants" | "generateBill" | "payments"} mode - The flow mode to switch to
+ * @param {"dashboard" | "agreement" | "createTenantNew" | "viewTenants" | "generateBill" | "payments" | "exportData"} mode - The flow mode to switch to
  */
 export function switchFlow(mode, options = { bypassGuard: false }) {
     if (
@@ -81,11 +81,13 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     const tenantListSection = document.getElementById("tenantListSection");
     const generateBillSection = document.getElementById("generateBillSection");
     const paymentsSection = document.getElementById("paymentsSection");
+    const exportDataSection = document.getElementById("exportDataSection");
 
     const isDashboard = mode === "dashboard";
     const isGenerateBill = mode === "generateBill";
     const isPayments = mode === "payments";
     const isViewTenants = mode === "viewTenants";
+    const isExportData = mode === "exportData";
     const isFormFlow = mode === "agreement" || mode === "createTenantNew";
     const toggleSection = (element, show) =>
         smoothToggle(element, show, show ? {} : { duration: 0 });
@@ -96,6 +98,7 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     toggleSection(tenantListSection, isViewTenants);
     toggleSection(generateBillSection, isGenerateBill);
     toggleSection(paymentsSection, isPayments);
+    toggleSection(exportDataSection, isExportData);
 
     // Update navigation button active states
     const navButtons = {
@@ -105,6 +108,7 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
         viewTenants: "navViewTenantsBtn",
         generateBill: "navGenerateBillBtn",
         payments: "navPaymentsBtn",
+        exportData: "navExportDataBtn",
     };
 
     const activeClasses = ["bg-slate-900", "text-white", "shadow-sm"];
@@ -136,6 +140,7 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
         viewTenants: "Tenant Directory",
         generateBill: "Generate Bills",
         payments: "Payments",
+        exportData: "Export data",
     };
     if (titleEl && titleMap[mode]) {
         titleEl.textContent = titleMap[mode];
@@ -181,7 +186,7 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
         const showClauses = mode === "agreement";
         const showDirectory = mode === "viewTenants";
         const showTenantSidebar = mode === "createTenantNew";
-        const showUtilitySidebar = isDashboard || isGenerateBill || isPayments;
+        const showUtilitySidebar = isDashboard || isGenerateBill || isPayments || isExportData;
 
         toggleSection(clausesAgreementContent, showClauses);
         toggleSection(directorySidebarContent, showDirectory);

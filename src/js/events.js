@@ -185,6 +185,7 @@ export function attachEventHandlers() {
         navViewTenantsBtn: "viewTenants",
         navCreateTenantBtn: "createTenantNew",
         navCreateAgreementBtn: "agreement",
+        navExportDataBtn: "exportData",
     };
 
     Object.entries(navTargets).forEach(([id, mode]) => {
