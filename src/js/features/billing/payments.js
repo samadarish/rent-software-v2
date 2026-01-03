@@ -82,6 +82,10 @@ const RECEIPT_WEBP_QUALITY = 0.68;
 const RECEIPT_TARGET_BYTES = 20 * 1024;
 const RECEIPT_OUTPUT_MIME = "image/webp";
 const RECEIPT_FORCE_WEBP = true;
+const RECEIPT_MIN_SCALE = 0.1;
+const RECEIPT_SCALE_DECAY = 0.75;
+const RECEIPT_MAX_ATTEMPTS = 10;
+const RECEIPT_MIN_QUALITY = 0.3;
 
 const attachmentPreviewCache = new Map();
 let paymentHistoryLoading = false;
@@ -1353,6 +1357,64 @@ async function downloadAttachment(url, name) {
     showToast(`Download started: ${fileLabel}`, "success");
 }
 
+async function rasterizeImageBlob(blob, targetMime = "image/png") {
+    if (!blob) return null;
+    const toBlob = (canvas) => {
+        if (typeof canvas.toBlob !== "function") {
+            const dataUrl = canvas.toDataURL(targetMime);
+            const file = dataUrlToFile(dataUrl, "receipt-copy");
+            return file || null;
+        }
+        return new Promise((resolve) => {
+            canvas.toBlob((result) => resolve(result || null), targetMime);
+        });
+    };
+
+    try {
+        if (typeof createImageBitmap === "function") {
+            const bitmap = await createImageBitmap(blob);
+            const canvas = document.createElement("canvas");
+            canvas.width = bitmap.width || 1;
+            canvas.height = bitmap.height || 1;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                if (typeof bitmap.close === "function") bitmap.close();
+                return null;
+            }
+            ctx.drawImage(bitmap, 0, 0);
+            if (typeof bitmap.close === "function") bitmap.close();
+            return await toBlob(canvas);
+        }
+    } catch (err) {
+        // Fall through to HTMLImageElement decoding.
+    }
+
+    return new Promise((resolve) => {
+        const objectUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = async () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.naturalWidth || img.width || 1;
+            canvas.height = img.naturalHeight || img.height || 1;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                URL.revokeObjectURL(objectUrl);
+                resolve(null);
+                return;
+            }
+            ctx.drawImage(img, 0, 0);
+            const out = await toBlob(canvas);
+            URL.revokeObjectURL(objectUrl);
+            resolve(out);
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(null);
+        };
+        img.src = objectUrl;
+    });
+}
+
 async function copyAttachmentToClipboard(url) {
     if (!url) {
         showToast("No receipt image to copy", "warning");
@@ -1368,10 +1430,20 @@ async function copyAttachmentToClipboard(url) {
         if (navigator.clipboard && window.ClipboardItem) {
             const response = await fetch(target);
             const blob = await response.blob();
-            const item = new ClipboardItem({ [blob.type || "image/png"]: blob });
-            await navigator.clipboard.write([item]);
-            showToast("Receipt image copied", "success");
-            return;
+            const mime = (blob.type || "").toLowerCase();
+            let clipboardBlob = blob;
+            if (mime === "image/webp" || !mime.startsWith("image/")) {
+                const converted = await rasterizeImageBlob(blob, "image/png");
+                if (converted) clipboardBlob = converted;
+            }
+            try {
+                const item = new ClipboardItem({ [clipboardBlob.type || "image/png"]: clipboardBlob });
+                await navigator.clipboard.write([item]);
+                showToast("Receipt image copied", "success");
+                return;
+            } catch (err) {
+                // fall through to link copy
+            }
         }
         if (navigator.clipboard?.writeText) {
             await navigator.clipboard.writeText(target);
@@ -2002,7 +2074,7 @@ function buildQualityCandidates(primary) {
     const candidates = [primary, 0.6, 0.52, 0.45];
     const unique = [];
     candidates.forEach((quality) => {
-        const clamped = Math.max(0.35, Math.min(0.9, Number(quality) || 0));
+        const clamped = Math.max(RECEIPT_MIN_QUALITY, Math.min(0.9, Number(quality) || 0));
         if (!unique.some((value) => Math.abs(value - clamped) < 0.001)) {
             unique.push(clamped);
         }
@@ -2161,9 +2233,9 @@ async function compressImageInBrowser(file, controller, mimeTypeHint = "") {
         return buildFallback();
     }
     const baseScale = Math.min(1, RECEIPT_MAX_DIM / Math.max(width, height));
-    const minScale = 0.2;
-    const scaleDecay = 0.85;
-    const maxAttempts = 6;
+    const minScale = RECEIPT_MIN_SCALE;
+    const scaleDecay = RECEIPT_SCALE_DECAY;
+    const maxAttempts = RECEIPT_MAX_ATTEMPTS;
 
     const renderScaled = async (scaleValue, quality) => {
         const targetWidth = Math.max(1, Math.round(width * scaleValue));
