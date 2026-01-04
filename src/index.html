@@ -34,7 +34,7 @@
 
 <body class="bg-slate-100 text-slate-900">
   <!-- Toasts -->
-  <div id="toastContainer" class="fixed top-16 md:top-20 right-4 z-[9999] w-[92vw] max-w-sm space-y-3 pointer-events-none"></div>
+  <div id="toastContainer" class="fixed top-16 md:top-20 left-1/2 -translate-x-1/2 z-[9999] w-[92vw] max-w-sm space-y-3 pointer-events-none"></div>
 
   <div class="min-h-screen flex flex-col">
     <!-- HEADER -->
@@ -1361,17 +1361,6 @@
 
         <div class="grid md:grid-cols-2 gap-4">
           <div class="space-y-3 border border-slate-200 rounded-lg p-3 bg-slate-50/50">
-            <div class="flex flex-col md:flex-row gap-2 items-start">
-              <select id="landlordExistingSelect" class="border rounded px-2 py-1.5 text-xs flex-1 w-full">
-                <option value="">Select saved landlord</option>
-              </select>
-              <div class="flex gap-2">
-                <button id="landlordLoadBtn"
-                  class="px-3 py-1.5 rounded bg-slate-200 text-[11px] font-semibold border">Load</button>
-                <button id="landlordDeleteBtn"
-                  class="px-3 py-1.5 rounded bg-rose-600 text-white text-[11px] font-semibold">Delete</button>
-              </div>
-            </div>
             <div>
               <label class="text-[11px] font-semibold block mb-1">Landlord Name</label>
               <input id="landlordDefaultName" type="text" class="w-full border rounded px-2 py-1.5 text-xs" />
@@ -1385,12 +1374,24 @@
               <textarea id="landlordDefaultAddress" rows="2"
                 class="w-full border rounded px-2 py-1.5 text-xs resize-y"></textarea>
             </div>
-            <div class="flex justify-end gap-2">
-              <button id="landlordDefaultsSaveBtn"
-                class="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold">
-                Save landlord
-              </button>
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] text-slate-600">Saved landlords</span>
+                <span id="landlordEditNotice"
+                  class="hidden text-[10px] px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700">Editing</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="landlordDefaultsCancelEditBtn"
+                  class="hidden px-3 py-1.5 rounded border border-slate-300 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">
+                  Cancel
+                </button>
+                <button id="landlordDefaultsSaveBtn"
+                  class="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">
+                  Save landlord
+                </button>
+              </div>
             </div>
+            <div id="landlordConfigList" class="space-y-1 max-h-40 overflow-y-auto text-[11px]"></div>
           </div>
 
           <div class="space-y-3">
@@ -1403,8 +1404,6 @@
                   <button id="landlordDefaultWingBtn"
                     class="px-3 py-1.5 rounded bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">Save
                     wing</button>
-                  <button id="landlordDefaultWingRemoveBtn"
-                    class="px-3 py-1.5 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-500">Remove</button>
                 </div>
               </div>
               <div id="wingList" class="flex flex-wrap gap-2 text-[11px]"></div>
@@ -1413,17 +1412,6 @@
             <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
               <div class="flex items-center justify-between">
                 <p class="text-[11px] font-semibold">Add unit configuration</p>
-                <div class="flex gap-2">
-                  <button id="unitConfigLoadBtn"
-                    class="px-3 py-1.5 rounded bg-slate-200 text-[11px] font-semibold border">Load</button>
-                  <button id="unitConfigDeleteBtn"
-                    class="px-3 py-1.5 rounded bg-rose-600 text-white text-[11px] font-semibold">Delete</button>
-                </div>
-              </div>
-              <div class="flex flex-col md:flex-row gap-2">
-                <select id="unitConfigExisting" class="border rounded px-2 py-1.5 text-xs flex-1">
-                  <option value="">Select existing unit</option>
-                </select>
               </div>
               <div class="grid grid-cols-2 gap-2">
                 <select id="unitConfigWing" class="border rounded px-2 py-1.5 text-xs bg-white">
@@ -1461,10 +1449,20 @@
                 <input id="unitConfigNotes" type="text" class="border rounded px-2 py-1.5 text-xs" placeholder="Notes" />
               </div>
               <div class="flex justify-between items-center">
-                <div class="text-[10px] text-slate-600">Saved units</div>
-                <button id="unitConfigSaveBtn"
-                  class="px-3 py-1.5 rounded bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">Save
-                  unit</button>
+                <div class="flex items-center gap-2">
+                  <div class="text-[10px] text-slate-600">Saved units</div>
+                  <span id="unitConfigEditNotice"
+                    class="hidden text-[10px] px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700">Editing</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button id="unitConfigCancelEditBtn"
+                    class="hidden px-3 py-1.5 rounded border border-slate-300 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">
+                    Cancel
+                  </button>
+                  <button id="unitConfigSaveBtn"
+                    class="px-3 py-1.5 rounded bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">Save
+                    unit</button>
+                </div>
               </div>
               <div id="unitConfigList" class="space-y-1 max-h-40 overflow-y-auto text-[11px]"></div>
             </div>

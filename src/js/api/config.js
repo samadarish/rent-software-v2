@@ -234,8 +234,6 @@ export function openLandlordConfigModal() {
     if (aadhaar) aadhaar.value = defaults.aadhaar || "";
     if (address) address.value = defaults.address || "";
     if (wing) wing.value = "";
-    const select = document.getElementById("landlordExistingSelect");
-    if (select) select.value = "";
 
     showModal(modal);
 }
@@ -243,10 +241,12 @@ export function openLandlordConfigModal() {
 /**
  * Persists landlord defaults to local storage and reapplies them to the form.
  */
-export function saveLandlordDefaults() {
+export function saveLandlordDefaults(options = {}) {
     const name = document.getElementById("landlordDefaultName")?.value.trim() || "";
     const aadhaar = document.getElementById("landlordDefaultAadhaar")?.value.trim() || "";
     const address = document.getElementById("landlordDefaultAddress")?.value.trim() || "";
+
+    const { closeModal = true, showMessage = true } = options || {};
 
     localStorage.setItem(
         STORAGE_KEYS.LANDLORD_DEFAULTS,
@@ -255,10 +255,14 @@ export function saveLandlordDefaults() {
 
     applyLandlordDefaultsToForm(true);
 
-    const modal = document.getElementById("landlordConfigModal");
-    if (modal) hideModal(modal);
+    if (closeModal) {
+        const modal = document.getElementById("landlordConfigModal");
+        if (modal) hideModal(modal);
+    }
 
-    showToast("Landlord defaults saved", "success");
+    if (showMessage) {
+        showToast("Landlord defaults saved", "success");
+    }
 }
 
 /**
@@ -274,10 +278,10 @@ export async function saveWingFromLandlordConfig() {
         return;
     }
 
-    const { addWingToSheet, fetchWingsFromSheet } = await import("./sheets.js");
+    const { addWingToSheet } = await import("./sheets.js");
     const result = await addWingToSheet(wing);
     if (result && result.ok !== false) {
         wingInput.value = "";
-        fetchWingsFromSheet(true);
+        showToast("Wing saved", "success");
     }
 }
