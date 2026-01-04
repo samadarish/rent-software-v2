@@ -1643,7 +1643,7 @@ function savePaymentAttachment_(dataUrl, tenantName, monthKey, wing, unitNumber)
   const extension = getFileExtension_(mimeType, '');
   const blobName = `${safeTenant}_${safeMonthYear}_${safeWing}_${safeUnit}_${suffix}${extension ? '.' + extension : ''}`;
   const blob = Utilities.newBlob(bytes, mimeType).setName(blobName);
-  const folder = getOrCreateFolder_('Payment Proofs');
+  const folder = getOrCreateFolder_('Payment Proofs test');
   const file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   const ensured = ensureDriveFileShareable_(file.getUrl());
