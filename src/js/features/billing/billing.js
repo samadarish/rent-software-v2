@@ -1290,4 +1290,13 @@ export function initBillingFeature() {
         billingState.availableWings = getAvailableWings();
         renderBillingCalendar();
     });
+
+    document.addEventListener("rentRevisions:updated", () => {
+        billingRecordCache.clear();
+        const modal = document.getElementById("billingWingModal");
+        const isOpen = modal && !modal.classList.contains("hidden");
+        if (!isOpen) return;
+        if (!billingState.selectedMonthKey || !getSelectedWingNormalized()) return;
+        refreshBillingData(true);
+    });
 }

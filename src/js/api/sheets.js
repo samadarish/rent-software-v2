@@ -2722,19 +2722,39 @@ export async function saveRentRevision(payload) {
             await setLocalData(LOCAL_KEYS.rentRevisionsAll, nextAll);
 
             const tenants = await getLocalList(LOCAL_KEYS.tenants);
-            const rentAmount = getLatestRentFromRevisions(
+            const latestRent = getLatestRentFromRevisions(
                 nextAll.filter((rev) => (rev?.tenancy_id || rev?.tenancyId) === tenancyId)
             );
-            if (rentAmount !== null) {
-                const idx = tenants.findIndex((t) => t.tenancyId === tenancyId);
+            if (latestRent !== null) {
+                const idx = tenants.findIndex((t) => {
+                    const id =
+                        t?.tenancyId ||
+                        t?.tenancy_id ||
+                        t?.templateData?.tenancy_id ||
+                        t?.templateData?.tenancyId ||
+                        "";
+                    return id && id.toString() === tenancyId;
+                });
                 if (idx >= 0) {
                     tenants[idx] = {
                         ...tenants[idx],
-                        rentAmount,
-                        currentRent: rentAmount,
+                        rentAmount: latestRent,
+                        currentRent: latestRent,
                     };
                     await updateLocalTenantsList(tenants);
                 }
+            }
+            if (typeof document !== "undefined") {
+                document.dispatchEvent(
+                    new CustomEvent("rentRevisions:updated", {
+                        detail: {
+                            tenancyId,
+                            revisions: next,
+                            allRevisions: nextAll,
+                            latestRent,
+                        },
+                    })
+                );
             }
             return { ok: true, revision: record, revisions: next };
         };

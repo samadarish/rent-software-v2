@@ -354,7 +354,21 @@ async function handleRentRevisionSave() {
     try {
         const res = await saveRentRevision({ tenancyId, effectiveMonth, rentAmount, note });
         if (res?.ok) {
-            activeRentRevisions = Array.isArray(res.revisions) ? res.revisions : activeRentRevisions;
+            if (Array.isArray(res.revisions)) {
+                activeRentRevisions = res.revisions;
+            } else if (res?.revision) {
+                const record = res.revision;
+                const recordMonth = normalizeMonthKey(record.effective_month || record.effectiveMonth || "");
+                const current = Array.isArray(activeRentRevisions) ? [...activeRentRevisions] : [];
+                const next = recordMonth
+                    ? current.filter(
+                          (rev) =>
+                              normalizeMonthKey(rev.effective_month || rev.effectiveMonth || "") !== recordMonth
+                      )
+                    : current;
+                next.push(record);
+                activeRentRevisions = next;
+            }
             const baseRent =
                 activeRentHistoryContext.rentAmount ||
                 activeRentHistoryContext.templateData?.rent_amount ||
@@ -1457,6 +1471,36 @@ export function initTenantDirectory() {
         tenantCache = collapseTenantRows(rows);
         hasLoadedTenants = true;
         applyTenantFilters();
+    });
+
+    document.addEventListener("rentRevisions:updated", (e) => {
+        if (!activeRentHistoryContext) return;
+        const tenancyId = (e?.detail?.tenancyId || "").toString();
+        if (!tenancyId) return;
+        const contextId = (
+            activeRentHistoryContext.tenancyId || activeRentHistoryContext.templateData?.tenancy_id || ""
+        ).toString();
+        if (!contextId || contextId !== tenancyId) return;
+
+        if (Array.isArray(e?.detail?.revisions)) {
+            activeRentRevisions = e.detail.revisions;
+        } else if (Array.isArray(e?.detail?.allRevisions)) {
+            activeRentRevisions = e.detail.allRevisions.filter(
+                (rev) => (rev?.tenancy_id || rev?.tenancyId || "").toString() === tenancyId
+            );
+        }
+
+        if (e?.detail?.latestRent !== null && e?.detail?.latestRent !== undefined) {
+            activeRentHistoryContext.rentAmount = e.detail.latestRent;
+            activeRentHistoryContext.currentRent = e.detail.latestRent;
+        }
+
+        const baseRent =
+            activeRentHistoryContext.rentAmount ||
+            activeRentHistoryContext.templateData?.rent_amount ||
+            activeRentHistoryContext.currentRent ||
+            "";
+        renderRentHistory(baseRent);
     });
 
     const searchInput = document.getElementById("tenantSearchInput");
