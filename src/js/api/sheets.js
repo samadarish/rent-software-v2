@@ -462,6 +462,7 @@ function buildBillingRecordFromBills(bills, monthKey, wing) {
         included: bill.included,
         rentAmount: bill.rentAmount ?? bill.rent_amount ?? "",
         payableDate: bill.payableDate ?? bill.payable_date ?? "",
+        billId: bill.billId ?? bill.bill_id ?? "",
     }));
 
     return {
@@ -488,6 +489,7 @@ async function buildBillingRecordFromLocalData(monthKey, wing) {
         unitsEntry,
         tenantsEntry,
         rentEntry,
+        billLinesEntry,
     ] = await Promise.all([
         getLocalEntry(LOCAL_KEYS.wingMonthlyConfig),
         getLocalEntry(LOCAL_KEYS.tenantMonthlyReadings),
@@ -495,6 +497,7 @@ async function buildBillingRecordFromLocalData(monthKey, wing) {
         getLocalEntry(LOCAL_KEYS.units),
         getLocalEntry(LOCAL_KEYS.tenants),
         getLocalEntry(LOCAL_KEYS.rentRevisionsAll),
+        getLocalEntry(LOCAL_KEYS.billLines),
     ]);
 
     const hasLocalData = [
@@ -512,6 +515,21 @@ async function buildBillingRecordFromLocalData(monthKey, wing) {
     const units = Array.isArray(unitsEntry?.value) ? unitsEntry.value : [];
     const tenantDirectory = Array.isArray(tenantsEntry?.value) ? tenantsEntry.value : [];
     const rentRevisions = Array.isArray(rentEntry?.value) ? rentEntry.value : [];
+    const billLines = Array.isArray(billLinesEntry?.value) ? billLinesEntry.value : [];
+
+    const billIdByKey = new Map();
+    billLines.forEach((line) => {
+        if (!line || typeof line !== "object") return;
+        const tenancyId = line.tenancy_id || line.tenancyId || "";
+        const billMonth = normalizeMonthKey(line.month_key || line.monthKey || "");
+        if (!tenancyId || billMonth !== normalizedMonth) return;
+        const billId = line.bill_id || line.billId || "";
+        if (!billId) return;
+        const key = `${billMonth}__${tenancyId}`;
+        if (!billIdByKey.has(key)) {
+            billIdByKey.set(key, billId);
+        }
+    });
 
     const configRow = configs.find(
         (cfg) =>
@@ -596,6 +614,8 @@ async function buildBillingRecordFromLocalData(monthKey, wing) {
             tenantEntry.tenantKey ||
             tenantName ||
             "";
+        const billKey = `${normalizedMonth}__${tenancyId}`;
+        const billId = billIdByKey.get(billKey) || "";
 
         return {
             tenancyId,
@@ -612,6 +632,7 @@ async function buildBillingRecordFromLocalData(monthKey, wing) {
             direction: unit.direction || tenantEntry.direction || "",
             floor: unit.floor || tenantEntry.floor || "",
             meterNumber: unit.meter_number || tenantEntry.meterNumber || "",
+            billId,
         };
     });
 

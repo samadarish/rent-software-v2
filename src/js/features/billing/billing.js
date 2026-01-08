@@ -760,6 +760,8 @@ function mergeTenantData(activeTenants, savedEntries = [], previousEntries = [])
         const savedNew = saved?.newReading;
         const previousPrev = previous?.newReading ?? previous?.prevReading ?? "";
         const included = saved && saved.included !== undefined ? normalizeIncludedFlag(saved.included) : true;
+        const hasBill = saved ? normalizeIncludedFlag(saved.included) : false;
+        const savedBillId = saved?.billId || saved?.bill_id || "";
 
         merged.push({
             tenantKey: tenant.tenantKey || identityKey,
@@ -783,7 +785,8 @@ function mergeTenantData(activeTenants, savedEntries = [], previousEntries = [])
                     : previousPrev,
             newReading: savedNew ?? "",
             included,
-            hasBill: !!saved,
+            hasBill,
+            billId: savedBillId,
             payableDate: saved?.payableDate || tenant.payableDate || "",
         });
     });
@@ -957,8 +960,16 @@ async function handleSaveBills() {
     }
 
     const normalizedMonthKey = normalizeMonthKey(billingState.selectedMonthKey);
-    const billTimeToken = getBillIdTimeToken(new Date());
+    let billTimeToken = "";
     selectedTenants.forEach((tenant) => {
+        const existingBillId = (tenant.billId || "").toString().trim();
+        if (existingBillId) {
+            tenant.billId = existingBillId;
+            return;
+        }
+        if (!billTimeToken) {
+            billTimeToken = getBillIdTimeToken(new Date());
+        }
         tenant.billId = generateBillId(tenant.name || tenant.tenantName || "", normalizedMonthKey, billTimeToken);
     });
 

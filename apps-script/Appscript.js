@@ -1127,6 +1127,20 @@ function handleSaveBillingRecord_(payload) {
       tenancyByGrn[grnKey].push(t);
     }
   });
+  const existingBillIdByTenancy = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS).reduce((m, bill) => {
+    const billMonth = normalizeMonthKey_(bill.month_key);
+    if (billMonth !== monthKey) return m;
+    const tenancy = tenancyById[bill.tenancy_id];
+    if (!tenancy) return m;
+    const unit = unitById[tenancy.unit_id];
+    if (!unit) return m;
+    if ((unit.wing || '').toString().trim().toLowerCase() !== wingNormalized) return m;
+    const billId = bill.bill_id || '';
+    if (billId && !m[bill.tenancy_id]) {
+      m[bill.tenancy_id] = billId;
+    }
+    return m;
+  }, {});
 
   const rentRevisionCache = readTable_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS).reduce((m, r) => {
     const tenancyId = r.tenancy_id;
@@ -1182,9 +1196,11 @@ function handleSaveBillingRecord_(payload) {
     if (!resolvedTenancies.length) return;
 
     const included = normalizeBoolean_(tenant.included);
-    const billId = tenant.billId || tenant.bill_id || '';
+    const incomingBillId = tenant.billId || tenant.bill_id || '';
     resolvedTenancies.forEach((tenancy) => {
       if (included) includedTenancies.push(tenancy.tenancy_id);
+      const existingBillId = existingBillIdByTenancy[tenancy.tenancy_id] || '';
+      const billId = existingBillId || incomingBillId || '';
       if (billId) billIdByTenancy[tenancy.tenancy_id] = billId;
 
       const reading = {
@@ -1316,6 +1332,13 @@ function handleGetBillingRecord_(monthKeyRaw, wingRaw) {
   });
   const hasReadings = readings.length > 0;
 
+  const billIdByTenancy = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS)
+    .filter((b) => normalizeMonthKey_(b.month_key) === monthKey && tenancyMap[b.tenancy_id])
+    .reduce((m, b) => {
+      if (b.bill_id && !m[b.tenancy_id]) m[b.tenancy_id] = b.bill_id;
+      return m;
+    }, {});
+
   const tenantMap = tenants.reduce((m, t) => {
     m[t.tenant_id] = t;
     return m;
@@ -1340,6 +1363,7 @@ function handleGetBillingRecord_(monthKeyRaw, wingRaw) {
       direction: unit.direction || '',
       floor: unit.floor || '',
       meterNumber: unit.meter_number || '',
+      billId: billIdByTenancy[reading.tenancy_id] || '',
     };
   });
 
