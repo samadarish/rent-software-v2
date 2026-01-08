@@ -1127,7 +1127,7 @@ function handleSaveBillingRecord_(payload) {
       tenancyByGrn[grnKey].push(t);
     }
   });
-  const existingBillIdByTenancy = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS).reduce((m, bill) => {
+  const existingBillMetaByTenancy = readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS).reduce((m, bill) => {
     const billMonth = normalizeMonthKey_(bill.month_key);
     if (billMonth !== monthKey) return m;
     const tenancy = tenancyById[bill.tenancy_id];
@@ -1136,8 +1136,9 @@ function handleSaveBillingRecord_(payload) {
     if (!unit) return m;
     if ((unit.wing || '').toString().trim().toLowerCase() !== wingNormalized) return m;
     const billId = bill.bill_id || '';
-    if (billId && !m[bill.tenancy_id]) {
-      m[bill.tenancy_id] = billId;
+    const billLineId = bill.bill_line_id || '';
+    if ((billId || billLineId) && !m[bill.tenancy_id]) {
+      m[bill.tenancy_id] = { billId, billLineId };
     }
     return m;
   }, {});
@@ -1199,8 +1200,8 @@ function handleSaveBillingRecord_(payload) {
     const incomingBillId = tenant.billId || tenant.bill_id || '';
     resolvedTenancies.forEach((tenancy) => {
       if (included) includedTenancies.push(tenancy.tenancy_id);
-      const existingBillId = existingBillIdByTenancy[tenancy.tenancy_id] || '';
-      const billId = existingBillId || incomingBillId || '';
+      const existingMeta = existingBillMetaByTenancy[tenancy.tenancy_id] || {};
+      const billId = existingMeta.billId || incomingBillId || '';
       if (billId) billIdByTenancy[tenancy.tenancy_id] = billId;
 
       const reading = {
@@ -1238,10 +1239,12 @@ function handleSaveBillingRecord_(payload) {
     const motorShare = normalizeBoolean_(reading.included) ? roundToTwo_(motorPerTenant) : 0;
     const totalBeforeRound = Number(rent) + electricityAmount + sweepAmount + motorShare;
     const total = normalizeBoolean_(reading.included) ? roundToNearest_(totalBeforeRound) : 0;
-    const billId = reading.bill_id || billIdByTenancy[reading.tenancy_id] || '';
+    const existingMeta = existingBillMetaByTenancy[reading.tenancy_id] || {};
+    const billLineId = existingMeta.billLineId || Utilities.getUuid();
+    const billId = reading.bill_id || billIdByTenancy[reading.tenancy_id] || existingMeta.billId || '';
 
     billRows.push({
-      bill_line_id: Utilities.getUuid(),
+      bill_line_id: billLineId,
       month_key: monthKey,
       bill_id: billId,
       tenancy_id: reading.tenancy_id,

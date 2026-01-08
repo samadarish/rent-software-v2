@@ -30,6 +30,7 @@ const billingState = {
     calendarPage: 0,
     calendarRangeKey: "",
     motorSnapshot: null,
+    savedSnapshot: null,
     meta: {
         electricityRate: "",
         sweepingPerFlat: "",
@@ -48,6 +49,7 @@ function scheduleBillingRender() {
         billingRenderHandle = null;
         renderTenantTable();
         renderMotorSummary();
+        updateGenerateButtonState();
     });
 }
 
@@ -133,6 +135,87 @@ function hasAnyMetaValue(meta = {}) {
     return [meta.electricityRate, meta.sweepingPerFlat, meta.motorPrev, meta.motorNew].some((v) =>
         v !== undefined && v !== null && v !== ""
     );
+}
+
+function normalizeNumberValue(value) {
+    if (value === "" || value === null || value === undefined) return "";
+    const num = Number(value);
+    return Number.isNaN(num) ? String(value).trim() : num;
+}
+
+function getTenantSnapshotKey(tenant) {
+    const tenancyId = tenant?.tenancyId || tenant?.tenancy_id || "";
+    if (tenancyId) return tenancyId;
+    const identity = getTenantIdentityKey(tenant);
+    if (identity) return identity;
+    return normalizeTenantKey(
+        tenant?.tenantKey || tenant?.tenantName || tenant?.tenant_name || tenant?.name || ""
+    );
+}
+
+function buildSavedSnapshot(record) {
+    const entries = Array.isArray(record?.tenants) ? record.tenants : [];
+    const tenantMap = new Map();
+    entries.forEach((entry) => {
+        const key = getTenantSnapshotKey(entry);
+        if (!key) return;
+        tenantMap.set(key, {
+            included: normalizeIncludedFlag(entry?.included),
+            prevReading: entry?.prevReading ?? entry?.prev_reading ?? "",
+            newReading: entry?.newReading ?? entry?.new_reading ?? "",
+            rentAmount: entry?.rentAmount ?? entry?.rent_amount ?? "",
+        });
+    });
+    return {
+        meta: normalizeMetaPayload(record?.meta || {}),
+        tenantMap,
+        hasBills: record?.hasReadings ?? entries.length > 0,
+    };
+}
+
+function hasBillingChanges() {
+    const snapshot = billingState.savedSnapshot;
+    if (!snapshot || !snapshot.hasBills) return false;
+
+    const currentMeta = normalizeMetaPayload(billingState.meta || {});
+    if (
+        normalizeNumberValue(currentMeta.electricityRate) !==
+            normalizeNumberValue(snapshot.meta.electricityRate) ||
+        normalizeNumberValue(currentMeta.sweepingPerFlat) !==
+            normalizeNumberValue(snapshot.meta.sweepingPerFlat) ||
+        normalizeNumberValue(currentMeta.motorPrev) !== normalizeNumberValue(snapshot.meta.motorPrev) ||
+        normalizeNumberValue(currentMeta.motorNew) !== normalizeNumberValue(snapshot.meta.motorNew)
+    ) {
+        return true;
+    }
+
+    for (const tenant of billingState.tenants) {
+        const key = getTenantSnapshotKey(tenant);
+        if (!key) continue;
+        const saved = snapshot.tenantMap.get(key);
+        if (!saved) return true;
+        if (normalizeIncludedFlag(tenant?.included) !== normalizeIncludedFlag(saved.included)) return true;
+        if (normalizeNumberValue(tenant?.prevReading) !== normalizeNumberValue(saved.prevReading)) return true;
+        if (normalizeNumberValue(tenant?.newReading) !== normalizeNumberValue(saved.newReading)) return true;
+        if (normalizeNumberValue(tenant?.rentAmount) !== normalizeNumberValue(saved.rentAmount)) return true;
+    }
+
+    return false;
+}
+
+function updateGenerateButtonState() {
+    const btn = document.getElementById("billingGenerateBtn");
+    if (!btn) return;
+    const shouldUpdate = hasBillingChanges();
+    if (shouldUpdate) {
+        btn.textContent = "Update bills";
+        btn.classList.remove("bg-emerald-600", "hover:bg-emerald-500");
+        btn.classList.add("bg-amber-500", "hover:bg-amber-400");
+        return;
+    }
+    btn.textContent = "Generate bills";
+    btn.classList.remove("bg-amber-500", "hover:bg-amber-400");
+    btn.classList.add("bg-emerald-600", "hover:bg-emerald-500");
 }
 
 function isTenantIncluded(tenant) {
@@ -313,10 +396,12 @@ function resetBillingForm() {
         motorNew: "",
     };
     billingState.tenants = [];
+    billingState.savedSnapshot = null;
     const tenantBody = document.getElementById("billingTenantTableBody");
     if (tenantBody) tenantBody.innerHTML = "";
     const emptyState = document.getElementById("billingTenantEmpty");
     if (emptyState) emptyState.classList.add("hidden");
+    updateGenerateButtonState();
 }
 
 function openBillingModal(month) {
@@ -883,9 +968,11 @@ async function loadBillingData({ force = false } = {}) {
     }
 
     billingState.tenants = mergeTenantData(activeTenants, savedEntries, previousEntries);
+    billingState.savedSnapshot = buildSavedSnapshot(record);
     populateInputsFromState();
     renderMotorSummary();
     renderTenantTable();
+    updateGenerateButtonState();
 
     if (loader) loader.classList.add("hidden");
     if (form) form.classList.remove("opacity-50");
@@ -1073,6 +1160,12 @@ async function handleSaveBills() {
             renderBillingCalendar();
         }
         billingState.sendStatus = new Map();
+        billingState.savedSnapshot = buildSavedSnapshot({
+            meta: payload.meta,
+            tenants: payload.tenants,
+            hasReadings: true,
+        });
+        updateGenerateButtonState();
         markCoverageForSelection();
         renderTenantTable();
         return true;

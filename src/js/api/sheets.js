@@ -756,6 +756,13 @@ async function buildLocalBillsFromPayload(payload = {}) {
         if (key) existingByKey.set(key, bill);
     });
 
+    const billLines = await getLocalList(LOCAL_KEYS.billLines);
+    const billLineByKey = new Map();
+    billLines.forEach((line) => {
+        const key = buildBillKey(line.month_key || line.monthKey, line.tenancy_id || line.tenancyId);
+        if (key) billLineByKey.set(key, line);
+    });
+
     const tenantDirectory = await getLocalList(LOCAL_KEYS.tenants);
     const tenancyMap = new Map();
     tenantDirectory.forEach((t) => {
@@ -766,6 +773,7 @@ async function buildLocalBillsFromPayload(payload = {}) {
         const tenancyId = tenant.tenancyId || tenant.tenancy_id || "";
         const billKey = buildBillKey(monthKey, tenancyId);
         const existing = existingByKey.get(billKey) || {};
+        const existingLine = billLineByKey.get(billKey) || {};
         const tenantEntry = tenancyMap.get(tenancyId) || {};
         const tenantName = tenant.name || tenant.tenantName || tenantEntry.tenantFullName || "";
         const tenantKey =
@@ -774,7 +782,13 @@ async function buildLocalBillsFromPayload(payload = {}) {
         const wingValue = wing || tenantEntry.wing || tenantEntry.wing || "";
         const totalAmount = tenant.totalAmount ?? tenant.total_amount ?? 0;
         const amountPaid = existing.amountPaid ?? existing.amount_paid ?? 0;
-        const billId = tenant.billId || tenant.bill_id || existing.billId || existing.bill_id || "";
+        const billId =
+            tenant.billId ||
+            tenant.bill_id ||
+            existing.billId ||
+            existing.bill_id ||
+            existingLine.bill_id ||
+            "";
         const state = resolveBillAmounts({ totalAmount, amountPaid });
 
         return {
@@ -800,7 +814,11 @@ async function buildLocalBillsFromPayload(payload = {}) {
             sweepingPerFlat: meta.sweepingPerFlat ?? meta.sweeping_per_flat ?? "",
             motorPrev: meta.motorPrev ?? meta.motor_prev ?? "",
             motorNew: meta.motorNew ?? meta.motor_new ?? "",
-            billLineId: existing.billLineId || existing.bill_line_id || createLocalId("bill"),
+            billLineId:
+                existing.billLineId ||
+                existing.bill_line_id ||
+                existingLine.bill_line_id ||
+                createLocalId("bill"),
             billId,
             tenancyId,
         };
@@ -1788,7 +1806,11 @@ export async function saveBillingRecord(payload) {
                             bill.is_paid ??
                             (totalAmount <= 0 || amountPaid + 0.005 >= totalAmount);
                         return {
-                            bill_line_id: bill.billLineId || bill.bill_line_id || createLocalId("bill"),
+                            bill_line_id:
+                                bill.billLineId ||
+                                bill.bill_line_id ||
+                                existing?.bill_line_id ||
+                                createLocalId("bill"),
                             month_key: monthKey,
                             bill_id: bill.billId || bill.bill_id || existing?.bill_id || "",
                             tenancy_id: tenancyId,
