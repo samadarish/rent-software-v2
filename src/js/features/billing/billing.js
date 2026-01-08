@@ -211,6 +211,42 @@ function getNextMonthLabel(currentKey) {
     return nextDate.toLocaleString("default", { month: "long" });
 }
 
+function getBillIdInitials(name) {
+    const trimmed = (name || "").toString().trim();
+    if (!trimmed) return "XX";
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+        const first = parts[0][0] || "X";
+        const last = parts[parts.length - 1][0] || "X";
+        return `${first}${last}`.toUpperCase();
+    }
+    const word = parts[0] || "";
+    const first = word[0] || "X";
+    const last = word[word.length - 1] || first || "X";
+    return `${first}${last}`.toUpperCase();
+}
+
+function getBillIdMonthToken(monthKey) {
+    return (monthKey || "").toString().replace(/[^0-9]/g, "");
+}
+
+function getBillIdTimeToken(date) {
+    const hours = `${date.getHours()}`.padStart(2, "0");
+    const minutes = `${date.getMinutes()}`.padStart(2, "0");
+    return `${hours}${minutes}`;
+}
+
+function generateBillId(name, monthKey, timeToken) {
+    const initials = getBillIdInitials(name);
+    const monthToken = getBillIdMonthToken(monthKey);
+    const randomToken = Math.random().toString(36).replace(/[^a-z0-9]/g, "").slice(2, 5).padEnd(3, "0");
+    return `${initials}-${monthToken}-${randomToken}-${timeToken}`;
+}
+
+function getSendStatusKey(id, lang) {
+    return `${id || ""}__${lang || "en"}`;
+}
+
 function calculateChargesForTenant(tenant, motorPerTenant) {
     const rate = parseNumber(billingState.meta.electricityRate, true);
     const sweep = parseNumber(billingState.meta.sweepingPerFlat, true);
@@ -920,10 +956,15 @@ async function handleSaveBills() {
         return false;
     }
 
+    const normalizedMonthKey = normalizeMonthKey(billingState.selectedMonthKey);
+    const billTimeToken = getBillIdTimeToken(new Date());
+    selectedTenants.forEach((tenant) => {
+        tenant.billId = generateBillId(tenant.name || tenant.tenantName || "", normalizedMonthKey, billTimeToken);
+    });
+
     const motor = computeMotorShare();
     const motorPerTenant = motor.perTenant;
 
-    const normalizedMonthKey = normalizeMonthKey(billingState.selectedMonthKey);
     const normalizedWing = getSelectedWingNormalized();
     const calendarRange = getBillingCalendarPageInfo(billingState.calendarPage);
     const payload = {
@@ -939,6 +980,7 @@ async function handleSaveBills() {
             grn: t.grn,
             name: t.name,
             tenancyId: t.tenancyId,
+            billId: t.billId || "",
             rentAmount: roundToTwo(t.rentAmount),
             prevReading: roundToTwo(t.prevReading),
             newReading: roundToTwo(t.newReading),
@@ -994,6 +1036,7 @@ async function handleSaveBills() {
             return {
                 id: t.grn || t.name,
                 name: t.name,
+                billId: t.billId || "",
                 mobile: getPrimaryMobile(t.mobile),
                 rent: roundToTwo(parseNumber(t.rentAmount, true)),
                 prevReading: roundToTwo(parseNumber(t.prevReading, false)),
@@ -1047,8 +1090,9 @@ function toggleSendList(show) {
     }
 }
 
-function formatWhatsappMessage(summary) {
+function formatWhatsappMessage(summary, language = "en") {
     const month = billingState.selectedMonthLabel || "this month";
+    const billId = summary.billId || summary.bill_id || "";
     const motorCount = billingState.motorSnapshot?.includedCount || 1;
     const electricityRate =
         billingState.motorSnapshot?.rate || parseNumber(billingState.meta.electricityRate, true);
@@ -1058,12 +1102,15 @@ function formatWhatsappMessage(summary) {
     const formatAmount = (val) => roundToTwo(val).toFixed(2);
     const totalWords = numberToIndianWords(Math.round(summary.total));
     const payableMonth = getNextMonthLabel(billingState.selectedMonthKey);
-    const payableSuffix = summary.payableDay
+    const payableSuffixEn = summary.payableDay
         ? `Pay on or before *${summary.payableDay}${payableMonth ? ` ${payableMonth}` : ""}*. Thank you!`
         : "Thank you!";
+    const payableSuffixHi = summary.payableDay
+        ? `कृपया *${summary.payableDay}${payableMonth ? ` ${payableMonth}` : ""}* तक भुगतान करें। धन्यवाद!`
+        : "धन्यवाद!";
 
-    const lines = [
-        `Hi *${summary.name}*, your rent bill for *${month}* has been generated.`,
+    const englishLines = [
+        `Hi *${summary.name}*, your rent bill for *${month}* has been generated. Your Bill ID is *${billId}*.`,
         "",
         `Electricity rate for the *${month}* = Rs. *${electricityRate}*/ Unit`,
         `Number of residents = *${motorCount}*`,
@@ -1088,10 +1135,39 @@ function formatWhatsappMessage(summary) {
         "",
         `= Rs. *${formatAmount(summary.total)}* (*${totalWords}*) only.`,
         "",
-        payableSuffix,
+        payableSuffixEn,
     ];
 
-    return lines.join("\n");
+    const hindiLines = [
+        `*${summary.name}*, *${month}* के लिए आपका किराया बिल तैयार हो गया है। आपका बिल आईडी *${billId}* है।`,
+        "",
+        `*${month}* के लिए बिजली रेट = Rs. *${electricityRate}*/ यूनिट`,
+        `निवासियों की संख्या = *${motorCount}*`,
+        "",
+        `किराया = Rs. *${formatAmount(summary.rent)}*`,
+        "",
+        "बिजली :",
+        `पिछला रीडिंग = *${summary.prevReading}*`,
+        `वर्तमान रीडिंग = *${summary.newReading}*`,
+        `पिछला - वर्तमान =  *${summary.units}* यूनिट`,
+        `(*${summary.units}* यूनिट) x *${formatAmount(electricityRate)}* =  Rs. *${formatAmount(summary.electricity)}*`,
+        "",
+        "मोटर :",
+        `पिछला रीडिंग = *${motorPrev}*`,
+        `वर्तमान रीडिंग = *${motorNew}*`,
+        `पिछला - वर्तमान =  *${motorUnits}* यूनिट`,
+        `(*${motorUnits}* यूनिट x *${formatAmount(electricityRate)}* ) / *${motorCount}* =  Rs. *${formatAmount(summary.motorShare)}*`,
+        "",
+        `सफाई = *${formatAmount(summary.sweep)}*`,
+        "",
+        `कुल = *${formatAmount(summary.rent)}* + *${formatAmount(summary.electricity)}* + *${formatAmount(summary.motorShare)}* + *${formatAmount(summary.sweep)}*`,
+        "",
+        `= Rs. *${formatAmount(summary.total)}* (*${totalWords}*) मात्र।`,
+        "",
+        payableSuffixHi,
+    ];
+
+    return (language === "hi" ? hindiLines : englishLines).join("\n");
 }
 
 function getPrimaryMobile(value) {
@@ -1138,6 +1214,7 @@ function bindSendListEvents() {
         const btn = target.closest(".send-bill-btn");
         if (!btn) return;
         const id = btn.dataset.id || "";
+        const lang = btn.dataset.lang || "en";
         const summary = billingState.lastGeneratedSummaries.find((item) => String(item.id) === String(id));
         if (!summary) return;
         const number = getPrimaryMobile(summary.mobile).replace(/\D/g, "");
@@ -1145,11 +1222,11 @@ function bindSendListEvents() {
             showToast(`Missing mobile number for ${summary.name}`, "error");
             return;
         }
-        const message = formatWhatsappMessage(summary);
+        const message = formatWhatsappMessage(summary, lang);
         const url = `https://web.whatsapp.com/send?phone=${number}&text=${encodeURIComponent(message)}&app_absent=0`;
         openWhatsappExternally(url).then((opened) => {
             if (!opened) return;
-            billingState.sendStatus.set(summary.id, true);
+            billingState.sendStatus.set(getSendStatusKey(summary.id, lang), true);
             renderSendList();
         });
     });
@@ -1175,21 +1252,28 @@ function renderSendList() {
     billingState.lastGeneratedSummaries.forEach((summary) => {
         const tr = document.createElement("tr");
         tr.className = "border-b last:border-0";
-        const sent = billingState.sendStatus.get(summary.id);
+        const sentHindi = billingState.sendStatus.get(getSendStatusKey(summary.id, "hi"));
+        const sentEnglish = billingState.sendStatus.get(getSendStatusKey(summary.id, "en"));
         const safeName = escapeHtml(summary.name || "");
         const safeId = escapeHtml(summary.id || "");
         const totalValue = Number(summary.total) || 0;
+        const baseButton =
+            "send-bill-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded border text-[11px] font-semibold transition whitespace-nowrap";
+        const pendingClasses = "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100";
+        const sentClasses = "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-500";
+        const buildButton = (lang, label, sent) => `
+            <button class="${baseButton} ${sent ? sentClasses : pendingClasses}" data-id="${safeId}" data-lang="${lang}">
+                <span class="${sent ? "inline-flex" : "hidden"} items-center justify-center w-4 h-4 rounded-full bg-white text-emerald-600 text-[10px] font-bold">✓</span>
+                <span>${label}</span>
+            </button>
+        `;
         tr.innerHTML = `
             <td class="px-3 py-2 text-[12px] font-semibold text-slate-800">${safeName}</td>
             <td class="px-3 py-2 text-[12px] font-semibold text-slate-700">Rs. ${totalValue.toFixed(2)}</td>
             <td class="px-3 py-2 text-right text-[12px]">
-                <div class="inline-flex items-center gap-2">
-                    ${
-                        sent
-                            ? '<span class="text-[11px] text-emerald-700 font-semibold">Sent</span>'
-                            : ''
-                    }
-                    <button class="send-bill-btn px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500" data-id="${safeId}">Send Bill (WhatsApp)</button>
+                <div class="inline-flex items-center gap-2 flex-nowrap">
+                    ${buildButton("hi", "Send in हिन्दी", !!sentHindi)}
+                    ${buildButton("en", "Send in Eng", !!sentEnglish)}
                 </div>
             </td>
         `;

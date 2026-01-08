@@ -138,6 +138,7 @@ const TENANCY_RENT_REVISION_HEADERS = [
 const BILL_LINE_HEADERS = [
   'bill_line_id',
   'month_key',
+  'bill_id',
   'tenancy_id',
   'rent_amount',
   'electricity_units',
@@ -1155,6 +1156,7 @@ function handleSaveBillingRecord_(payload) {
   const readingRows = [];
   const billRows = [];
   const includedTenancies = [];
+  const billIdByTenancy = {};
 
   tenants.forEach((tenant) => {
     const grnKey = (tenant.grn || tenant.tenantKey || tenant.tenantName || '').toString().toLowerCase();
@@ -1180,16 +1182,16 @@ function handleSaveBillingRecord_(payload) {
     if (!resolvedTenancies.length) return;
 
     const included = normalizeBoolean_(tenant.included);
-    const prev = Number(tenant.prevReading || 0) || 0;
-    const next = Number(tenant.newReading || 0) || 0;
-    const units = Math.max(next - prev, 0);
+    const billId = tenant.billId || tenant.bill_id || '';
     resolvedTenancies.forEach((tenancy) => {
       if (included) includedTenancies.push(tenancy.tenancy_id);
+      if (billId) billIdByTenancy[tenancy.tenancy_id] = billId;
 
       const reading = {
         reading_id: Utilities.getUuid(),
         month_key: monthKey,
         tenancy_id: tenancy.tenancy_id,
+        bill_id: billId,
         prev_reading: tenant.prevReading || '',
         new_reading: tenant.newReading || '',
         included,
@@ -1220,10 +1222,12 @@ function handleSaveBillingRecord_(payload) {
     const motorShare = normalizeBoolean_(reading.included) ? roundToTwo_(motorPerTenant) : 0;
     const totalBeforeRound = Number(rent) + electricityAmount + sweepAmount + motorShare;
     const total = normalizeBoolean_(reading.included) ? roundToNearest_(totalBeforeRound) : 0;
+    const billId = reading.bill_id || billIdByTenancy[reading.tenancy_id] || '';
 
     billRows.push({
       bill_line_id: Utilities.getUuid(),
       month_key: monthKey,
+      bill_id: billId,
       tenancy_id: reading.tenancy_id,
       rent_amount: rent,
       electricity_units: units,
@@ -1407,6 +1411,7 @@ function handleFetchBillsMinimal_(statusRaw, monthsBackRaw) {
   const billColumns = [
     'bill_line_id',
     'month_key',
+    'bill_id',
     'tenancy_id',
     'total_amount',
     'amount_paid',
@@ -1469,6 +1474,7 @@ function handleFetchBillsMinimal_(statusRaw, monthsBackRaw) {
       remainingAmount,
       isPaid,
       payableDate: bill.payable_date || '',
+      billId: bill.bill_id || '',
       billLineId: bill.bill_line_id,
       tenancyId: bill.tenancy_id,
     };
@@ -1531,6 +1537,7 @@ function handleFetchBillDetails_(billLineIdRaw) {
       sweepingPerFlat: cfg.sweeping_per_flat || '',
       motorPrev: cfg.motor_prev || '',
       motorNew: cfg.motor_new || '',
+      billId: bill.bill_id || '',
       billLineId: bill.bill_line_id,
       tenancyId: bill.tenancy_id,
     },
@@ -1618,6 +1625,7 @@ function handleFetchGeneratedBills_(statusRaw) {
       sweepingPerFlat: cfg.sweeping_per_flat || '',
       motorPrev: cfg.motor_prev || '',
       motorNew: cfg.motor_new || '',
+      billId: bill.bill_id || '',
       billLineId: bill.bill_line_id,
       tenancyId: bill.tenancy_id,
     };

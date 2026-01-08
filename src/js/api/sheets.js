@@ -372,6 +372,7 @@ async function buildGeneratedBillsFromLocalData() {
             motorPrev: cfg.motor_prev || "",
             motorNew: cfg.motor_new || "",
             billLineId: bill?.bill_line_id || bill?.billLineId || "",
+            billId: bill?.bill_id || bill?.billId || "",
             tenancyId,
         };
     });
@@ -752,6 +753,7 @@ async function buildLocalBillsFromPayload(payload = {}) {
         const wingValue = wing || tenantEntry.wing || tenantEntry.wing || "";
         const totalAmount = tenant.totalAmount ?? tenant.total_amount ?? 0;
         const amountPaid = existing.amountPaid ?? existing.amount_paid ?? 0;
+        const billId = tenant.billId || tenant.bill_id || existing.billId || existing.bill_id || "";
         const state = resolveBillAmounts({ totalAmount, amountPaid });
 
         return {
@@ -778,6 +780,7 @@ async function buildLocalBillsFromPayload(payload = {}) {
             motorPrev: meta.motorPrev ?? meta.motor_prev ?? "",
             motorNew: meta.motorNew ?? meta.motor_new ?? "",
             billLineId: existing.billLineId || existing.bill_line_id || createLocalId("bill"),
+            billId,
             tenancyId,
         };
     });
@@ -1766,6 +1769,7 @@ export async function saveBillingRecord(payload) {
                         return {
                             bill_line_id: bill.billLineId || bill.bill_line_id || createLocalId("bill"),
                             month_key: monthKey,
+                            bill_id: bill.billId || bill.bill_id || existing?.bill_id || "",
                             tenancy_id: tenancyId,
                             rent_amount: Number(bill.rentAmount ?? bill.rent_amount) || 0,
                             electricity_units: units,
