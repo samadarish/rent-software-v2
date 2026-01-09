@@ -10,6 +10,7 @@
  * @param {"success" | "error" | "info" | "warning"} type - The type of toast (determines color)
  */
 export function showToast(message, type = "success") {
+    saveToastHistoryEntry(message, type);
     const container = document.getElementById("toastContainer");
     if (!container) {
         console.log(message);
@@ -43,6 +44,159 @@ export function showToast(message, type = "success") {
         toast.classList.add("opacity-0", "translate-y-1");
         setTimeout(() => toast.remove(), 300);
     }, 2500);
+}
+
+const TOAST_HISTORY_KEY = "toastHistory.v1";
+const TOAST_HISTORY_LIMIT = 200;
+let toastHistoryBound = false;
+
+function loadToastHistory() {
+    if (!window.localStorage) return [];
+    try {
+        const raw = localStorage.getItem(TOAST_HISTORY_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+        return [];
+    }
+}
+
+function persistToastHistory(list) {
+    if (!window.localStorage) return;
+    try {
+        localStorage.setItem(TOAST_HISTORY_KEY, JSON.stringify(list));
+    } catch (err) {
+        // Ignore storage failures.
+    }
+}
+
+function getToastTypeStyles(type) {
+    if (type === "error") return { dot: "bg-rose-500", text: "text-rose-600" };
+    if (type === "warning") return { dot: "bg-amber-500", text: "text-amber-600" };
+    if (type === "success") return { dot: "bg-emerald-500", text: "text-emerald-600" };
+    return { dot: "bg-slate-500", text: "text-slate-600" };
+}
+
+function formatToastTimestamp(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString();
+}
+
+function renderToastHistory(list) {
+    const container = document.getElementById("toastHistoryList");
+    const empty = document.getElementById("toastHistoryEmpty");
+    if (!container || !empty) return;
+
+    container.innerHTML = "";
+    if (!list.length) {
+        empty.classList.remove("hidden");
+        return;
+    }
+    empty.classList.add("hidden");
+
+    list.forEach((entry) => {
+        const row = document.createElement("div");
+        row.className = "px-3 py-2 border-b border-slate-100 last:border-0";
+        const styles = getToastTypeStyles(entry?.type);
+        const message = (entry?.message || "").toString();
+        const time = formatToastTimestamp(entry?.timestamp);
+        row.innerHTML = `
+            <div class="flex items-start gap-2">
+                <span class="mt-1.5 h-2 w-2 rounded-full ${styles.dot}"></span>
+                <div class="flex-1">
+                    <div class="text-[11px] font-semibold ${styles.text}">${entry?.type || "info"}</div>
+                    <div class="text-[12px] text-slate-800">${message}</div>
+                    <div class="text-[10px] text-slate-500 mt-0.5">${time}</div>
+                </div>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+function updateToastBadge(list) {
+    const badge = document.getElementById("toastHistoryBadge");
+    if (!badge) return;
+    const errorCount = list.filter((entry) => entry?.type === "error").length;
+    if (errorCount <= 0) {
+        badge.textContent = "";
+        badge.classList.add("hidden");
+        return;
+    }
+    badge.textContent = String(errorCount);
+    badge.classList.remove("hidden");
+}
+
+function updateToastHistoryUi(list) {
+    updateToastBadge(list);
+    renderToastHistory(list);
+}
+
+function saveToastHistoryEntry(message, type) {
+    const entry = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        message: (message || "").toString(),
+        type,
+        timestamp: new Date().toISOString(),
+    };
+    const existing = loadToastHistory();
+    const updated = [entry, ...existing].slice(0, TOAST_HISTORY_LIMIT);
+    persistToastHistory(updated);
+    updateToastHistoryUi(updated);
+    return entry;
+}
+
+function toggleToastHistoryDropdown(show) {
+    const dropdown = document.getElementById("toastHistoryDropdown");
+    if (!dropdown) return;
+    dropdown.classList.toggle("hidden", !show);
+}
+
+export function initToastHistoryUi() {
+    if (toastHistoryBound) return;
+    toastHistoryBound = true;
+
+    const btn = document.getElementById("toastHistoryBtn");
+    const dropdown = document.getElementById("toastHistoryDropdown");
+    const clearBtn = document.getElementById("toastHistoryClearBtn");
+    if (!btn || !dropdown) return;
+
+    const refresh = () => {
+        const list = loadToastHistory();
+        updateToastHistoryUi(list);
+    };
+
+    refresh();
+
+    btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const isHidden = dropdown.classList.contains("hidden");
+        toggleToastHistoryDropdown(isHidden);
+        if (isHidden) refresh();
+    });
+
+    if (clearBtn) {
+        clearBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            persistToastHistory([]);
+            updateToastHistoryUi([]);
+        });
+    }
+
+    document.addEventListener("click", (event) => {
+        if (dropdown.classList.contains("hidden")) return;
+        if (dropdown.contains(event.target) || btn.contains(event.target)) return;
+        toggleToastHistoryDropdown(false);
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            toggleToastHistoryDropdown(false);
+        }
+    });
 }
 
 /**

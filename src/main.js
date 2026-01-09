@@ -23,7 +23,7 @@ import { initFamilyTable } from "./js/features/tenants/family.js";
 import { initFormOptions, refreshUnitOptions, refreshLandlordOptions } from "./js/features/tenants/form.js";
 import { switchFlow } from "./js/features/navigation/flow.js";
 import { attachEventHandlers } from "./js/events.js";
-import { updateConnectionIndicator } from "./js/utils/ui.js";
+import { initToastHistoryUi, updateConnectionIndicator } from "./js/utils/ui.js";
 import { initDraftUi } from "./js/features/shared/drafts.js";
 import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
@@ -43,6 +43,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Attach all event listeners
   attachEventHandlers();
   initDraftUi();
+  initToastHistoryUi();
 
   document.addEventListener("sync:completed", () => {
     void (async () => {
