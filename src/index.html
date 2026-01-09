@@ -183,7 +183,7 @@
             <h2 class="text-sm md:text-base font-semibold">Dashboard</h2>
             <span class="text-[10px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 border">Coming soon</span>
           </div>
-          <div class="grid md:grid-cols-2 gap-3">
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div class="border rounded-lg p-3 space-y-2" data-notes-widget="dashboard">
               <div class="flex items-center justify-center gap-2 text-[9px]">
                 <span data-note-position
@@ -209,6 +209,8 @@
                   class="min-w-[36px] px-3 py-1.5 rounded border border-slate-200 bg-white text-[13px] font-semibold leading-none text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">&larr;</button>
                 <button data-note-action="next"
                   class="min-w-[36px] px-3 py-1.5 rounded border border-slate-200 bg-white text-[13px] font-semibold leading-none text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">&rarr;</button>
+                <button data-note-action="cancel"
+                  class="hidden px-3 py-1.5 rounded border border-slate-200 bg-white text-[9px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">Cancel</button>
                 <button data-note-action="add"
                   class="px-3 py-1.5 rounded border border-slate-200 bg-white text-[9px] font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">+ Add
                   note</button>
@@ -228,6 +230,30 @@
             <div class="border rounded-lg p-3 bg-slate-50">
               <p class="text-[11px] font-semibold text-slate-700">Reminders</p>
               <p class="text-[11px] text-slate-500">Track upcoming renewals and payment follow-ups.</p>
+            </div>
+            <div class="border rounded-lg p-3 bg-slate-50">
+              <p class="text-[11px] font-semibold text-slate-700">Collections</p>
+              <p class="text-[11px] text-slate-500">Overdue totals and follow-ups will surface here.</p>
+            </div>
+            <div class="border rounded-lg p-3 bg-slate-50">
+              <p class="text-[11px] font-semibold text-slate-700">Occupancy</p>
+              <p class="text-[11px] text-slate-500">Track vacant units and active tenancies.</p>
+            </div>
+            <div class="border rounded-lg p-3 bg-slate-50">
+              <p class="text-[11px] font-semibold text-slate-700">New activity</p>
+              <p class="text-[11px] text-slate-500">Recent changes will show here.</p>
+            </div>
+            <div class="border rounded-lg p-3 bg-slate-50">
+              <p class="text-[11px] font-semibold text-slate-700">Billing status</p>
+              <p class="text-[11px] text-slate-500">Generated bills and pending items summary.</p>
+            </div>
+            <div class="border rounded-lg p-3 bg-slate-50">
+              <p class="text-[11px] font-semibold text-slate-700">Payments</p>
+              <p class="text-[11px] text-slate-500">Recent receipts and totals by month.</p>
+            </div>
+            <div class="border rounded-lg p-3 bg-slate-50">
+              <p class="text-[11px] font-semibold text-slate-700">System health</p>
+              <p class="text-[11px] text-slate-500">Connection status and sync checks.</p>
             </div>
           </div>
         </section>
@@ -836,6 +862,8 @@
                     class="min-w-[28px] px-2 py-0.5 rounded border border-slate-200 bg-white text-[11px] font-semibold leading-none text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">&larr;</button>
                   <button data-note-action="next"
                     class="min-w-[28px] px-2 py-0.5 rounded border border-slate-200 bg-white text-[11px] font-semibold leading-none text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">&rarr;</button>
+                  <button data-note-action="cancel"
+                    class="hidden px-2 py-0.5 rounded border border-slate-200 bg-white text-[8px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">Cancel</button>
                   <button data-note-action="add"
                     class="px-2 py-0.5 rounded border border-slate-200 bg-white text-[8px] font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">+ Add
                     note</button>

@@ -153,8 +153,8 @@ function buildNoteStyles(bgColor) {
         text: textColor,
         border: borderColor,
         placeholder: placeholderColor,
-        shadow: `inset 0 6px 18px ${toRgba(shadowBase, 0.35)}`,
-        shadowFocus: `inset 0 7px 22px ${toRgba(shadowBase, 0.45)}`,
+        shadow: `inset 0 10px 24px ${toRgba(shadowBase, 0.35)}, inset 0 -6px 10px ${toRgba(shadowBase, 0.22)}`,
+        shadowFocus: `inset 0 12px 28px ${toRgba(shadowBase, 0.45)}, inset 0 -8px 14px ${toRgba(shadowBase, 0.3)}`,
     };
 }
 
@@ -240,6 +240,8 @@ function renderWidget(widget) {
     const total = notesState.notes.length;
     const index = total ? notesState.currentIndex + 1 : 0;
     const hasContent = !!note && note.content.trim().length > 0;
+    const canDiscardEmptyDraft =
+        !!note && !hasContent && total > 1 && notesState.currentIndex === total - 1;
     const position = widget.querySelector("[data-note-position]");
     const created = widget.querySelector("[data-note-created]");
     const updated = widget.querySelector("[data-note-updated]");
@@ -250,10 +252,18 @@ function renderWidget(widget) {
     const addBtn = widget.querySelector('[data-note-action="add"]');
     const deleteBtn = widget.querySelector('[data-note-action="delete"]');
     const copyBtn = widget.querySelector('[data-note-action="copy"]');
+    const cancelBtn = widget.querySelector('[data-note-action="cancel"]');
 
     if (position) position.textContent = total ? `Note ${index} of ${total}` : "Note 0 of 0";
-    if (prevBtn) prevBtn.disabled = !hasContent || total <= 1 || notesState.currentIndex <= 0;
-    if (nextBtn) nextBtn.disabled = !hasContent || total <= 1 || notesState.currentIndex >= total - 1;
+    if (prevBtn) {
+        prevBtn.disabled = !hasContent || total <= 1 || notesState.currentIndex <= 0 || canDiscardEmptyDraft;
+        prevBtn.classList.toggle("hidden", canDiscardEmptyDraft);
+    }
+    if (nextBtn) {
+        const hasNext = total > 1 && notesState.currentIndex < total - 1;
+        nextBtn.disabled = !hasNext || canDiscardEmptyDraft;
+        nextBtn.classList.toggle("hidden", canDiscardEmptyDraft);
+    }
     if (addBtn) addBtn.disabled = !hasContent;
     if (deleteBtn) {
         deleteBtn.disabled = !hasContent;
@@ -261,6 +271,10 @@ function renderWidget(widget) {
         deleteBtn.classList.toggle("pointer-events-none", !hasContent);
     }
     if (copyBtn) copyBtn.disabled = !hasContent;
+    if (cancelBtn) {
+        cancelBtn.disabled = !canDiscardEmptyDraft;
+        cancelBtn.classList.toggle("hidden", !canDiscardEmptyDraft);
+    }
 
     if (!note) {
         if (empty) empty.classList.remove("hidden");
@@ -376,6 +390,18 @@ function moveNote(direction) {
     renderAllWidgets();
 }
 
+function cancelDraftNote() {
+    const note = getCurrentNote();
+    if (!note || note.content.trim()) return;
+    const next = notesState.notes.slice();
+    next.splice(notesState.currentIndex, 1);
+    if (notesState.currentIndex >= next.length) {
+        notesState.currentIndex = Math.max(0, next.length - 1);
+    }
+    setNotes(next);
+    updateLocalNotes(next);
+}
+
 async function copyNoteContent(widget) {
     const input = widget.querySelector("[data-note-input]");
     const text = input ? input.value : (getCurrentNote() && getCurrentNote().content) || "";
@@ -402,6 +428,7 @@ function bindWidget(widget) {
     const addBtn = widget.querySelector('[data-note-action="add"]');
     const deleteBtn = widget.querySelector('[data-note-action="delete"]');
     const copyBtn = widget.querySelector('[data-note-action="copy"]');
+    const cancelBtn = widget.querySelector('[data-note-action="cancel"]');
 
     if (input && !input.dataset.bound) {
         input.dataset.bound = "true";
@@ -436,6 +463,11 @@ function bindWidget(widget) {
     if (copyBtn && !copyBtn.dataset.bound) {
         copyBtn.dataset.bound = "true";
         copyBtn.addEventListener("click", () => copyNoteContent(widget));
+    }
+
+    if (cancelBtn && !cancelBtn.dataset.bound) {
+        cancelBtn.dataset.bound = "true";
+        cancelBtn.addEventListener("click", () => cancelDraftNote());
     }
 }
 

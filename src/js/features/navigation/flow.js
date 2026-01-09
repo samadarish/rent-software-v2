@@ -98,6 +98,9 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     toggleSection(formSection, isFormFlow);
     const showRightSection = !isDashboard;
     smoothToggle(formRightSection, showRightSection, showRightSection ? {} : { duration: 0 });
+    if (formRightSection) {
+        formRightSection.classList.toggle("hidden", !showRightSection);
+    }
     toggleSection(tenantListSection, isViewTenants);
     toggleSection(generateBillSection, isGenerateBill);
     toggleSection(paymentsSection, isPayments);
@@ -187,7 +190,7 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     if (clausesAgreementContent && directorySidebarContent) {
         const showClauses = mode === "agreement";
         const showDirectory = mode === "viewTenants";
-        const showUtilitySidebar = mode === "createTenantNew" || isDashboard || isGenerateBill || isPayments || isExportData;
+        const showUtilitySidebar = mode === "createTenantNew" || isGenerateBill || isPayments || isExportData;
 
         toggleSection(clausesAgreementContent, showClauses);
         toggleSection(directorySidebarContent, showDirectory);
