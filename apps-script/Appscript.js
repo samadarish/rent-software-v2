@@ -22,6 +22,7 @@ const CLAUSES_SHEET = 'Clauses';
 const WING_MONTHLY_SHEET = 'WingMonthlyConfig';
 const TENANT_READINGS_SHEET = 'TenantMonthlyReadings';
 const BILL_LINES_SHEET = 'BillLines';
+const NOTES_SHEET = 'Notes';
 const PAYMENTS_SHEET = 'Payments';
 const ATTACHMENTS_SHEET = 'Attachments';
 const INDEX_SHEET = 'Index';
@@ -150,6 +151,14 @@ const BILL_LINE_HEADERS = [
   'generated_at',
   'amount_paid',
   'is_paid',
+];
+
+const NOTES_HEADERS = [
+  'note_id',
+  'content',
+  'color',
+  'created_at',
+  'updated_at',
 ];
 
 const PAYMENT_HEADERS = [
@@ -590,6 +599,32 @@ function writeUnifiedClauses_(payload) {
   const lastRow = sheet.getLastRow();
   if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, CLAUSES_HEADERS.length).clearContent();
   if (rows.length) sheet.getRange(2, 1, rows.length, CLAUSES_HEADERS.length).setValues(rows);
+}
+
+/********* NOTES *********/
+function normalizeNotePayload_(note) {
+  const now = new Date();
+  const createdAt = note.created_at || note.createdAt || Utilities.formatDate(now, Session.getScriptTimeZone() || 'Asia/Kolkata', 'yyyy-MM-dd');
+  return {
+    note_id: note.note_id || note.noteId || note.id || Utilities.getUuid(),
+    content: (note.content || note.text || note.note || '').toString(),
+    color: (note.color || note.bg_color || note.bgColor || '').toString(),
+    created_at: createdAt,
+    updated_at: note.updated_at || note.updatedAt || now,
+  };
+}
+
+function handleSaveNotes_(payload) {
+  const notes = Array.isArray(payload && payload.notes) ? payload.notes : [];
+  const normalized = notes.map((note) => normalizeNotePayload_(note));
+  const sheet = getSheetWithHeaders_(NOTES_SHEET, NOTES_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, NOTES_HEADERS.length).clearContent();
+  if (normalized.length) {
+    const rows = normalized.map((n) => NOTES_HEADERS.map((key) => n[key] ?? ''));
+    sheet.getRange(2, 1, rows.length, NOTES_HEADERS.length).setValues(rows);
+  }
+  return jsonResponse({ ok: true, notes: normalized });
 }
 
 /********* TENANTS + TENANCIES *********/
@@ -1969,6 +2004,7 @@ function handleExportAll_() {
     wingMonthlyConfig: readTable_(WING_MONTHLY_SHEET, WING_MONTHLY_HEADERS),
     tenantMonthlyReadings: readTable_(TENANT_READINGS_SHEET, TENANT_READING_HEADERS),
     billLines: readTable_(BILL_LINES_SHEET, BILL_LINE_HEADERS),
+    notes: readTable_(NOTES_SHEET, NOTES_HEADERS),
     payments: handleFetchPayments_(),
     attachments: readTable_(ATTACHMENTS_SHEET, ATTACHMENT_HEADERS),
     rentRevisions,
@@ -1996,6 +2032,11 @@ function doGet(e) {
     if (action === 'clauses') {
       const unified = readUnifiedClauses_();
       return jsonResponse({ ok: true, tenant: unified.tenant || [], landlord: unified.landlord || [], penalties: unified.penalties || [], misc: unified.misc || [] });
+    }
+
+    if (action === 'notes') {
+      const notes = readTable_(NOTES_SHEET, NOTES_HEADERS);
+      return jsonResponse({ ok: true, notes });
     }
 
     if (action === 'allsheets') {
@@ -2084,6 +2125,7 @@ function doPost(e) {
     if (action === 'deleteLandlord') return handleDeleteLandlord_(body.payload || {});
     if (action === 'saveBillingRecord') return handleSaveBillingRecord_(body.payload);
     if (action === 'savePayment') return jsonResponse(handleSavePayment_(body.payload || {}));
+    if (action === 'saveNotes') return handleSaveNotes_(body.payload || {});
     if (action === 'uploadPaymentAttachment') {
       const payload = body.payload || {};
       try {

@@ -675,6 +675,21 @@ function createLocalId(prefix = "local") {
     return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function normalizeNoteRecord(note = {}) {
+    const now = new Date();
+    const created =
+        note.created_at ||
+        note.createdAt ||
+        now.toISOString().slice(0, 10);
+    return {
+        note_id: note.note_id || note.noteId || note.id || createLocalId("note"),
+        content: (note.content || note.text || note.note || "").toString(),
+        color: (note.color || note.bg_color || note.bgColor || "").toString(),
+        created_at: created,
+        updated_at: note.updated_at || note.updatedAt || now.toISOString(),
+    };
+}
+
 function normalizeWingValue(value) {
     return normalizeWing(value || "");
 }
@@ -1233,6 +1248,59 @@ export async function fetchWingsFromSheet(force = false) {
 }
 
 /**
+ * Retrieves saved notes from Google Sheets (or local cache).
+ * @param {boolean} force - Whether to force refresh from the server.
+ * @returns {Promise<{notes: Array}>} Notes list payload.
+ */
+export async function fetchNotesFromSheet(force = false) {
+    const entry = await getLocalEntry(LOCAL_KEYS.notes);
+    const cached = Array.isArray(entry?.value) ? entry.value : null;
+    if (cached) {
+        document.dispatchEvent(new CustomEvent("notes:updated", { detail: cached }));
+        if (!shouldRevalidate(entry, force)) {
+            return { notes: cached };
+        }
+    }
+
+    const url = ensureAppScriptUrl({
+        onMissing: () => showToast("Configure Apps Script URL to view notes", "warning"),
+    });
+    if (!url) return { notes: cached || [] };
+
+    const runFetch = async () => {
+        const data = await callAppScript({
+            url,
+            action: "notes",
+            cache: { useLocal: false, revalidate: false },
+        });
+        if (Array.isArray(data?.notes)) {
+            const normalized = data.notes.map((note) => normalizeNoteRecord(note));
+            await setLocalData(LOCAL_KEYS.notes, normalized);
+            document.dispatchEvent(new CustomEvent("notes:updated", { detail: normalized }));
+            return { notes: normalized };
+        }
+        return { notes: cached || [] };
+    };
+
+    if (cached) {
+        if (navigator.onLine) {
+            runFetch().catch((err) => {
+                console.error("fetchNotesFromSheet error", err);
+            });
+        }
+        return { notes: cached };
+    }
+
+    try {
+        return await runFetch();
+    } catch (err) {
+        console.error("fetchNotesFromSheet error", err);
+        showToast("Could not fetch notes", "error");
+        return { notes: cached || [] };
+    }
+}
+
+/**
  * Persists a new wing value to Google Sheets and refreshes UI indicators.
  * @param {string} wing - Wing name entered by the user.
  * @returns {Promise<object>} API response shape from the Apps Script endpoint.
@@ -1322,6 +1390,37 @@ export async function removeWingFromSheet(wing) {
     } catch (e) {
         console.error("removeWingFromSheet error", e);
         showToast("Failed to remove wing", "error");
+        return { ok: false };
+    }
+}
+
+/**
+ * Saves notes to Google Sheets (queued) and updates local storage immediately.
+ * @param {Array} notes - Notes collection to persist.
+ * @returns {Promise<object>} Result payload with updated notes list.
+ */
+export async function saveNotesToSheet(notes = []) {
+    const normalized = Array.isArray(notes) ? notes.map((note) => normalizeNoteRecord(note)) : [];
+    const localUpdate = async () => {
+        await setLocalData(LOCAL_KEYS.notes, normalized);
+        document.dispatchEvent(new CustomEvent("notes:updated", { detail: normalized }));
+        return { ok: true, notes: normalized };
+    };
+
+    try {
+        const url = ensureAppScriptUrl();
+        const data = await runWriteAction({
+            url,
+            action: "saveNotes",
+            payload: { notes: normalized },
+            queuedMessage: "",
+            fallback: { ok: true, queued: true, notes: normalized },
+            localUpdate,
+        });
+        return data;
+    } catch (err) {
+        console.error("saveNotesToSheet error", err);
+        showToast("Failed to save notes", "error");
         return { ok: false };
     }
 }

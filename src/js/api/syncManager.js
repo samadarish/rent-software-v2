@@ -31,6 +31,7 @@ const WRITE_INVALIDATIONS = {
     deleteAttachment: ["payments"],
     saveBillingRecord: ["generatedbills", "billsminimal"],
     saveRentRevision: ["tenants"],
+    saveNotes: ["notes"],
 };
 
 const LOCAL_STORAGE_KEYS = [
@@ -154,6 +155,13 @@ async function storeRentRevisions(revisions = []) {
     return next;
 }
 
+async function storeNotesList(notes = []) {
+    const next = Array.isArray(notes) ? notes : [];
+    await setLocalData(LOCAL_KEYS.notes, next);
+    dispatchUpdateEvent("notes:updated", next);
+    return next;
+}
+
 async function applyExportAll(data) {
     if (!data || typeof data !== "object") return;
     if (Array.isArray(data.wings)) await storeWingsList(data.wings);
@@ -195,6 +203,9 @@ async function applyExportAll(data) {
     }
     if (data.generatedBills && Array.isArray(data.generatedBills.bills)) {
         await setLocalData(LOCAL_KEYS.generatedBills, data.generatedBills);
+    }
+    if (Array.isArray(data.notes)) {
+        await storeNotesList(data.notes);
     }
     if (Array.isArray(data.allSheets)) {
         await setLocalData(LOCAL_KEYS.allSheets, data.allSheets);
@@ -323,6 +334,20 @@ function buildSyncTasks(url) {
                         penalties: Array.isArray(data.penalties) ? data.penalties : [],
                         misc: Array.isArray(data.misc) ? data.misc : [],
                     });
+                }
+                return data;
+            }),
+        },
+        {
+            label: "Syncing notes",
+            run: skipIfExported(async () => {
+                const data = await runWithTimeout(
+                    callAppScript({ url, action: "notes", cache: { useLocal: false } }),
+                    SYNC_TIMEOUT_MS,
+                    "Notes"
+                );
+                if (Array.isArray(data?.notes)) {
+                    await storeNotesList(data.notes);
                 }
                 return data;
             }),

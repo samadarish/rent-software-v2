@@ -45,6 +45,23 @@ textarea {
   font-size: 0.75rem;
 }
 
+/* ========== NOTES TEXTAREA STYLING ========== */
+
+.note-textarea {
+  background-color: var(--note-bg, #f8fafc);
+  color: var(--note-text, #0f172a);
+  border-color: var(--note-border, #e2e8f0);
+  box-shadow: var(--note-shadow, inset 0 4px 16px rgba(15, 23, 42, 0.2));
+}
+
+.note-textarea::placeholder {
+  color: var(--note-placeholder, rgba(15, 23, 42, 0.5));
+}
+
+.note-textarea:focus {
+  box-shadow: var(--note-shadow-focus, inset 0 6px 18px rgba(15, 23, 42, 0.3));
+}
+
 /* Make the main grid a little tighter on spacing */
 main {
   font-size: 0.8rem;

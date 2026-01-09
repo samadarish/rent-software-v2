@@ -25,6 +25,7 @@ import { switchFlow } from "./js/features/navigation/flow.js";
 import { attachEventHandlers } from "./js/events.js";
 import { initToastHistoryUi, updateConnectionIndicator } from "./js/utils/ui.js";
 import { initDraftUi } from "./js/features/shared/drafts.js";
+import { initNotesFeature } from "./js/features/shared/notes.js";
 import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
 import { currentFlow } from "./js/state.js";
@@ -44,6 +45,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   attachEventHandlers();
   initDraftUi();
   initToastHistoryUi();
+  initNotesFeature();
 
   document.addEventListener("sync:completed", () => {
     void (async () => {

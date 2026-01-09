@@ -17,6 +17,7 @@ export const LOCAL_KEYS = {
     rentRevisionsAll: "data:rentRevisions:all",
     rentRevisions: (tenancyId) => `data:rentRevisions:${tenancyId || "unknown"}`,
     allSheets: "data:allSheets",
+    notes: "data:notes",
 };
 
 function coerceArray(value) {
