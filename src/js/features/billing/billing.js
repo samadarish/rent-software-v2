@@ -6,7 +6,12 @@
  * state, parses tenant/unit data, and wires modal interactions.
  */
 
-import { formatCurrency as formatCurrencyBase, normalizeMonthKey, numberToIndianWords } from "../../utils/formatters.js";
+import {
+    formatCurrency as formatCurrencyBase,
+    normalizeMonthKey,
+    numberToIndianWords,
+    numberToIndianWordsHindi,
+} from "../../utils/formatters.js";
 import { normalizeWing } from "../../utils/normalizers.js";
 import { escapeHtml } from "../../utils/htmlUtils.js";
 import { cloneSelectOptions, hideModal, showModal, showToast, smoothToggle } from "../../utils/ui.js";
@@ -1205,6 +1210,7 @@ function formatWhatsappMessage(summary, language = "en") {
     const motorNew = billingState.motorSnapshot?.next ?? parseNumber(billingState.meta.motorNew, false);
     const formatAmount = (val) => roundToTwo(val).toFixed(2);
     const totalWords = numberToIndianWords(Math.round(summary.total));
+    const totalWordsHi = numberToIndianWordsHindi(Math.round(summary.total));
     const payableMonth = getNextMonthLabel(billingState.selectedMonthKey);
     const payableSuffixEn = summary.payableDay
         ? `Pay on or before *${summary.payableDay}${payableMonth ? ` ${payableMonth}` : ""}*. Thank you!`
@@ -1266,7 +1272,7 @@ function formatWhatsappMessage(summary, language = "en") {
         "",
         `कुल = *${formatAmount(summary.rent)}* + *${formatAmount(summary.electricity)}* + *${formatAmount(summary.motorShare)}* + *${formatAmount(summary.sweep)}*`,
         "",
-        `= Rs. *${formatAmount(summary.total)}* (*${totalWords}*) मात्र।`,
+        `= Rs. *${formatAmount(summary.total)}* (*${totalWordsHi}*) मात्र।`,
         "",
         payableSuffixHi,
     ];

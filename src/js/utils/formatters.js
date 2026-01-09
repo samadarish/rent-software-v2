@@ -147,6 +147,138 @@ export function numberToIndianWords(num) {
     return result.charAt(0).toUpperCase() + result.slice(1);
 }
 
+/**
+ * Converts a number to Hindi words (Indian numbering system).
+ * @param {number} num - The number to convert
+ * @returns {string} Number in Hindi words (e.g., "एक लाख तेईस हजार")
+ */
+export function numberToIndianWordsHindi(num) {
+    if (num === 0) return "शून्य";
+
+    const words = [
+        "शून्य",
+        "एक",
+        "दो",
+        "तीन",
+        "चार",
+        "पांच",
+        "छह",
+        "सात",
+        "आठ",
+        "नौ",
+        "दस",
+        "ग्यारह",
+        "बारह",
+        "तेरह",
+        "चौदह",
+        "पंद्रह",
+        "सोलह",
+        "सत्रह",
+        "अठारह",
+        "उन्नीस",
+        "बीस",
+        "इक्कीस",
+        "बाईस",
+        "तेईस",
+        "चौबीस",
+        "पच्चीस",
+        "छब्बीस",
+        "सत्ताईस",
+        "अट्ठाईस",
+        "उनतीस",
+        "तीस",
+        "इकतीस",
+        "बत्तीस",
+        "तैंतीस",
+        "चौंतीस",
+        "पैंतीस",
+        "छत्तीस",
+        "सैंतीस",
+        "अड़तीस",
+        "उनतालीस",
+        "चालीस",
+        "इकतालीस",
+        "बयालीस",
+        "तैंतालीस",
+        "चवालीस",
+        "पैंतालीस",
+        "छियालीस",
+        "सैंतालीस",
+        "अड़तालीस",
+        "उनचास",
+        "पचास",
+        "इक्यावन",
+        "बावन",
+        "तिरेपन",
+        "चौवन",
+        "पचपन",
+        "छप्पन",
+        "सत्तावन",
+        "अट्ठावन",
+        "उनसठ",
+        "साठ",
+        "इकसठ",
+        "बासठ",
+        "तिरसठ",
+        "चौंसठ",
+        "पैंसठ",
+        "छियासठ",
+        "सड़सठ",
+        "अड़सठ",
+        "उनहत्तर",
+        "सत्तर",
+        "इकहत्तर",
+        "बहत्तर",
+        "तिहत्तर",
+        "चौहत्तर",
+        "पचहत्तर",
+        "छिहत्तर",
+        "सतहत्तर",
+        "अठहत्तर",
+        "उन्नासी",
+        "अस्सी",
+        "इक्यासी",
+        "बयासी",
+        "तिरासी",
+        "चौरासी",
+        "पचासी",
+        "छियासी",
+        "सत्तासी",
+        "अट्ठासी",
+        "नवासी",
+        "नब्बे",
+        "इक्यानवे",
+        "बानवे",
+        "तिरानवे",
+        "चौरानवे",
+        "पंचानवे",
+        "छियानवे",
+        "सत्तानवे",
+        "अट्ठानवे",
+        "निन्यानवे",
+    ];
+
+    if (num < 100) return words[num];
+
+    const parts = [];
+    const crore = Math.floor(num / 10000000);
+    num %= 10000000;
+    const lakh = Math.floor(num / 100000);
+    num %= 100000;
+    const thousand = Math.floor(num / 1000);
+    num %= 1000;
+    const hundred = Math.floor(num / 100);
+    const remainder = num % 100;
+
+    if (crore) parts.push(`${numberToIndianWordsHindi(crore)} करोड़`);
+    if (lakh) parts.push(`${numberToIndianWordsHindi(lakh)} लाख`);
+    if (thousand) parts.push(`${numberToIndianWordsHindi(thousand)} हजार`);
+    if (hundred) parts.push(`${words[hundred]} सौ`);
+    if (remainder) parts.push(words[remainder]);
+
+    return parts.join(" ");
+}
+
 const DEFAULT_CURRENCY_SYMBOL = "\u20B9";
 
 /**
