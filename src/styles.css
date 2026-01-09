@@ -244,6 +244,10 @@ label {
     grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr);
   }
 
+  #appLayout.layout-no-sidebar {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
   /* Navigation column buttons a bit more compact on desktop */
   aside button {
     padding-top: 0.3rem;

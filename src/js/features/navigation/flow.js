@@ -66,9 +66,11 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
     // Update layout class so equal widths only apply on the agreement form
     const appLayout = document.getElementById("appLayout");
     if (appLayout) {
-        appLayout.classList.remove("layout-agreement", "layout-directory");
+        appLayout.classList.remove("layout-agreement", "layout-directory", "layout-no-sidebar");
         if (mode === "agreement") {
             appLayout.classList.add("layout-agreement");
+        } else if (mode === "dashboard") {
+            appLayout.classList.add("layout-no-sidebar");
         } else {
             appLayout.classList.add("layout-directory");
         }
@@ -94,7 +96,8 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
 
     toggleSection(dashboardSection, isDashboard);
     toggleSection(formSection, isFormFlow);
-    smoothToggle(formRightSection, true);
+    const showRightSection = !isDashboard;
+    smoothToggle(formRightSection, showRightSection, showRightSection ? {} : { duration: 0 });
     toggleSection(tenantListSection, isViewTenants);
     toggleSection(generateBillSection, isGenerateBill);
     toggleSection(paymentsSection, isPayments);
@@ -177,20 +180,17 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
 
     // Toggle sidebar content (clauses for agreement, placeholder for tenant modes)
     const clausesAgreementContent = document.getElementById("clausesAgreementContent");
-    const clausesPlaceholderContent = document.getElementById("clausesPlaceholderContent");
     const directorySidebarContent = document.getElementById("directorySidebarContent");
     const utilitySidebarContent = document.getElementById("utilitySidebarContent");
     const noGrnCheckbox = document.getElementById("grnNoCheckbox");
 
-    if (clausesAgreementContent && clausesPlaceholderContent && directorySidebarContent) {
+    if (clausesAgreementContent && directorySidebarContent) {
         const showClauses = mode === "agreement";
         const showDirectory = mode === "viewTenants";
-        const showTenantSidebar = mode === "createTenantNew";
-        const showUtilitySidebar = isDashboard || isGenerateBill || isPayments || isExportData;
+        const showUtilitySidebar = mode === "createTenantNew" || isDashboard || isGenerateBill || isPayments || isExportData;
 
         toggleSection(clausesAgreementContent, showClauses);
         toggleSection(directorySidebarContent, showDirectory);
-        toggleSection(clausesPlaceholderContent, showTenantSidebar);
         toggleSection(utilitySidebarContent, showUtilitySidebar);
     }
 
