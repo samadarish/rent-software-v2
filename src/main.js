@@ -17,7 +17,7 @@
  * - events.js: Event handler registration
  */
 
-import { ensureAppScriptConfigured, applyLandlordDefaultsToForm } from "./js/api/config.js";
+import { ensureAppScriptConfigured, applyLandlordDefaultsToForm, startManualSync } from "./js/api/config.js";
 import { fetchWingsFromSheet, loadClausesFromSheet } from "./js/api/sheets.js";
 import { initFamilyTable } from "./js/features/tenants/family.js";
 import { initFormOptions, refreshUnitOptions, refreshLandlordOptions } from "./js/features/tenants/form.js";
@@ -26,7 +26,7 @@ import { attachEventHandlers } from "./js/events.js";
 import { initToastHistoryUi, showToast, updateConnectionIndicator } from "./js/utils/ui.js";
 import { initDraftUi } from "./js/features/shared/drafts.js";
 import { initNotesFeature } from "./js/features/shared/notes.js";
-import { flushSyncQueue, initSyncManager, startInitialSync } from "./js/api/syncManager.js";
+import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
 import { currentFlow } from "./js/state.js";
 
@@ -49,7 +49,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // --- FEATURE: Sync Now ---
   document.getElementById("manualSyncBtn")?.addEventListener("click", () => {
-    startInitialSync();
+    startManualSync();
   });
 
   // --- FEATURE: WhatsApp Login ---

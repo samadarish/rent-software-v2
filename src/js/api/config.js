@@ -182,6 +182,12 @@ export async function ensureAppScriptConfigured({ autoSync = false } = {}) {
     return { ok: true };
 }
 
+export async function startManualSync() {
+    const configured = await ensureAppScriptConfigured({ autoSync: false });
+    if (!configured?.ok) return configured;
+    return runFullSyncWithModal({ reason: "stale" });
+}
+
 /**
  * Reads landlord defaults from local storage and returns an object shape.
  * @returns {{ name?: string, aadhaar?: string, address?: string }} persisted defaults
