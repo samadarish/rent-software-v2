@@ -1,12 +1,12 @@
+use rusqlite::{params, Connection};
 use serde::Serialize;
-use tauri::{Emitter, Manager};
-use rusqlite::{Connection, params};
 use std::collections::HashMap;
 use std::io::{self, Read};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::{Emitter, Manager};
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -74,10 +74,7 @@ fn now_ms() -> i64 {
 }
 
 fn get_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join("rent_software.sqlite"))
 }
@@ -178,7 +175,10 @@ impl<R: Read> Read for ProgressReader<R> {
 
 #[tauri::command]
 fn cache_get(state: tauri::State<DbState>, key: String) -> Result<Option<CacheEntry>, String> {
-    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|_| "Database lock poisoned".to_string())?;
     let mut stmt = conn
         .prepare("SELECT value, updated_at FROM local_cache WHERE key = ?1")
         .map_err(|e| e.to_string())?;
@@ -193,8 +193,15 @@ fn cache_get(state: tauri::State<DbState>, key: String) -> Result<Option<CacheEn
 }
 
 #[tauri::command]
-fn cache_set(state: tauri::State<DbState>, key: String, value: serde_json::Value) -> Result<(), String> {
-    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
+fn cache_set(
+    state: tauri::State<DbState>,
+    key: String,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|_| "Database lock poisoned".to_string())?;
     let payload = serde_json::to_string(&value).map_err(|e| e.to_string())?;
     let updated_at = now_ms();
     conn.execute(
@@ -207,7 +214,10 @@ fn cache_set(state: tauri::State<DbState>, key: String, value: serde_json::Value
 
 #[tauri::command]
 fn cache_delete(state: tauri::State<DbState>, key: String) -> Result<(), String> {
-    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|_| "Database lock poisoned".to_string())?;
     conn.execute("DELETE FROM local_cache WHERE key = ?1", params![key])
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -215,7 +225,10 @@ fn cache_delete(state: tauri::State<DbState>, key: String) -> Result<(), String>
 
 #[tauri::command]
 fn cache_delete_prefix(state: tauri::State<DbState>, prefix: String) -> Result<(), String> {
-    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|_| "Database lock poisoned".to_string())?;
     let pattern = format!("{}%", prefix);
     conn.execute(
         "DELETE FROM local_cache WHERE key LIKE ?1",
@@ -233,7 +246,10 @@ fn queue_add(
     method: Option<String>,
     params: Option<serde_json::Value>,
 ) -> Result<i64, String> {
-    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|_| "Database lock poisoned".to_string())?;
     let payload_json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
     let method_value = method.unwrap_or_else(|| "POST".to_string());
     let params_value = params.unwrap_or_else(|| serde_json::json!({}));
@@ -250,7 +266,10 @@ fn queue_add(
 
 #[tauri::command]
 fn queue_list(state: tauri::State<DbState>, limit: Option<u32>) -> Result<Vec<SyncJob>, String> {
-    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|_| "Database lock poisoned".to_string())?;
     let limit_value = limit.unwrap_or(200);
     let mut stmt = conn
         .prepare(
@@ -262,7 +281,8 @@ fn queue_list(state: tauri::State<DbState>, limit: Option<u32>) -> Result<Vec<Sy
             let params_raw: String = row.get(3)?;
             let payload_raw: String = row.get(4)?;
             let params_value = serde_json::from_str(&params_raw).unwrap_or(serde_json::Value::Null);
-            let payload_value = serde_json::from_str(&payload_raw).unwrap_or(serde_json::Value::Null);
+            let payload_value =
+                serde_json::from_str(&payload_raw).unwrap_or(serde_json::Value::Null);
             Ok(SyncJob {
                 id: row.get(0)?,
                 action: row.get(1)?,
@@ -282,7 +302,10 @@ fn queue_list(state: tauri::State<DbState>, limit: Option<u32>) -> Result<Vec<Sy
 
 #[tauri::command]
 fn queue_delete(state: tauri::State<DbState>, id: i64) -> Result<(), String> {
-    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|_| "Database lock poisoned".to_string())?;
     conn.execute("DELETE FROM sync_queue WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -290,7 +313,10 @@ fn queue_delete(state: tauri::State<DbState>, id: i64) -> Result<(), String> {
 
 #[tauri::command]
 fn queue_clear(state: tauri::State<DbState>) -> Result<(), String> {
-    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|_| "Database lock poisoned".to_string())?;
     conn.execute("DELETE FROM sync_queue", [])
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -298,7 +324,10 @@ fn queue_clear(state: tauri::State<DbState>) -> Result<(), String> {
 
 #[tauri::command]
 fn queue_count(state: tauri::State<DbState>) -> Result<i64, String> {
-    let conn = state.conn.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|_| "Database lock poisoned".to_string())?;
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM sync_queue", [], |row| row.get(0))
         .map_err(|e| e.to_string())?;
@@ -350,6 +379,121 @@ fn cancel_upload(state: tauri::State<UploadState>, upload_id: String) -> bool {
     state.cancel(&upload_id)
 }
 
+#[tauri::command]
+async fn open_whatsapp(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    let script = r##"
+    (() => {
+        "use strict";
+        const STATE = { IN: "IN", OUT: "OUT", UNKNOWN: "UNKNOWN" };
+        let isSuccessHandled = false;
+
+        function detect() {
+            const paneSide = document.getElementById("pane-side");
+            const main = document.getElementById("main");
+            if (paneSide || main) return STATE.IN;
+            const app = document.getElementById("app") || document.body;
+            const qrCanvas = app ? app.querySelector("div[data-ref] canvas, canvas") : null;
+            if (qrCanvas) return STATE.OUT;
+            return STATE.UNKNOWN;
+        }
+
+        function ensureOverlay() {
+            let el = document.getElementById("wa-login-overlay");
+            if (el) return el;
+            el = document.createElement("div");
+            el.id = "wa-login-overlay";
+            // Default small overlay style
+            el.style.cssText = "position:fixed;top:12px;right:12px;z-index:2147483647;background:#111;color:#fff;padding:10px 12px;border-radius:12px;font:13px/1.35 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.18);opacity:.95;pointer-events:none;transition:all 0.5s ease;";
+            el.innerHTML = '<div style="font-weight:700;margin-bottom:4px;">WhatsApp Web</div><div id="wa-login-status" style="font-weight:600;">Starting…</div>';
+            (document.body || document.documentElement).appendChild(el);
+            return el;
+        }
+
+        function setStatus(state) {
+            if (isSuccessHandled) return;
+
+            ensureOverlay();
+            const s = document.getElementById("wa-login-status");
+            if (!s) return;
+
+            if (state === STATE.IN) {
+                isSuccessHandled = true;
+                s.textContent = "✅ Logged in";
+                
+                // Signal backend to close immediately
+                document.title = "WA_LOGGED_IN_SUCCESS";
+                if (window.location.hash !== "#wa_login_success") {
+                    window.location.hash = "wa_login_success";
+                }
+
+            } else if (state === STATE.OUT) {
+                s.textContent = "🔒 Logged out (QR screen)";
+            } else {
+                s.textContent = "⏳ Loading / Unknown";
+            }
+        }
+
+        function tick() {
+            const state = detect();
+            setStatus(state);
+        }
+        setInterval(tick, 1000);
+    })();
+    "##;
+
+    let win_builder = WebviewWindowBuilder::new(
+        &app,
+        "whatsapp_login",
+        WebviewUrl::External("https://web.whatsapp.com".parse().unwrap()),
+    )
+    .title("WhatsApp Login")
+    .inner_size(1000.0, 700.0)
+    .initialization_script(script);
+
+    let window = win_builder.build().map_err(|e| e.to_string())?;
+
+    // Spawn a polling task to check for the title change
+    let win_clone = window.clone();
+    let app_clone = app.clone();
+
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let mut detected = false;
+
+            // Check Title
+            if let Ok(title) = win_clone.title() {
+                if title.contains("WA_LOGGED_IN_SUCCESS") {
+                    println!("WA Login Detected via Title");
+                    detected = true;
+                }
+            } else {
+                break; // Window closed
+            }
+
+            // Check URL Hash (fallback)
+            if !detected {
+                if let Ok(url) = win_clone.url() {
+                    if url.as_str().contains("wa_login_success") {
+                        println!("WA Login Detected via URL Hash");
+                        detected = true;
+                    }
+                }
+            }
+
+            if detected {
+                let _ = app_clone.emit("whatsapp-login-success", ());
+                let _ = win_clone.close();
+                break;
+            }
+        }
+    });
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -357,9 +501,11 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(UploadState::default())
         .setup(|app| {
-            let conn = setup_db(&app.handle())
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-            app.manage(DbState { conn: Mutex::new(conn) });
+            let conn =
+                setup_db(&app.handle()).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            app.manage(DbState {
+                conn: Mutex::new(conn),
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -373,7 +519,8 @@ pub fn run() {
             queue_clear,
             queue_count,
             upload_payment_attachment,
-            cancel_upload
+            cancel_upload,
+            open_whatsapp
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -23,10 +23,10 @@ import { initFamilyTable } from "./js/features/tenants/family.js";
 import { initFormOptions, refreshUnitOptions, refreshLandlordOptions } from "./js/features/tenants/form.js";
 import { switchFlow } from "./js/features/navigation/flow.js";
 import { attachEventHandlers } from "./js/events.js";
-import { initToastHistoryUi, updateConnectionIndicator } from "./js/utils/ui.js";
+import { initToastHistoryUi, showToast, updateConnectionIndicator } from "./js/utils/ui.js";
 import { initDraftUi } from "./js/features/shared/drafts.js";
 import { initNotesFeature } from "./js/features/shared/notes.js";
-import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
+import { flushSyncQueue, initSyncManager, startInitialSync } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
 import { currentFlow } from "./js/state.js";
 
@@ -46,6 +46,48 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDraftUi();
   initToastHistoryUi();
   initNotesFeature();
+
+  // --- FEATURE: Sync Now ---
+  document.getElementById("manualSyncBtn")?.addEventListener("click", () => {
+    startInitialSync();
+  });
+
+  // --- FEATURE: WhatsApp Login ---
+  const waBtn = document.getElementById("whatsappLoginBtn");
+  const waStatus = document.getElementById("whatsappStatus");
+  const waIcon = document.getElementById("whatsappIconState");
+
+  function setWhatsAppLoggedIn() {
+    if (waStatus) waStatus.innerText = "Logged in";
+    if (waIcon) waIcon.innerText = "✅";
+    localStorage.setItem("wa_logged_in", "true");
+  }
+
+  if (localStorage.getItem("wa_logged_in") === "true") {
+    setWhatsAppLoggedIn();
+  }
+
+  if (waBtn) {
+    waBtn.addEventListener("click", async () => {
+      try {
+        if (window.__TAURI__) {
+            await window.__TAURI__.core.invoke("open_whatsapp");
+        } else {
+            console.warn("Tauri API not available (browser mode)");
+        }
+      } catch (err) {
+        console.error("Failed to open WhatsApp", err);
+        alert("Error opening WhatsApp: " + err);
+      }
+    });
+  }
+
+  if (window.__TAURI__) {
+      window.__TAURI__.event.listen("whatsapp-login-success", () => {
+          setWhatsAppLoggedIn();
+          showToast("WhatsApp logged in successfully", "success");
+      });
+  }
 
   document.addEventListener("sync:completed", () => {
     void (async () => {
