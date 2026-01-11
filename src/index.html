@@ -894,14 +894,13 @@
 
               <div id="tenantDetailsPanel" class="hidden space-y-3">
                 <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <h3 class="text-xs font-semibold">Tenant Details</h3>
-                      <p class="text-[10px] text-slate-500">Identity fields only</p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span id="sidebarStatusPill"
-                        class="text-[10px] px-2 py-1 rounded-full border bg-slate-50 text-slate-600">Status</span>
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <h3 class="text-xs font-semibold">Tenant Details</h3>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span id="sidebarStatusPill"
+                          class="text-[10px] px-2 py-1 rounded-full border bg-slate-50 text-slate-600">Status</span>
                       <button id="sidebarEditTenantBtn"
                         class="px-3 py-1.5 rounded bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">Edit
                         Tenant</button>
@@ -931,9 +930,13 @@
                   <div class="flex items-center justify-between">
                     <div>
                       <h4 class="text-xs font-semibold">Family snapshot</h4>
-                      <p class="text-[10px] text-slate-500">Occupants linked to tenant</p>
                     </div>
-                    <span class="text-[10px] text-slate-500" id="sidebarFamilyCount">0 members</span>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[10px] text-slate-500" id="sidebarFamilyCount">0 members</span>
+                      <button id="sidebarFamilyViewBtn" type="button"
+                        class="px-2 py-1 rounded text-[10px] bg-white border border-slate-200 font-semibold opacity-60 cursor-not-allowed"
+                        disabled>View</button>
+                    </div>
                   </div>
                   <ul id="sidebarFamilyList" class="space-y-1 text-[11px] text-slate-700">
                     <li class="text-[10px] text-slate-500">No tenant selected.</li>
@@ -944,7 +947,6 @@
                   <div class="flex items-center justify-between">
                     <div>
                       <h4 class="text-xs font-semibold">Unit history</h4>
-                      <p class="text-[10px] text-slate-500">Active first, then recent inactive</p>
                     </div>
                     <button id="sidebarNewTenancyBtn"
                       class="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">New tenancy</button>
@@ -1883,6 +1885,46 @@
       </div>
     </div>
 </div>
+
+  <!-- FAMILY SNAPSHOT MODAL -->
+  <div id="familySnapshotModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
+    <div class="bg-white rounded-xl shadow-lg w-full max-w-3xl p-4 md:p-6 space-y-4 modal-panel">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[10px] uppercase text-slate-500 font-semibold">Family snapshot</p>
+          <h3 id="familyModalTitle" class="text-base font-semibold">Family members</h3>
+          <p class="text-[10px] text-slate-500">All members linked to this tenant.</p>
+        </div>
+        <button class="family-modal-close text-slate-500 hover:text-slate-800">X</button>
+      </div>
+
+      <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded px-3 py-2">
+        <div>
+          <p class="text-[10px] uppercase text-slate-500 font-semibold">Total members</p>
+          <p id="familyModalCount" class="text-sm font-semibold text-slate-900">0</p>
+        </div>
+        <div id="familyModalLoader"
+          class="hidden text-[11px] text-slate-600 bg-white border border-slate-200 rounded px-2 py-1">Loading family...
+        </div>
+      </div>
+
+      <div class="border rounded overflow-auto">
+        <table class="w-full text-left">
+          <thead class="bg-slate-50 text-[11px] uppercase text-slate-600">
+            <tr>
+              <th class="px-2 py-2">Name</th>
+              <th class="px-2 py-2">Relationship</th>
+              <th class="px-2 py-2">Occupation</th>
+              <th class="px-2 py-2">Aadhaar</th>
+              <th class="px-2 py-2">Address</th>
+            </tr>
+          </thead>
+          <tbody id="familyModalTableBody" class="text-[11px]"></tbody>
+        </table>
+        <div id="familyModalEmpty" class="text-[11px] text-slate-500 px-2 py-3">No family members recorded.</div>
+      </div>
+    </div>
+  </div>
 
   <!-- RENT REVISIONS MODAL (Moved to root) -->
   <div id="rentHistoryModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">

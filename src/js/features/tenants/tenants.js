@@ -4,6 +4,7 @@ import {
     saveRentRevision,
     updateTenantRecord,
 } from "../../api/sheets.js";
+import { getLocalList, LOCAL_KEYS } from "../../api/localStore.js";
 import { buildUnitLabel, formatCurrency, normalizeMonthKey, toOrdinal } from "../../utils/formatters.js";
 import { escapeHtml } from "../../utils/htmlUtils.js";
 import { generateNoGrnValue } from "../../utils/grn.js";
@@ -31,6 +32,8 @@ let activeRentHistoryContext = null;
 let selectedTenantForSidebar = null;
 let tenantModalEditable = false;
 let tenantModalMode = "tenant"; // tenant | tenancy
+let familySnapshotRequestId = 0;
+let familyModalRequestId = 0;
 
 const statusClassMap = {
     active: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -257,6 +260,146 @@ function formatTenancyEndDate(raw) {
     if (!raw) return "-";
     const formatted = formatDateForInput(raw);
     return formatted || raw;
+}
+
+function normalizeTenantId(value) {
+    return value === undefined || value === null ? "" : String(value);
+}
+
+function resolveTenantId(tenant) {
+    if (!tenant || typeof tenant !== "object") return "";
+    return (
+        tenant.tenantId ||
+        tenant.tenant_id ||
+        tenant.templateData?.tenant_id ||
+        tenant.templateData?.tenantId ||
+        ""
+    );
+}
+
+async function getFamilyMembersForTenant(tenant) {
+    const tenantId = normalizeTenantId(resolveTenantId(tenant));
+    if (!tenantId) return [];
+    const familyMembers = await getLocalList(LOCAL_KEYS.familyMembers, []);
+    return familyMembers.filter(
+        (member) => normalizeTenantId(member?.tenant_id || member?.tenantId) === tenantId
+    );
+}
+
+function setFamilyViewButtonState(button, enabled) {
+    if (!button) return;
+    button.disabled = !enabled;
+    button.classList.toggle("opacity-60", !enabled);
+    button.classList.toggle("cursor-not-allowed", !enabled);
+}
+
+async function updateSidebarFamilySnapshot(tenant) {
+    const requestId = ++familySnapshotRequestId;
+    const familyCount = document.getElementById("sidebarFamilyCount");
+    const familyList = document.getElementById("sidebarFamilyList");
+    const viewBtn = document.getElementById("sidebarFamilyViewBtn");
+
+    if (!tenant) {
+        if (familyCount) familyCount.textContent = "0 members";
+        if (familyList) {
+            familyList.innerHTML = '<li class="text-[10px] text-slate-500">No tenant selected.</li>';
+        }
+        setFamilyViewButtonState(viewBtn, false);
+        return;
+    }
+
+    if (familyCount) familyCount.textContent = "Loading...";
+    if (familyList) {
+        familyList.innerHTML = '<li class="text-[10px] text-slate-500">Loading family...</li>';
+    }
+    setFamilyViewButtonState(viewBtn, true);
+
+    const members = await getFamilyMembersForTenant(tenant);
+    if (requestId !== familySnapshotRequestId) return;
+
+    if (!selectedTenantForSidebar) return;
+    const expectedId = normalizeTenantId(resolveTenantId(tenant));
+    const selectedId = normalizeTenantId(resolveTenantId(selectedTenantForSidebar));
+    if (expectedId && selectedId && expectedId !== selectedId) return;
+    if (!expectedId && selectedTenantForSidebar !== tenant) return;
+
+    if (familyList) {
+        familyList.innerHTML = "";
+        members.forEach((member) => {
+            const li = document.createElement("li");
+            li.textContent = `${member.name || "Member"} - ${member.relationship || "Relation"}`;
+            familyList.appendChild(li);
+        });
+        if (!members.length) {
+            familyList.innerHTML = '<li class="text-[10px] text-slate-500">No family members recorded.</li>';
+        }
+    }
+
+    if (familyCount) {
+        familyCount.textContent = `${members.length} members`;
+    }
+}
+
+async function populateFamilyModal(tenant) {
+    const requestId = ++familyModalRequestId;
+    const title = document.getElementById("familyModalTitle");
+    const countEl = document.getElementById("familyModalCount");
+    const tableBody = document.getElementById("familyModalTableBody");
+    const empty = document.getElementById("familyModalEmpty");
+    const loader = document.getElementById("familyModalLoader");
+
+    const tenantName = tenant?.tenantFullName || "Tenant";
+    if (title) title.textContent = `Family members - ${tenantName}`;
+    if (countEl) countEl.textContent = "0";
+    if (tableBody) tableBody.innerHTML = "";
+    if (empty) empty.classList.add("hidden");
+    if (loader) loader.classList.remove("hidden");
+
+    const members = await getFamilyMembersForTenant(tenant);
+    if (requestId !== familyModalRequestId) return;
+
+    if (loader) loader.classList.add("hidden");
+    if (countEl) countEl.textContent = String(members.length);
+
+    if (!members.length) {
+        if (empty) empty.classList.remove("hidden");
+        return;
+    }
+
+    if (!tableBody) return;
+    members.forEach((member) => {
+        const tr = document.createElement("tr");
+        const name = escapeHtml(member?.name || "-");
+        const relationship = escapeHtml(member?.relationship || "-");
+        const occupation = escapeHtml(member?.occupation || "-");
+        const aadhaar = escapeHtml(member?.aadhaar || "-");
+        const address = escapeHtml(member?.address || "-");
+        tr.innerHTML = `
+            <td class="px-2 py-1">${name}</td>
+            <td class="px-2 py-1">${relationship}</td>
+            <td class="px-2 py-1">${occupation}</td>
+            <td class="px-2 py-1">${aadhaar}</td>
+            <td class="px-2 py-1">${address}</td>
+        `;
+        tableBody.appendChild(tr);
+    });
+}
+
+function openFamilyModal(tenant) {
+    if (!tenant) {
+        showToast("Select a tenant first", "warning");
+        return;
+    }
+    const modal = document.getElementById("familySnapshotModal");
+    if (!modal) return;
+    showModal(modal);
+    void populateFamilyModal(tenant);
+}
+
+function closeFamilyModal() {
+    const modal = document.getElementById("familySnapshotModal");
+    if (modal) hideModal(modal);
+    familyModalRequestId += 1;
 }
 
 function renderRentHistory(baseRent) {
@@ -819,9 +962,11 @@ function updateSidebarSnapshot() {
     const addressEl = document.getElementById("sidebarTenantAddress");
     const familyCount = document.getElementById("sidebarFamilyCount");
     const familyList = document.getElementById("sidebarFamilyList");
+    const familyViewBtn = document.getElementById("sidebarFamilyViewBtn");
     const historyList = document.getElementById("sidebarUnitHistory");
 
     if (!selectedTenantForSidebar) {
+        familySnapshotRequestId += 1;
         if (emptyState) emptyState.classList.remove("hidden");
         if (detailsPanel) detailsPanel.classList.add("hidden");
         if (nameEl) nameEl.textContent = "Select a tenant";
@@ -834,6 +979,7 @@ function updateSidebarSnapshot() {
         if (addressEl) addressEl.textContent = "-";
         if (familyCount) familyCount.textContent = "0 members";
         if (familyList) familyList.innerHTML = '<li class="text-[10px] text-slate-500">No tenant selected.</li>';
+        setFamilyViewButtonState(familyViewBtn, false);
         if (historyList) historyList.innerHTML = '<div class="text-[10px] text-slate-500">No tenant selected.</div>';
         return;
     }
@@ -850,21 +996,7 @@ function updateSidebarSnapshot() {
     if (mobileEl) mobileEl.textContent = t.tenantMobile || "-";
     if (occupationEl) occupationEl.textContent = t.tenantOccupation || "-";
     if (addressEl) addressEl.textContent = t.tenantPermanentAddress || "-";
-
-    if (familyList) {
-        familyList.innerHTML = "";
-        (t.family || []).forEach((member) => {
-            const li = document.createElement("li");
-            li.textContent = `${member.name || "Member"} - ${member.relationship || "Relation"}`;
-            familyList.appendChild(li);
-        });
-        if (!(t.family || []).length) {
-            familyList.innerHTML = '<li class="text-[10px] text-slate-500">No family members recorded.</li>';
-        }
-    }
-    if (familyCount) {
-        familyCount.textContent = `${t.family?.length || 0} members`;
-    }
+    void updateSidebarFamilySnapshot(t);
 
     if (historyList) {
         const history = Array.isArray(t.tenancyHistory) ? [...t.tenancyHistory] : [];
@@ -1540,6 +1672,11 @@ export function initTenantDirectory() {
         });
     }
 
+    const familyViewBtn = document.getElementById("sidebarFamilyViewBtn");
+    if (familyViewBtn) {
+        familyViewBtn.addEventListener("click", () => openFamilyModal(selectedTenantForSidebar));
+    }
+
     const modalCloseButtons = document.querySelectorAll(".tenant-modal-close");
     modalCloseButtons.forEach((btn) => btn.addEventListener("click", closeTenantModal));
 
@@ -1586,6 +1723,7 @@ export function initTenantDirectory() {
     }
 
     document.querySelectorAll(".rent-history-close").forEach((btn) => btn.addEventListener("click", closeRentHistoryModal));
+    document.querySelectorAll(".family-modal-close").forEach((btn) => btn.addEventListener("click", closeFamilyModal));
 
     const sidebarHistory = document.getElementById("sidebarUnitHistory");
     if (sidebarHistory) {
