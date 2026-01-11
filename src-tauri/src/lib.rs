@@ -494,6 +494,156 @@ async fn open_whatsapp(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn send_whatsapp_message(
+    app: tauri::AppHandle,
+    phone: String,
+    message: String,
+    progress_label: String,
+) -> Result<(), String> {
+    use std::time::{Duration, Instant};
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    // Script to Auto-Send and Show Progress
+    // 1. Inject Overlay with Progress Label
+    // 2. Wait for Send button
+    // 3. Click it
+    // 4. Mark title as WA_MSG_SENT_SUCCESS
+    let script = format!(
+        r##"
+    (() => {{
+        "use strict";
+        let sent = false;
+        
+        function ensureOverlay() {{
+            let el = document.getElementById("wa-send-overlay");
+            if (el) return el;
+            el = document.createElement("div");
+            el.id = "wa-send-overlay";
+            el.style.cssText = "position:fixed;top:10px;right:10px;z-index:99999;background:linear-gradient(135deg, #0f2027, #203a43, #2c5364);color:#fff;padding:8px 16px;border-radius:20px;font:bold 12px sans-serif;box-shadow:0 4px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);";
+            el.innerText = "{}"; 
+            document.body.appendChild(el);
+            return el;
+        }}
+
+        // Helper to find button by aria-label or data-icon
+        function findSendButton() {{
+            return document.querySelector('span[data-icon="send"]') || 
+                   document.querySelector('button[aria-label="Send"]');
+        }}
+
+        const interval = setInterval(() => {{
+            ensureOverlay();
+            
+            if (sent) {{
+                clearInterval(interval);
+                return;
+            }}
+
+            const btn = findSendButton();
+            if (btn) {{
+                 // Simulate click
+                const event = new MouseEvent('click', {{
+                    view: window,
+                    bubbles: true,
+                    cancelable: true
+                }});
+                btn.dispatchEvent(event);
+                btn.click();
+                
+                sent = true;
+                
+                // Allow some time for network request
+                setTimeout(() => {{
+                    document.title = "WA_MSG_SENT_SUCCESS";
+                    window.location.hash = "wa_msg_sent_success";
+                }}, 3000); // 3s wait after click
+            }}
+        }}, 1000);
+
+        // Safety timeout 45s
+        setTimeout(() => {{
+            if (!sent) {{
+                document.title = "WA_MSG_SENT_TIMEOUT";
+            }}
+        }}, 45000);
+    }})();
+    "##,
+        progress_label
+    );
+
+    let url_str = format!(
+        "https://web.whatsapp.com/send?phone={}&text={}&app_absent=0",
+        phone,
+        urlencoding::encode(&message)
+    );
+
+    let win_builder = WebviewWindowBuilder::new(
+        &app,
+        format!(
+            "whatsapp_send_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ),
+        WebviewUrl::External(url_str.parse().unwrap()),
+    )
+    .title(format!("Sending: {}", progress_label))
+    .inner_size(800.0, 600.0)
+    .initialization_script(&script);
+
+    let window = win_builder.build().map_err(|e| e.to_string())?;
+
+    // Block and poll for success directly in this async function behavior
+    // We use tokio::time::sleep to yield but keep this task alive
+    let start = Instant::now();
+    let mut success = false;
+
+    loop {
+        // Yield to event loop
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        if start.elapsed().as_secs() > 60 {
+            let _ = window.close();
+            break;
+        }
+
+        // We must run window interactions on valid thread/context or just check normally.
+        // tauri::Window is thread-safe cloneable.
+
+        if let Ok(title) = window.title() {
+            if title.contains("WA_MSG_SENT_SUCCESS") {
+                success = true;
+            }
+        } else {
+            // Window closed manually by user or error
+            break;
+        }
+
+        if !success {
+            if let Ok(url) = window.url() {
+                if url.as_str().contains("wa_msg_sent_success") {
+                    success = true;
+                }
+            }
+        }
+
+        if success {
+            // Wait small buffer
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+            let _ = window.close();
+            return Ok(());
+        }
+    }
+
+    if !success {
+        return Err("Timeout or Window Closed".to_string());
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -520,7 +670,8 @@ pub fn run() {
             queue_count,
             upload_payment_attachment,
             cancel_upload,
-            open_whatsapp
+            open_whatsapp,
+            send_whatsapp_message
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

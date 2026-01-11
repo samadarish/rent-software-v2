@@ -28,6 +28,7 @@ const billingState = {
     selectedWingLabel: "",
     lastGeneratedSummaries: [],
     sendStatus: new Map(),
+    selections: new Map(), // key: id -> { lang: 'en'|'hi', selected: boolean }
     calendarCoverage: new Map(),
     calendarCoverageCache: new Map(),
     availableWings: [],
@@ -1321,10 +1322,42 @@ function bindSendListEvents() {
     tbody.addEventListener("click", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
+        
+        // Handle Copy Button
+        const copyBtn = target.closest(".send-copy-btn");
+        if (copyBtn) {
+             const id = copyBtn.dataset.id || "";
+             const row = copyBtn.closest("tr");
+             if (!row) return;
+
+             // Determine language from radio
+             const langRadio = row.querySelector(`input[name="lang_${id}"]:checked`);
+             const lang = langRadio ? langRadio.value : "en";
+             
+             const summary = billingState.lastGeneratedSummaries.find((item) => String(item.id) === String(id));
+             if (!summary) return;
+             
+             const message = formatWhatsappMessage(summary, lang);
+             copyToClipboard(message).then(() => {
+                 showToast("Message copied to clipboard", "success");
+             }).catch(err => {
+                 console.error("Copy failed", err);
+                 showToast("Failed to copy message", "error");
+             });
+             return;
+        }
+
+        // Handle Send Button
         const btn = target.closest(".send-bill-btn");
         if (!btn) return;
         const id = btn.dataset.id || "";
-        const lang = btn.dataset.lang || "en";
+        const row = btn.closest("tr");
+        if (!row) return;
+
+        // Determine language from radio
+        const langRadio = row.querySelector(`input[name="lang_${id}"]:checked`);
+        const lang = langRadio ? langRadio.value : "en";
+        
         const summary = billingState.lastGeneratedSummaries.find((item) => String(item.id) === String(id));
         if (!summary) return;
         const number = getPrimaryMobile(summary.mobile).replace(/\D/g, "");
@@ -1333,10 +1366,27 @@ function bindSendListEvents() {
             return;
         }
         const message = formatWhatsappMessage(summary, lang);
-        const url = `https://web.whatsapp.com/send?phone=${number}&text=${encodeURIComponent(message)}&app_absent=0`;
+        
+        let url = ""; 
+        
+        // If technical user / native request:
+        // Use custom scheme or backend command if desired for manual send too?
+        // User asked to "use injecttion hooks" for "Auto-send".
+        // For manual "Send Manual", maybe standard web link is fine, but since we have "whatsapp-login"
+        // in backend, maybe we should use that session?
+        // Let's stick to standard URL for manual send unless specified otherwise, 
+        // OR better, try to use the same mechanism if running in Tauri to be consistent.
+        
+        // Actually, for manual send, opening the browser/window is expected.
+        url = `https://web.whatsapp.com/send?phone=${number}&text=${encodeURIComponent(message)}&app_absent=0`;
+        
         openWhatsappExternally(url).then((opened) => {
             if (!opened) return;
             billingState.sendStatus.set(getSendStatusKey(summary.id, lang), true);
+            // We can't easily detect "sent" status for manual external open without more complex hooks
+            // But we can mark it as opened/attempted.
+            // renderSendList() replaces the DOM, so finding the element again is tricky if we re-render immediately.
+            // But we should re-render to show the checkmark.
             renderSendList();
         });
     });
@@ -1345,50 +1395,120 @@ function bindSendListEvents() {
 function renderSendList() {
     const tbody = document.getElementById("billingSendTableBody");
     const header = document.getElementById("billingSendMonthLabel");
-    const empty = document.getElementById("billingSendEmpty");
-    if (!tbody || !header || !empty) return;
+    const emptyDiv = document.getElementById("billingSendEmpty");
+    if (!tbody || !header || !emptyDiv) return;
 
     bindSendListEvents();
     header.textContent = billingState.selectedMonthLabel || "Selected month";
     tbody.innerHTML = "";
 
     if (!billingState.lastGeneratedSummaries.length) {
-        empty.classList.remove("hidden");
+        tbody.closest("table").classList.add("hidden");
+        emptyDiv.classList.remove("hidden");
         return;
     }
-
-    empty.classList.add("hidden");
+    tbody.closest("table").classList.remove("hidden");
+    emptyDiv.classList.add("hidden");
 
     billingState.lastGeneratedSummaries.forEach((summary) => {
-        const tr = document.createElement("tr");
-        tr.className = "border-b last:border-0";
+        const safeId = escapeHtml(summary.id || "");
+        
+        // Load persisted state or default
+        const persisted = billingState.selections.get(safeId) || { lang: 'en', selected: false };
+        const isSelected = persisted.selected;
+        const currentLang = persisted.lang;
+
+        // Check if already sent (any lang? or specific?)
+        // If sent, maybe we show green row already?
         const sentHindi = billingState.sendStatus.get(getSendStatusKey(summary.id, "hi"));
         const sentEnglish = billingState.sendStatus.get(getSendStatusKey(summary.id, "en"));
+        // If "Auto-sent" logic applies, maybe we want to know if *either* was just auto-sent.
+        // But for now, just render normally.
+
+        const tr = document.createElement("tr");
+        const isSentAny = sentHindi || sentEnglish; 
+        
+        // If we want to show "green" row if fully processed? 
+        // User asked "once auto send has been done remove the checkbox and make the row for that tenant green"
+        // So if we detect it's been sent *in this session* or status is true, maybe we do it?
+        // Let's rely on standard logic: if unchecked (removed) and sent, show green.
+        // Actually `handleAutoSend` unchecks it.
+        
+        if (isSentAny && !isSelected) { 
+             // Maybe user wants to send again manually? 
+             // Ideally we shouldn't block manual sending even if auto-sent.
+             // But let's apply the requested style.
+             tr.className = "border-b last:border-0 hover:bg-emerald-50 bg-emerald-50 transition-colors";
+        } else {
+             tr.className = "border-b last:border-0 hover:bg-slate-50 transition-colors";
+        }
+
         const safeName = escapeHtml(summary.name || "");
-        const safeId = escapeHtml(summary.id || "");
         const totalValue = Number(summary.total) || 0;
-        const baseButton =
-            "send-bill-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded border text-[11px] font-semibold transition whitespace-nowrap";
-        const pendingClasses = "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100";
-        const sentClasses = "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-500";
-        const buildButton = (lang, label, sent) => `
-            <button class="${baseButton} ${sent ? sentClasses : pendingClasses}" data-id="${safeId}" data-lang="${lang}">
-                <span class="${sent ? "inline-flex" : "hidden"} items-center justify-center w-4 h-4 rounded-full bg-white text-emerald-600 text-[10px] font-bold">✓</span>
-                <span>${label}</span>
-            </button>
-        `;
+        
+        // Checkbox HTML
+        const checkboxHtml = (isSentAny && !isSelected) ? 
+             `<span class="text-emerald-600 font-bold text-[10px]">✓</span>` :
+             `<input type="checkbox" class="send-check h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" data-id="${safeId}" ${isSelected ? "checked" : ""}>`;
+
         tr.innerHTML = `
-            <td class="px-3 py-2 text-[12px] font-semibold text-slate-800">${safeName}</td>
-            <td class="px-3 py-2 text-[12px] font-semibold text-slate-700">Rs. ${totalValue.toFixed(2)}</td>
-            <td class="px-3 py-2 text-right text-[12px]">
-                <div class="inline-flex items-center gap-2 flex-nowrap">
-                    ${buildButton("hi", "Send in हिन्दी", !!sentHindi)}
-                    ${buildButton("en", "Send in Eng", !!sentEnglish)}
+            <td class="px-3 py-2 w-8 text-center align-middle">
+                 ${checkboxHtml}
+            </td>
+            <td class="px-3 py-2 text-[12px] font-semibold text-slate-800 align-middle">${safeName}</td>
+            <td class="px-3 py-2 text-[12px] font-semibold text-slate-700 align-middle">Rs. ${totalValue.toFixed(2)}</td>
+            
+            <td class="px-3 py-2 text-center align-middle">
+                <div class="flex items-center justify-center gap-1">
+                   <input type="radio" name="lang_${safeId}" value="hi" class="lang-radio h-3 w-3 border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" ${currentLang === 'hi' ? 'checked' : ''} data-id="${safeId}">
+                </div>
+            </td>
+            <td class="px-3 py-2 text-center align-middle">
+                <div class="flex items-center justify-center gap-1">
+                    <input type="radio" name="lang_${safeId}" value="en" class="lang-radio h-3 w-3 border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" ${currentLang === 'en' ? 'checked' : ''} data-id="${safeId}">
+                </div>
+            </td>
+            
+            <td class="px-3 py-2 text-right text-[12px] align-middle">
+                <div class="inline-flex items-center justify-end gap-2">
+                    <button class="send-copy-btn p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100" title="Copy message" data-id="${safeId}">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                    <button class="send-bill-btn inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 text-white text-[10px] font-semibold hover:bg-slate-800 shadow-sm" data-id="${safeId}">
+                        <span>Send</span>
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                    </button>
                 </div>
             </td>
         `;
         tbody.appendChild(tr);
     });
+    
+    // Bind checkbox changes for state persistence
+    tbody.querySelectorAll(".send-check").forEach(cb => {
+        cb.addEventListener("change", (e) => {
+             const id = e.target.dataset.id;
+             const current = billingState.selections.get(id) || { lang: 'en', selected: false };
+             current.selected = e.target.checked;
+             billingState.selections.set(id, current);
+             updateAutoSendButton();
+        });
+    });
+
+    // Bind radio changes for state persistence
+    tbody.querySelectorAll(".lang-radio").forEach(radio => {
+        radio.addEventListener("change", (e) => {
+             if(e.target.checked) {
+                 const id = e.target.dataset.id;
+                 const val = e.target.value;
+                 const current = billingState.selections.get(id) || { lang: 'en', selected: false };
+                 current.lang = val;
+                 billingState.selections.set(id, current);
+             }
+        });
+    });
+    
+    updateAutoSendButton();
 }
 
 function setupModalEvents() {
@@ -1454,7 +1574,155 @@ function setupModalEvents() {
         })
     );
 
+    sendCloseButtons.forEach((btn) =>
+        btn.addEventListener("click", () => {
+            toggleSendList(false);
+        })
+    );
+
+    const toggleAllCheckbox = document.getElementById("billingSendToggleAll");
+    if (toggleAllCheckbox) {
+        toggleAllCheckbox.addEventListener("change", (e) => {
+            const checked = e.target.checked;
+            document.querySelectorAll(".send-check").forEach((cb) => {
+                const id = cb.dataset.id;
+                cb.checked = checked;
+                
+                // Persist state
+                const current = billingState.selections.get(id) || { lang: 'en', selected: false };
+                current.selected = checked;
+                billingState.selections.set(id, current);
+            });
+            updateAutoSendButton();
+        });
+    }
+
+    const autoSendBtn = document.getElementById("billingAutoSendBtn");
+    if (autoSendBtn) {
+        autoSendBtn.addEventListener("click", handleAutoSend);
+    }
+
     applyMetaListeners();
+}
+
+function updateAutoSendButton() {
+    const btn = document.getElementById("billingAutoSendBtn");
+    const countBadge = document.getElementById("billingAutoSendCount");
+    if (!btn || !countBadge) return;
+    
+    // Check persist map or DOM? DOM is source of truth for current interaction, map for re-renders.
+    const checkboxes = Array.from(document.querySelectorAll(".send-check:checked"));
+    const count = checkboxes.length;
+    
+    countBadge.textContent = count;
+    countBadge.classList.toggle("hidden", count === 0);
+    
+    if (count === 0) {
+        btn.classList.add("opacity-50", "cursor-not-allowed");
+        btn.disabled = true;
+    } else {
+        btn.classList.remove("opacity-50", "cursor-not-allowed");
+        btn.disabled = false;
+    }
+}
+
+async function handleAutoSend() {
+    const checkboxes = Array.from(document.querySelectorAll(".send-check:checked"));
+    if (!checkboxes.length) return;
+
+    const btn = document.getElementById("billingAutoSendBtn");
+    if (btn) {
+        btn.textContent = "Sending...";
+        btn.disabled = true;
+    }
+
+    let sentCount = 0;
+    const total = checkboxes.length;
+
+    for (const [index, checkbox] of checkboxes.entries()) {
+        const id = checkbox.dataset.id;
+        const row = checkbox.closest("tr");
+        if(!row) continue;
+
+        // Determine language
+        // Since we persist, we could read from map, but DOM is fine
+        const langRadio = row.querySelector(`input[name="lang_${id}"]:checked`);
+        const lang = langRadio ? langRadio.value : "en";
+        
+        const summary = billingState.lastGeneratedSummaries.find((item) => String(item.id) === String(id));
+        if (!summary) continue;
+        
+        const number = getPrimaryMobile(summary.mobile).replace(/\D/g, "");
+        if (!number) {
+            showToast(`Skipped ${summary.name}: No mobile number`, "error");
+            continue;
+        }
+
+        const message = formatWhatsappMessage(summary, lang);
+        
+        try {
+             if (window.__TAURI__) {
+                 // Pass progress label (1-based index)
+                 const progressLabel = `${index + 1}/${total} Sent`;
+                 
+                 // This is now awaitable and blocks until window closes!
+                 await window.__TAURI__.core.invoke("send_whatsapp_message", { 
+                     phone: number, 
+                     message: message,
+                     progressLabel: progressLabel
+                 });
+                 
+                 billingState.sendStatus.set(getSendStatusKey(summary.id, lang), true);
+                 
+                 // UI Updates on Success
+                 // 1. Remove Checkbox
+                 checkbox.checked = false;
+                 checkbox.disabled = true; 
+                 // Update persist state
+                 const current = billingState.selections.get(id) || { lang, selected: false };
+                 current.selected = false;
+                 billingState.selections.set(id, current);
+
+                 // 2. Make row green logic
+                 row.classList.add("bg-emerald-50");
+                 // Maybe add a "Sent" badge in the checkbox column?
+                 const checkCell = row.querySelector("td:first-child");
+                 if(checkCell) checkCell.innerHTML = `<span class="text-emerald-600 font-bold text-[10px]">✓</span>`;
+
+                 sentCount++;
+             } else {
+                 console.warn("Auto-send only works in Tauri environment");
+                 showToast("Auto-send unavailable in browser mode", "error");
+                 break;
+             }
+        } catch (err) {
+            console.error("Failed to auto-send for " + summary.name, err);
+            showToast(`Failed to send to ${summary.name}`, "error");
+            // If timeout or error, we continue to next? Yes.
+        }
+    }
+    
+    if (btn) {
+        btn.innerHTML = `<span>Auto-send Selected</span> <span id="billingAutoSendCount" class="bg-white/20 px-1.5 rounded text-[10px] hidden">0</span>`;
+        btn.disabled = false;
+        updateAutoSendButton(); // Reset state
+    }
+    
+    showToast(`Auto-send completed. ${sentCount}/${total} sent.`, "success");
+}
+
+function copyToClipboard(text) {
+    if (!navigator.clipboard) {
+         // Fallback
+         const ta = document.createElement('textarea');
+         ta.value = text;
+         document.body.appendChild(ta);
+         ta.select();
+         document.execCommand('copy');
+         document.body.removeChild(ta);
+         return Promise.resolve();
+    }
+    return navigator.clipboard.writeText(text);
 }
 
 /**
