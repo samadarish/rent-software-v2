@@ -1824,7 +1824,7 @@ async function handleAutoSend() {
         try {
              if (window.__TAURI__) {
                  // Pass progress label (1-based index)
-                 const progressLabel = `${index + 1}/${total} Sent`;
+                 const progressLabel = `${index + 1}/${total} Sending`;
                  
                  // This is now awaitable and blocks until window closes!
                  await window.__TAURI__.core.invoke("send_whatsapp_message", { 

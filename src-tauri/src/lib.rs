@@ -527,10 +527,19 @@ async fn send_whatsapp_message(
         function ensureOverlay() {{
             let el = document.getElementById("wa-send-overlay");
             if (el) return el;
+            
+            // Add spinner keyframes
+            if (!document.getElementById('wa-spinner-style')) {{
+                const style = document.createElement('style');
+                style.id = 'wa-spinner-style';
+                style.textContent = '@keyframes wa-spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}';
+                document.head.appendChild(style);
+            }}
+            
             el = document.createElement("div");
             el.id = "wa-send-overlay";
-            el.style.cssText = "position:fixed;top:10px;right:10px;z-index:99999;background:linear-gradient(135deg, #0f2027, #2c5364);color:#fff;padding:8px 16px;border-radius:6px;font:bold 12px sans-serif;box-shadow:0 10px 30px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);";
-            el.innerText = "{}"; 
+            el.style.cssText = "position:fixed;top:10px;right:10px;z-index:99999;background:linear-gradient(135deg, #0f2027, #2c5364);color:#fff;padding:8px 16px;border-radius:6px;font:bold 12px sans-serif;box-shadow:0 10px 30px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);display:flex;align-items:center;gap:8px;";
+            el.innerHTML = '<span class="wa-spinner" style="width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:wa-spin 0.8s linear infinite;"></span><span class="wa-text">{}</span>'; 
             document.body.appendChild(el);
             return el;
         }}
@@ -551,8 +560,7 @@ async fn send_whatsapp_message(
             const el = ensureOverlay();
             
             if (sent) {{
-                el.innerText = "Sent! Closing...";
-                el.style.background = "linear-gradient(to right, #11998e, #38ef7d)";
+                // Close instantly without notification
                 clearInterval(interval);
                 return;
             }}
@@ -561,7 +569,8 @@ async fn send_whatsapp_message(
             
             // Communicate State via Hash
             if (state === "OUT") {{
-                 el.innerText = "Logged Out! Please login on this screen.";
+                 const textSpan = el.querySelector('.wa-text');
+                 if (textSpan) textSpan.innerText = "Logged Out! Please login on this screen.";
                  el.style.background = "linear-gradient(to right, #cb2d3e, #ef473a)";
                  if (!window.location.hash.includes("wa_state=OUT")) {{
                      window.location.hash = "wa_state=OUT";
@@ -570,7 +579,8 @@ async fn send_whatsapp_message(
                  if (!window.location.hash.includes("wa_state=IN") && !window.location.hash.includes("wa_msg_sent")) {{
                      window.location.hash = "wa_state=IN";
                  }}
-                 el.innerText = "{}"; // Restore original progress label
+                 const textSpan = el.querySelector('.wa-text');
+                 if (textSpan) textSpan.innerText = "{}"; // Restore original progress label
                  el.style.background = "linear-gradient(135deg, #0f2027, #2c5364)";
 
                  // Attempt Send
@@ -679,7 +689,7 @@ async fn send_whatsapp_message(
         }
 
         if success {
-            tokio::time::sleep(Duration::from_millis(1000)).await;
+            // Close instantly without delay
             let _ = window.close();
             return Ok(());
         }
