@@ -1192,11 +1192,24 @@ function toggleSendList(show) {
     if (!modal) return;
     if (show) {
         showModal(modal);
+        renderSendList();
+        
+        // START POLLING for Login State Changes (Every 500ms)
+        if (window._billingStatePoller) clearInterval(window._billingStatePoller);
+        window._billingStatePoller = setInterval(() => {
+             // Pass null to force read from storage
+             // This ensures if event was missed, we still catch up
+             updateAutoSendButton(null);
+        }, 500);
+
     } else {
         hideModal(modal);
-    }
-    if (show) {
-        renderSendList();
+        
+        // STOP POLLING
+        if (window._billingStatePoller) {
+            clearInterval(window._billingStatePoller);
+            window._billingStatePoller = null;
+        }
     }
 }
 
@@ -1413,9 +1426,23 @@ function renderSendList() {
     billingState.lastGeneratedSummaries.forEach((summary) => {
         const safeId = escapeHtml(summary.id || "");
         
+        // Logged In Check
+        const isLoggedIn = localStorage.getItem("wa_logged_in") === "true";
+
         // Load persisted state or default
-        const persisted = billingState.selections.get(safeId) || { lang: 'en', selected: false };
-        const isSelected = persisted.selected;
+        // If logged out: force unselected but don't overwrite persistent state yet? 
+        // User said "uncheck everybody".
+        // If logged in: default to selected if not previously set? 
+        
+        let persisted = billingState.selections.get(safeId);
+        
+        // Default Logic if no persistence
+        if (!persisted) {
+             persisted = { lang: 'en', selected: isLoggedIn }; // Select all if logged in by default
+        }
+        
+        // Override if logged out -> always unchecked valid for rendering
+        const isSelected = isLoggedIn ? persisted.selected : false;
         const currentLang = persisted.lang;
 
         // Check if already sent (any lang? or specific?)
@@ -1449,7 +1476,7 @@ function renderSendList() {
         // Checkbox HTML
         const checkboxHtml = (isSentAny && !isSelected) ? 
              `<span class="text-emerald-600 font-bold text-[10px]">✓</span>` :
-             `<input type="checkbox" class="send-check h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" data-id="${safeId}" ${isSelected ? "checked" : ""}>`;
+             `<input type="checkbox" class="send-check h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" data-id="${safeId}" ${isSelected ? "checked" : ""} ${!isLoggedIn ? "disabled" : ""}>`;
 
         tr.innerHTML = `
             <td class="px-3 py-2 w-8 text-center align-middle">
@@ -1472,11 +1499,10 @@ function renderSendList() {
             <td class="px-3 py-2 text-right text-[12px] align-middle">
                 <div class="inline-flex items-center justify-end gap-2">
                     <button class="send-copy-btn p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100" title="Copy message" data-id="${safeId}">
-                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        <svg class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                     </button>
-                    <button class="send-bill-btn inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 text-white text-[10px] font-semibold hover:bg-slate-800 shadow-sm" data-id="${safeId}">
-                        <span>Send</span>
-                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                    <button class="send-bill-btn inline-flex items-center gap-1 px-3 py-1.5 rounded bg-[#25D366] text-white border border-[#20ba5a] text-[12px] font-semibold hover:bg-[#20ba5a] shadow-sm" data-id="${safeId}">
+                        <span>Send Manual</span>
                     </button>
                 </div>
             </td>
@@ -1603,21 +1629,140 @@ function setupModalEvents() {
     }
 
     applyMetaListeners();
+    ensureBillingListeners();
+    updateAutoSendButton();
 }
 
-function updateAutoSendButton() {
+let _billingListenersBound = false;
+function ensureBillingListeners() {
+    if (_billingListenersBound) return;
+    _billingListenersBound = true;
+
+    if (window.__TAURI__) {
+        window.__TAURI__.event.listen("whatsapp-login-success", () => {
+             console.log("Billing: Login Event Received");
+             localStorage.setItem("wa_logged_in", "true"); // Force persist immediately
+             updateAutoSendButton(true);
+        });
+        window.__TAURI__.event.listen("whatsapp-logout", () => {
+             console.log("Billing: Logout Event Received");
+             localStorage.setItem("wa_logged_in", "false"); // Force persist immediately
+             updateAutoSendButton(false);
+        });
+    }
+
+    // Fallback: Check on window focus (e.g. after login window closes)
+    // Add delay to allow main.js to update localStorage from the event first
+    window.addEventListener("focus", () => {
+        console.log("Billing: Window Focussed - Checking State (Delayed)");
+        setTimeout(() => {
+             updateAutoSendButton(null);
+        }, 500);
+    });
+
+    // LINK WITH MAIN APP STATUS (User Request)
+    // This listens to the exact event that updates the navigation/toast
+    document.addEventListener("app:whatsapp-status-change", (e) => {
+         console.log("Billing: App Status Change Detected", e.detail);
+         if (e.detail && typeof e.detail.loggedIn === "boolean") {
+             updateAutoSendButton(e.detail.loggedIn);
+         }
+    });
+}
+
+function updateAutoSendButton(forceState = null) {
     const btn = document.getElementById("billingAutoSendBtn");
-    const countBadge = document.getElementById("billingAutoSendCount");
-    if (!btn || !countBadge) return;
+    const toggleAll = document.getElementById("billingSendToggleAll");
+    // Note: billingAutoSendCount may not exist if button is currently showing "Sign in" state
+    // It gets recreated when we set innerHTML for logged-in state
+    if (!btn) return;
     
-    // Check persist map or DOM? DOM is source of truth for current interaction, map for re-renders.
-    const checkboxes = Array.from(document.querySelectorAll(".send-check:checked"));
-    const count = checkboxes.length;
+    // Use forced state if provided, otherwise check storage
+    const isLoggedIn = forceState !== null ? forceState : (localStorage.getItem("wa_logged_in") === "true");
     
-    countBadge.textContent = count;
-    countBadge.classList.toggle("hidden", count === 0);
+    // Logic for State Transitions
+    // Check if we are physically transitioning by checking if inputs are disabled vs new login state
+    const inputs = document.querySelectorAll(".send-check");
+    const areDisabled = inputs.length > 0 && inputs[0].disabled;
     
-    if (count === 0) {
+    if (!isLoggedIn) {
+        // ==> LOGGED OUT STATE
+        // Disable inputs if not already
+        if (!areDisabled) {
+             inputs.forEach(ci => { ci.disabled = true; ci.checked = false; });
+             if(toggleAll) { toggleAll.disabled = true; toggleAll.checked = false; }
+             // Update persist logic? Maybe just visual for now to keep state safe?
+             // User said "uncheck everybody".
+             inputs.forEach(cb => {
+                 const id = cb.dataset.id;
+                 const current = billingState.selections.get(id) || { lang: 'en', selected: false };
+                 current.selected = false;
+                 billingState.selections.set(id, current);
+             });
+        }
+        
+        // Show Sign In State
+        btn.innerHTML = `<span>To send Sign in to whatsapp</span>`;
+        // Use bg-red-400 for "less red" (standard red is bg-red-500/600, rose is pinkish/red)
+        btn.className = "px-6 py-2.5 rounded bg-red-400 text-white text-[12px] font-semibold hover:bg-red-500 shadow-sm flex items-center gap-2 transform active:scale-95 transition-all";
+        btn.disabled = false;
+        btn.dataset.action = "login";
+        return;
+    }
+
+    // ==> LOGGED IN STATE
+    // Logic: If inputs are disabled (just logged in) OR count is 0 (first load logged in?), 
+    // force enable and CHECK ALL to ensure "Auto-send" is ready to go.
+    
+    // Calculate initial count of selected checkboxes
+    let count = document.querySelectorAll(".send-check:checked").length;
+    
+    // Check if we need to "Activate" the form
+    const needsActivation = areDisabled || count === 0;
+
+    if (needsActivation) {
+         console.log("Billing: Activating Checkboxes (Enable & Select All)");
+         inputs.forEach(ci => { 
+             ci.disabled = false; 
+             ci.checked = true; 
+             
+             // Update persistent state so it sticks
+             const id = ci.dataset.id;
+             const current = billingState.selections.get(id) || { lang: 'en', selected: false };
+             current.selected = true;
+             billingState.selections.set(id, current);
+         });
+         
+         if(toggleAll) { 
+             toggleAll.disabled = false; 
+             toggleAll.checked = true; 
+         }
+         
+         // Re-query checked inputs to update count correctly below
+         const freshCheckboxes = Array.from(document.querySelectorAll(".send-check:checked"));
+         // Update local variable
+         count = freshCheckboxes.length; 
+    } else {
+        // Just ensure they are enabled if they were disabled
+        if (areDisabled) {
+             console.log("Billing: Enabling Checkboxes only");
+             inputs.forEach(ci => { ci.disabled = false; });
+             if(toggleAll) toggleAll.disabled = false;
+        }
+    }
+
+    // Restore Auto Send State
+    btn.dataset.action = "send";
+    
+    // Explicitly reset classes
+    btn.className = "px-6 py-2.5 rounded bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 shadow-sm flex items-center gap-2 transform active:scale-95 transition-all";
+    
+    // Re-calculate count
+    const finalCount = document.querySelectorAll(".send-check:checked").length;
+    
+    btn.innerHTML = `<span>Auto-send Selected</span> <span id="billingAutoSendCount" class="bg-white/20 px-1.5 rounded text-[10px] ${finalCount === 0 ? 'hidden' : ''}">${finalCount}</span>`;
+    
+    if (finalCount === 0) {
         btn.classList.add("opacity-50", "cursor-not-allowed");
         btn.disabled = true;
     } else {
@@ -1627,10 +1772,26 @@ function updateAutoSendButton() {
 }
 
 async function handleAutoSend() {
+    const btn = document.getElementById("billingAutoSendBtn");
+
+    // Handle Login Action if button state is 'login'
+    if (btn && btn.dataset.action === "login") {
+        try {
+            if (window.__TAURI__) {
+                await window.__TAURI__.core.invoke("open_whatsapp");
+            } else {
+                alert("Cannot open WhatsApp in browser mode");
+            }
+        } catch (err) {
+            console.error("Failed to open WhatsApp login", err);
+            showToast("Failed to open WhatsApp window", "error");
+        }
+        return;
+    }
+
     const checkboxes = Array.from(document.querySelectorAll(".send-check:checked"));
     if (!checkboxes.length) return;
 
-    const btn = document.getElementById("billingAutoSendBtn");
     if (btn) {
         btn.textContent = "Sending...";
         btn.disabled = true;

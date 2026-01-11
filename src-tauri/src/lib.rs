@@ -386,60 +386,58 @@ async fn open_whatsapp(app: tauri::AppHandle) -> Result<(), String> {
     let script = r##"
     (() => {
         "use strict";
-        const STATE = { IN: "IN", OUT: "OUT", UNKNOWN: "UNKNOWN" };
-        let isSuccessHandled = false;
-
-        function detect() {
-            const paneSide = document.getElementById("pane-side");
-            const main = document.getElementById("main");
-            if (paneSide || main) return STATE.IN;
-            const app = document.getElementById("app") || document.body;
-            const qrCanvas = app ? app.querySelector("div[data-ref] canvas, canvas") : null;
-            if (qrCanvas) return STATE.OUT;
-            return STATE.UNKNOWN;
+        
+        function getRawState() {
+            // Strong indicators for Logged IN
+            if (document.getElementById("pane-side")) return "IN";
+            if (document.getElementById("main")) return "IN";
+            if (document.querySelector("div[role='textbox']")) return "IN";
+            
+            // Strong indicators for Logged OUT (Login Screen)
+            const bodyText = document.body.innerText || "";
+            if (bodyText.includes("Use WhatsApp on your computer")) return "OUT";
+            if (document.querySelector("canvas")) return "OUT"; // QR Code
+            if (document.querySelector('[data-testid="qrcode"]')) return "OUT";
+            if (document.querySelector('.landing-wrapper')) return "OUT";
+            
+            return "UNKNOWN";
         }
 
         function ensureOverlay() {
-            let el = document.getElementById("wa-login-overlay");
+            let el = document.getElementById("wa-state-overlay");
             if (el) return el;
             el = document.createElement("div");
-            el.id = "wa-login-overlay";
-            // Default small overlay style
-            el.style.cssText = "position:fixed;top:12px;right:12px;z-index:2147483647;background:#111;color:#fff;padding:10px 12px;border-radius:12px;font:13px/1.35 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.18);opacity:.95;pointer-events:none;transition:all 0.5s ease;";
-            el.innerHTML = '<div style="font-weight:700;margin-bottom:4px;">WhatsApp Web</div><div id="wa-login-status" style="font-weight:600;">Starting…</div>';
+            el.id = "wa-state-overlay";
+            el.style.cssText = "position:fixed;top:10px;right:10px;z-index:999999;background:rgba(0,0,0,0.8);color:white;padding:5px 10px;border-radius:4px;font-size:12px;pointer-events:none;font-weight:bold;";
             (document.body || document.documentElement).appendChild(el);
             return el;
         }
 
-        function setStatus(state) {
-            if (isSuccessHandled) return;
-
-            ensureOverlay();
-            const s = document.getElementById("wa-login-status");
-            if (!s) return;
-
-            if (state === STATE.IN) {
-                isSuccessHandled = true;
-                s.textContent = "✅ Logged in";
-                
-                // Signal backend to close immediately
-                document.title = "WA_LOGGED_IN_SUCCESS";
-                if (window.location.hash !== "#wa_login_success") {
-                    window.location.hash = "wa_login_success";
+        setInterval(() => {
+            const state = getRawState();
+            
+            // Use URL Hash for signaling (Title is prone to race conditions with WA)
+            if (state !== "UNKNOWN") {
+                const targetHash = "#wa_state=" + state;
+                if (window.location.hash !== targetHash) {
+                    window.location.hash = targetHash;
                 }
-
-            } else if (state === STATE.OUT) {
-                s.textContent = "🔒 Logged out (QR screen)";
-            } else {
-                s.textContent = "⏳ Loading / Unknown";
             }
-        }
 
-        function tick() {
-            const state = detect();
-            setStatus(state);
-        }
-        setInterval(tick, 1000);
+            // Visual Overlay
+            const el = ensureOverlay();
+            if (state === "IN") {
+                el.innerText = "✅ Logged In";
+                el.style.background = "rgba(16, 185, 129, 0.9)"; // Green
+            } else if (state === "OUT") { 
+                el.innerText = "🔒 Logged Out (QR)";
+                el.style.background = "rgba(244, 63, 94, 0.9)"; // Red
+            } else {
+                el.innerText = "⏳ Detecting...";
+                el.style.background = "rgba(0, 0, 0, 0.8)";
+            }
+
+        }, 200);
     })();
     "##;
 
@@ -454,39 +452,50 @@ async fn open_whatsapp(app: tauri::AppHandle) -> Result<(), String> {
 
     let window = win_builder.build().map_err(|e| e.to_string())?;
 
-    // Spawn a polling task to check for the title change
     let win_clone = window.clone();
     let app_clone = app.clone();
 
     std::thread::spawn(move || {
+        let mut last_processed_state = String::from("UNKNOWN");
+
         loop {
             std::thread::sleep(std::time::Duration::from_millis(500));
-            let mut detected = false;
 
-            // Check Title
-            if let Ok(title) = win_clone.title() {
-                if title.contains("WA_LOGGED_IN_SUCCESS") {
-                    println!("WA Login Detected via Title");
-                    detected = true;
-                }
+            // Use URL for reliability
+            let url = match win_clone.url() {
+                Ok(u) => u,
+                Err(_) => break, // Window closed
+            };
+            let url_str = url.as_str();
+
+            let current_state = if url_str.contains("#wa_state=IN") {
+                "IN"
+            } else if url_str.contains("#wa_state=OUT") {
+                "OUT"
             } else {
-                break; // Window closed
+                "UNKNOWN"
+            };
+
+            if current_state == "UNKNOWN" {
+                continue;
             }
 
-            // Check URL Hash (fallback)
-            if !detected {
-                if let Ok(url) = win_clone.url() {
-                    if url.as_str().contains("wa_login_success") {
-                        println!("WA Login Detected via URL Hash");
-                        detected = true;
-                    }
+            if current_state != last_processed_state {
+                if current_state == "IN" {
+                    println!("Rust: Login Detected (Hash)");
+                    let _ = app_clone.emit("whatsapp-login-success", ());
+
+                    // Allow event propagation
+                    std::thread::sleep(std::time::Duration::from_millis(1000));
+
+                    // Close window instantly on login
+                    let _ = win_clone.close();
+                    break;
+                } else if current_state == "OUT" {
+                    println!("Rust: Logout Detected (Hash)");
+                    let _ = app_clone.emit("whatsapp-logout", ());
                 }
-            }
-
-            if detected {
-                let _ = app_clone.emit("whatsapp-login-success", ());
-                let _ = win_clone.close();
-                break;
+                last_processed_state = current_state.to_string();
             }
         }
     });
@@ -520,56 +529,74 @@ async fn send_whatsapp_message(
             if (el) return el;
             el = document.createElement("div");
             el.id = "wa-send-overlay";
-            el.style.cssText = "position:fixed;top:10px;right:10px;z-index:99999;background:linear-gradient(135deg, #0f2027, #203a43, #2c5364);color:#fff;padding:8px 16px;border-radius:20px;font:bold 12px sans-serif;box-shadow:0 4px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);";
+            el.style.cssText = "position:fixed;top:10px;right:10px;z-index:99999;background:linear-gradient(135deg, #0f2027, #2c5364);color:#fff;padding:8px 16px;border-radius:6px;font:bold 12px sans-serif;box-shadow:0 10px 30px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);";
             el.innerText = "{}"; 
             document.body.appendChild(el);
             return el;
         }}
 
-        // Helper to find button by aria-label or data-icon
         function findSendButton() {{
-            return document.querySelector('span[data-icon="send"]') || 
-                   document.querySelector('button[aria-label="Send"]');
+             return document.querySelector('span[data-icon="send"]') || 
+                    document.querySelector('button[aria-label="Send"]');
+        }}
+
+        function getRawState() {{
+            if (document.getElementById("pane-side") || document.getElementById("main")) return "IN";
+            const body = document.body.innerText || "";
+            if (body.includes("Use WhatsApp on your computer") || document.querySelector("canvas")) return "OUT";
+            return "UNKNOWN";
         }}
 
         const interval = setInterval(() => {{
-            ensureOverlay();
+            const el = ensureOverlay();
             
             if (sent) {{
+                el.innerText = "Sent! Closing...";
+                el.style.background = "linear-gradient(to right, #11998e, #38ef7d)";
                 clearInterval(interval);
                 return;
             }}
 
-            const btn = findSendButton();
-            if (btn) {{
-                 // Simulate click
-                const event = new MouseEvent('click', {{
-                    view: window,
-                    bubbles: true,
-                    cancelable: true
-                }});
-                btn.dispatchEvent(event);
-                btn.click();
-                
-                sent = true;
-                
-                // Allow some time for network request
-                setTimeout(() => {{
-                    document.title = "WA_MSG_SENT_SUCCESS";
-                    window.location.hash = "wa_msg_sent_success";
-                }}, 3000); // 3s wait after click
+            const state = getRawState();
+            
+            // Communicate State via Hash
+            if (state === "OUT") {{
+                 el.innerText = "Logged Out! Please login on this screen.";
+                 el.style.background = "linear-gradient(to right, #cb2d3e, #ef473a)";
+                 if (!window.location.hash.includes("wa_state=OUT")) {{
+                     window.location.hash = "wa_state=OUT";
+                 }}
+            }} else if (state === "IN") {{
+                 if (!window.location.hash.includes("wa_state=IN") && !window.location.hash.includes("wa_msg_sent")) {{
+                     window.location.hash = "wa_state=IN";
+                 }}
+                 el.innerText = "{}"; // Restore original progress label
+                 el.style.background = "linear-gradient(135deg, #0f2027, #2c5364)";
+
+                 // Attempt Send
+                 const btn = findSendButton();
+                 if (btn) {{
+                    const event = new MouseEvent('click', {{ view: window, bubbles: true, cancelable: true }});
+                    btn.dispatchEvent(event);
+                    btn.click();
+                    
+                    sent = true;
+                    setTimeout(() => {{
+                        document.title = "WA_MSG_SENT_SUCCESS";
+                        window.location.hash = "wa_msg_sent_success";
+                    }}, 3000); 
+                 }}
             }}
         }}, 1000);
 
-        // Safety timeout 45s
         setTimeout(() => {{
             if (!sent) {{
                 document.title = "WA_MSG_SENT_TIMEOUT";
             }}
-        }}, 45000);
+        }}, 600000); // 10 minute timeout to allow for login
     }})();
     "##,
-        progress_label
+        progress_label, progress_label
     );
 
     let url_str = format!(
@@ -595,42 +622,63 @@ async fn send_whatsapp_message(
 
     let window = win_builder.build().map_err(|e| e.to_string())?;
 
-    // Block and poll for success directly in this async function behavior
-    // We use tokio::time::sleep to yield but keep this task alive
+    // Block and poll for success directly
     let start = Instant::now();
     let mut success = false;
+    let mut last_send_state = String::from("UNKNOWN");
+    let app_clone = app.clone();
 
     loop {
-        // Yield to event loop
         tokio::time::sleep(Duration::from_millis(500)).await;
 
-        if start.elapsed().as_secs() > 60 {
+        if start.elapsed().as_secs() > 600 {
+            // 10 minutes matches JS
             let _ = window.close();
             break;
         }
 
-        // We must run window interactions on valid thread/context or just check normally.
-        // tauri::Window is thread-safe cloneable.
+        if let Ok(url) = window.url() {
+            let url_str = url.as_str();
 
-        if let Ok(title) = window.title() {
-            if title.contains("WA_MSG_SENT_SUCCESS") {
+            // Check Success
+            if url_str.contains("wa_msg_sent_success") {
                 success = true;
             }
+
+            // Check Login State Changes
+            let current_send_state = if url_str.contains("wa_state=OUT") {
+                "OUT"
+            } else if url_str.contains("wa_state=IN") {
+                "IN"
+            } else {
+                "UNKNOWN"
+            };
+
+            if current_send_state != "UNKNOWN" && current_send_state != last_send_state {
+                if current_send_state == "OUT" {
+                    println!("Rust (Send): Logout Detected");
+                    let _ = app_clone.emit("whatsapp-logout", ());
+                } else if current_send_state == "IN" {
+                    println!("Rust (Send): Login Detected");
+                    let _ = app_clone.emit("whatsapp-login-success", ());
+                }
+                last_send_state = current_send_state.to_string();
+            }
         } else {
-            // Window closed manually by user or error
+            // Window closed
             break;
         }
 
+        // Double check title
         if !success {
-            if let Ok(url) = window.url() {
-                if url.as_str().contains("wa_msg_sent_success") {
+            if let Ok(title) = window.title() {
+                if title.contains("WA_MSG_SENT_SUCCESS") {
                     success = true;
                 }
             }
         }
 
         if success {
-            // Wait small buffer
             tokio::time::sleep(Duration::from_millis(1000)).await;
             let _ = window.close();
             return Ok(());

@@ -58,9 +58,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   const waIcon = document.getElementById("whatsappIconState");
 
   function setWhatsAppLoggedIn() {
-    if (waStatus) waStatus.innerText = "Logged in";
-    if (waIcon) waIcon.innerText = "✅";
+    if (waStatus) {
+        waStatus.innerText = "Logged in";
+        waStatus.classList.remove("text-rose-500", "font-bold");
+        waStatus.classList.add("text-emerald-600", "font-bold");
+    }
     localStorage.setItem("wa_logged_in", "true");
+    document.dispatchEvent(new CustomEvent("app:whatsapp-status-change", { detail: { loggedIn: true } }));
   }
 
   if (localStorage.getItem("wa_logged_in") === "true") {
@@ -87,6 +91,21 @@ document.addEventListener("DOMContentLoaded", async () => {
           setWhatsAppLoggedIn();
           showToast("WhatsApp logged in successfully", "success");
       });
+
+      window.__TAURI__.event.listen("whatsapp-logout", () => {
+          setWhatsAppLoggedOut();
+          showToast("WhatsApp logged out", "info");
+      });
+  }
+
+  function setWhatsAppLoggedOut() {
+    if (waStatus) {
+        waStatus.innerText = "Sign in";
+        waStatus.classList.remove("text-emerald-600");
+        waStatus.classList.add("text-rose-500");
+    }
+    localStorage.removeItem("wa_logged_in");
+    document.dispatchEvent(new CustomEvent("app:whatsapp-status-change", { detail: { loggedIn: false } }));
   }
 
   document.addEventListener("sync:completed", () => {
