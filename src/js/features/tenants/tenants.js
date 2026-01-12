@@ -151,6 +151,12 @@ function setTenantModalGrnToggleVisibility(show) {
     }
 }
 
+function setTenantModalRentVisibility(show) {
+    const wrap = document.getElementById("tenantModalRentWrap");
+    if (!wrap) return;
+    wrap.classList.toggle("hidden", !show);
+}
+
 /**
  * Computes a unique identity key for a tenant entry to collapse duplicates.
  * @param {object} raw
@@ -570,10 +576,10 @@ function syncTenantModalPicklists() {
  * @param {string} selectedUnitId
  * @param {string} tenancyId
  */
-function populateUnitDropdown(selectedUnitId, tenancyId) {
+function populateUnitDropdown(selectedUnitId, tenancyId, preserveSelection = true) {
     const select = document.getElementById("tenantModalUnit");
     if (!select) return;
-    const previous = select.value;
+    const previous = preserveSelection ? select.value : "";
     select.innerHTML = '<option value="">Select unit</option>';
 
     const available = unitCache.filter(
@@ -593,7 +599,7 @@ function populateUnitDropdown(selectedUnitId, tenancyId) {
 
     if (selectedUnitId && Array.from(select.options).some((o) => o.value === selectedUnitId)) {
         select.value = selectedUnitId;
-    } else if (previous && Array.from(select.options).some((o) => o.value === previous)) {
+    } else if (preserveSelection && previous && Array.from(select.options).some((o) => o.value === previous)) {
         select.value = previous;
     }
 }
@@ -1309,15 +1315,17 @@ function populateTenantModal(tenant, mode = "tenant") {
 
     toggleTenantModalSections(mode);
 
+    const isNewTenancy = mode === "tenancy" && !!tenant.isNewTenancy;
     const templateData = tenant.templateData || {};
 
     syncTenantModalPicklists();
-    populateUnitDropdown(tenant.unitId || templateData.unit_id, tenant.tenancyId || templateData.tenancy_id);
+    const selectedUnitId = isNewTenancy ? "" : tenant.unitId || templateData.unit_id || "";
+    populateUnitDropdown(selectedUnitId, tenant.tenancyId || templateData.tenancy_id, !isNewTenancy);
 
     const title = document.getElementById("tenantModalTitle");
     if (title) {
         const statusLabel = tenant.activeTenant ? "Active" : "Inactive";
-        const unitLabel = tenant.unitNumber || templateData.unit_number || templateData.unitNumber;
+        const unitLabel = isNewTenancy ? "" : tenant.unitNumber || templateData.unit_number || templateData.unitNumber;
         if (mode === "tenancy") {
             if (unitLabel) {
                 title.textContent = `Tenancy Details — ${unitLabel} (${statusLabel})`;
@@ -1370,12 +1378,45 @@ function populateTenantModal(tenant, mode = "tenant") {
         tenantModalPetPolicy: tenant.petPolicy || templateData.pet_text_area || "",
     };
 
+    if (isNewTenancy) {
+        [
+            "tenantModalGrn",
+            "tenantModalUnit",
+            "tenantModalWing",
+            "tenantModalUnitNumber",
+            "tenantModalFloor",
+            "tenantModalDirection",
+            "tenantModalMeter",
+            "tenantModalRent",
+            "tenantModalDeposit",
+            "tenantModalPayable",
+            "tenantModalRentRevisionUnit",
+            "tenantModalRentRevisionNumber",
+            "tenantModalLateRent",
+            "tenantModalGracePeriod",
+            "tenantModalAgreementDate",
+            "tenantModalCommencement",
+            "tenantModalEndDate",
+            "tenantModalTenantNotice",
+            "tenantModalLandlordNotice",
+            "tenantModalVacateReason",
+            "tenantModalLandlord",
+            "tenantModalLandlordAadhaar",
+            "tenantModalLandlordAddress",
+            "tenantModalPetPolicy",
+        ].forEach((id) => {
+            fields[id] = "";
+        });
+    }
+
     Object.entries(fields).forEach(([id, value]) => {
         const el = document.getElementById(id);
         if (el) el.value = value;
     });
 
-    const showNoGrnToggle = mode === "tenancy" && !!tenant.isNewTenancy;
+    setTenantModalRentVisibility(isNewTenancy);
+
+    const showNoGrnToggle = isNewTenancy;
     setTenantModalGrnToggleVisibility(showNoGrnToggle);
     if (showNoGrnToggle) {
         const grnValue = fields.tenantModalGrn || "";
@@ -1397,7 +1438,7 @@ function populateTenantModal(tenant, mode = "tenant") {
         });
     }
 
-    applyUnitSelectionToModal(tenant.unitId || templateData.unit_id || "");
+    applyUnitSelectionToModal(selectedUnitId);
 
     if (mode === "rent") {
         renderRentHistory(tenant.rentAmount || templateData.rent_amount || "");
