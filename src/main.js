@@ -46,6 +46,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDraftUi();
   initToastHistoryUi();
   initNotesFeature();
+  const offlineOverlay = document.getElementById("offlineOverlay");
+  const appShell = document.getElementById("appShell");
+  const setOfflineState = (offline) => {
+    if (offlineOverlay) offlineOverlay.classList.toggle("hidden", !offline);
+    if (appShell) appShell.style.pointerEvents = offline ? "none" : "";
+    document.body.classList.toggle("overflow-hidden", offline);
+  };
+  setOfflineState(!navigator.onLine);
 
   // --- FEATURE: Sync Now ---
   document.getElementById("manualSyncBtn")?.addEventListener("click", () => {
@@ -161,11 +169,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   await Promise.allSettled(initialFetches);
 
   updateConnectionIndicator(navigator.onLine ? "online" : "offline");
+  setOfflineState(!navigator.onLine);
 
   const handleOnline = () => {
     updateConnectionIndicator("online", "Internet connected");
+    setOfflineState(false);
     flushSyncQueue();
   };
   window.addEventListener("online", handleOnline);
-  window.addEventListener("offline", () => updateConnectionIndicator("offline", "No internet"));
+  window.addEventListener("offline", () => {
+    updateConnectionIndicator("offline", "No internet");
+    setOfflineState(true);
+  });
 });

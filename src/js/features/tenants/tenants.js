@@ -1155,6 +1155,10 @@ function updateSidebarSnapshot() {
                 const safeRent = escapeHtml(
                     formatRent(h.currentRent ?? t.currentRent ?? t.rentAmount)
                 );
+                const effectiveStatus = (h.status || t.status || "").toLowerCase();
+                const vacateButton = effectiveStatus === "active"
+                    ? `<button type="button" class="px-2 py-1 rounded text-[10px] bg-rose-50 border border-rose-200 text-rose-700 font-semibold hover:bg-rose-100 tenant-vacate-btn">Vacate</button>`
+                    : "";
                 card.innerHTML = `
                     <div class="flex items-center justify-between gap-2">
                         <div>
@@ -1167,7 +1171,7 @@ function updateSidebarSnapshot() {
                               <div class="flex gap-1">
                                   <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-slate-200 font-semibold tenancy-edit-btn">View</button>
                                   <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-indigo-200 text-indigo-700 font-semibold rent-history-btn">Rent Data</button>
-                                  <button type="button" class="px-2 py-1 rounded text-[10px] bg-rose-50 border border-rose-200 text-rose-700 font-semibold hover:bg-rose-100 tenant-vacate-btn">Vacate</button>
+                                  ${vacateButton}
                               </div>
                           </div>
                       </div>
@@ -1523,9 +1527,7 @@ function populateTenantModal(tenant, mode = "tenant") {
         tenantModalCommencement: formatDateForInput(
             tenant.tenancyCommencementRaw || templateData.tenancy_comm_raw || ""
         ),
-        tenantModalEndDate: formatDateForInput(tenant.tenancyEndDate || templateData.tenancy_end_raw || ""),
         tenantModalMobile: tenant.tenantMobile || templateData.tenant_mobile || "",
-        tenantModalVacateReason: tenant.vacateReason || "",
         tenantModalInitialMeter: "",
         tenantModalRentRevisionUnit: tenant.rentRevisionUnit || templateData["rent_rev year_mon"] || "",
         tenantModalRentRevisionNumber: tenant.rentRevisionNumber || templateData.rent_rev_number || "",
@@ -1550,10 +1552,8 @@ function populateTenantModal(tenant, mode = "tenant") {
             "tenantModalGracePeriod",
             "tenantModalAgreementDate",
             "tenantModalCommencement",
-            "tenantModalEndDate",
             "tenantModalTenantNotice",
             "tenantModalLandlordNotice",
-            "tenantModalVacateReason",
             "tenantModalLandlord",
             "tenantModalLandlordAadhaar",
             "tenantModalLandlordAddress",
@@ -1664,9 +1664,7 @@ async function saveTenantModal() {
         tenancyCommencementRaw: normalizeDateInputValue(
             document.getElementById("tenantModalCommencement")?.value || ""
         ),
-        tenancyEndRaw: normalizeDateInputValue(document.getElementById("tenantModalEndDate")?.value || ""),
         tenantMobile: document.getElementById("tenantModalMobile")?.value || "",
-        vacateReason: document.getElementById("tenantModalVacateReason")?.value || "",
         unitNumber: document.getElementById("tenantModalUnitNumber")?.value || "",
         rentRevisionUnit: document.getElementById("tenantModalRentRevisionUnit")?.value || "",
         rentRevisionNumber: document.getElementById("tenantModalRentRevisionNumber")?.value || "",
@@ -1704,7 +1702,7 @@ async function saveTenantModal() {
                 activeTenantForModal.isNewTenancy || typeof updates.activeTenant !== "undefined"
                     ? updates.activeTenant ?? true
                     : activeTenantForModal.activeTenant,
-            tenancyEndDate: updates.tenancyEndRaw || activeTenantForModal.tenancyEndDate,
+            tenancyEndDate: activeTenantForModal.tenancyEndDate,
             unitId: updates.unitId || activeTenantForModal.unitId,
             family: familyMembers,
             isNewTenancy: false,
