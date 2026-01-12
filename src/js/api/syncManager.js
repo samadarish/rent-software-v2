@@ -26,6 +26,7 @@ const WRITE_INVALIDATIONS = {
     deleteLandlord: ["landlords"],
     saveTenant: ["tenants", "units"],
     updateTenant: ["tenants", "units"],
+    vacateTenancy: ["tenants", "units"],
     saveClauses: ["clauses"],
     savePayment: ["payments", "billsminimal", "generatedbills"],
     deleteAttachment: ["payments"],

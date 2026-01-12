@@ -1,5 +1,5 @@
 use rusqlite::{params, Connection};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{self, Read};
 use std::path::PathBuf;
@@ -30,6 +30,12 @@ struct DbState {
 struct CacheEntry {
     value: serde_json::Value,
     updated_at: i64,
+}
+
+#[derive(Deserialize)]
+struct CacheSetItem {
+    key: String,
+    value: serde_json::Value,
 }
 
 #[derive(Serialize)]
@@ -210,6 +216,35 @@ fn cache_set(
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+fn cache_set_many(
+    state: tauri::State<DbState>,
+    entries: Vec<CacheSetItem>,
+) -> Result<bool, String> {
+    if entries.is_empty() {
+        return Ok(true);
+    }
+    let mut conn = state
+        .conn
+        .lock()
+        .map_err(|_| "Database lock poisoned".to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let updated_at = now_ms();
+    for entry in entries {
+        if entry.key.trim().is_empty() {
+            continue;
+        }
+        let payload = serde_json::to_string(&entry.value).map_err(|e| e.to_string())?;
+        tx.execute(
+            "INSERT OR REPLACE INTO local_cache (key, value, updated_at) VALUES (?1, ?2, ?3)",
+            params![entry.key, payload, updated_at],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(true)
 }
 
 #[tauri::command]
@@ -719,6 +754,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             cache_get,
             cache_set,
+            cache_set_many,
             cache_delete,
             cache_delete_prefix,
             queue_add,

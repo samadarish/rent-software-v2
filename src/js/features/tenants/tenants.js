@@ -3,6 +3,7 @@ import {
     getRentRevisions,
     saveRentRevision,
     updateTenantRecord,
+    vacateTenantTenancy,
 } from "../../api/sheets.js";
 import { getLocalList, LOCAL_KEYS } from "../../api/localStore.js";
 import { buildUnitLabel, formatCurrency, normalizeMonthKey, toOrdinal } from "../../utils/formatters.js";
@@ -34,6 +35,8 @@ let tenantModalEditable = false;
 let tenantModalMode = "tenant"; // tenant | tenancy
 let familySnapshotRequestId = 0;
 let familyModalRequestId = 0;
+let activeVacateContext = null;
+let vacateActionPending = false;
 
 const statusClassMap = {
     active: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -406,6 +409,120 @@ function closeFamilyModal() {
     const modal = document.getElementById("familySnapshotModal");
     if (modal) hideModal(modal);
     familyModalRequestId += 1;
+}
+
+function openVacateModal(tenancy, tenant) {
+    if (!tenancy || !tenant) {
+        showToast("Select a tenancy first", "warning");
+        return;
+    }
+    activeVacateContext = { tenancy, tenant };
+    const modal = document.getElementById("vacateModal");
+    if (!modal) return;
+    const title = document.getElementById("vacateModalTitle");
+    const endDateInput = document.getElementById("vacateEndDateInput");
+    const reasonInput = document.getElementById("vacateReasonInput");
+
+    const unitLabel = tenancy.unitLabel || tenant.unitLabel || tenant.unitNumber || "";
+    if (title) {
+        title.textContent = unitLabel ? `Vacate - ${unitLabel}` : "Vacate tenancy";
+    }
+    if (endDateInput) {
+        endDateInput.value = formatDateForInput(tenancy.endDate || tenant.tenancyEndDate || "");
+    }
+    if (reasonInput) {
+        reasonInput.value = tenant.vacateReason || "";
+    }
+
+    showModal(modal);
+}
+
+function closeVacateModal() {
+    const modal = document.getElementById("vacateModal");
+    if (modal) hideModal(modal);
+    activeVacateContext = null;
+}
+
+async function handleVacateConfirm() {
+    if (vacateActionPending) return;
+
+    const endDateInput = document.getElementById("vacateEndDateInput");
+    const reasonInput = document.getElementById("vacateReasonInput");
+    const endDate = endDateInput?.value || "";
+    const vacateReason = reasonInput?.value?.trim() || "";
+
+    if (!endDate) {
+        showToast("Tenant end date is required", "warning");
+        return;
+    }
+    if (!vacateReason) {
+        showToast("Vacate reason is required", "warning");
+        return;
+    }
+
+    const context = activeVacateContext;
+    if (!context?.tenant || !context?.tenancy) {
+        showToast("Select a tenancy first", "warning");
+        return;
+    }
+
+    const tenantId =
+        context.tenant.tenantId ||
+        context.tenant.tenant_id ||
+        context.tenant.templateData?.tenant_id ||
+        "";
+    const tenancyId =
+        context.tenancy.tenancyId ||
+        context.tenant.tenancyId ||
+        context.tenant.tenancy_id ||
+        context.tenant.templateData?.tenancy_id ||
+        "";
+
+    if (!tenantId || !tenancyId) {
+        showToast("Unable to resolve tenancy details", "error");
+        return;
+    }
+
+    const confirmBtn = document.getElementById("vacateConfirmBtn");
+    vacateActionPending = true;
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.classList.add("opacity-60");
+    }
+
+    try {
+        const res = await vacateTenantTenancy({
+            tenantId,
+            tenancyId,
+            endDate,
+            vacateReason,
+        });
+        if (res?.ok === false) {
+            showToast(res?.message || "Failed to vacate tenancy", "error");
+            return;
+        }
+
+        closeVacateModal();
+
+        const updated = tenantCache.find((t) => {
+            const matchTenancy = (t.tenancyId || t.tenancy_id || "").toString() === tenancyId.toString();
+            const matchTenant = (t.tenantId || t.tenant_id || "").toString() === tenantId.toString();
+            return matchTenancy || matchTenant;
+        });
+        if (updated) {
+            selectedTenantForSidebar = updated;
+        }
+        updateSidebarSnapshot();
+    } catch (err) {
+        console.error("Vacate tenancy failed", err);
+        showToast("Failed to vacate tenancy", "error");
+    } finally {
+        vacateActionPending = false;
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.classList.remove("opacity-60");
+        }
+    }
 }
 
 function renderRentHistory(baseRent) {
@@ -1047,35 +1164,52 @@ function updateSidebarSnapshot() {
                         </div>
                         <div class="flex flex-col gap-1 items-end">
                             <span class="self-end">${statusPill.outerHTML}</span>
-                            <div class="flex gap-1">
-                                <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-slate-200 font-semibold tenancy-edit-btn">View</button>
-                                <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-indigo-200 text-indigo-700 font-semibold rent-history-btn">Rent revisions</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                const pillHolder = card.querySelector("span.self-end");
-                if (pillHolder) pillHolder.replaceWith(statusPill);
-                const rentBtn = card.querySelector(".rent-history-btn");
-                if (rentBtn) {
-                    rentBtn.dataset.tenancyId =
-                        card.dataset.tenancyId ||
-                        t.tenancyId ||
-                        t.tenancy_id ||
-                        t.templateData?.tenancy_id ||
-                        "";
-                    rentBtn.dataset.grn = t.grnNumber || t.grn_number || t.templateData?.grn_number || "";
-                    rentBtn.dataset.unitLabel = h.unitLabel || t.unitLabel || t.unitNumber || t.templateData?.unit_number || "";
-                    rentBtn.dataset.startDate = h.startDate || t.tenancyCommencement || t.templateData?.tenancy_comm_raw || "";
-                    rentBtn.dataset.endDate = h.endDate || t.tenancyEndDate || t.templateData?.tenancy_end_raw || "";
-                    rentBtn.dataset.status = h.status || t.status || "";
-                    rentBtn.dataset.currentRent =
-                        h.currentRent || h.rentAmount || t.currentRent || t.rentAmount || t.templateData?.rent_amount || "";
-                }
-                historyList.appendChild(card);
-            });
-        }
-    }
+                              <div class="flex gap-1">
+                                  <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-slate-200 font-semibold tenancy-edit-btn">View</button>
+                                  <button type="button" class="px-2 py-1 rounded text-[10px] bg-white border border-indigo-200 text-indigo-700 font-semibold rent-history-btn">Rent Data</button>
+                                  <button type="button" class="px-2 py-1 rounded text-[10px] bg-rose-50 border border-rose-200 text-rose-700 font-semibold hover:bg-rose-100 tenant-vacate-btn">Vacate</button>
+                              </div>
+                          </div>
+                      </div>
+                  `;
+                  const pillHolder = card.querySelector("span.self-end");
+                  if (pillHolder) pillHolder.replaceWith(statusPill);
+                  const rentBtn = card.querySelector(".rent-history-btn");
+                  const vacateBtn = card.querySelector(".tenant-vacate-btn");
+                  if (rentBtn) {
+                      rentBtn.dataset.tenancyId =
+                          card.dataset.tenancyId ||
+                          t.tenancyId ||
+                          t.tenancy_id ||
+                          t.templateData?.tenancy_id ||
+                          "";
+                      rentBtn.dataset.grn = t.grnNumber || t.grn_number || t.templateData?.grn_number || "";
+                      rentBtn.dataset.unitLabel = h.unitLabel || t.unitLabel || t.unitNumber || t.templateData?.unit_number || "";
+                      rentBtn.dataset.startDate = h.startDate || t.tenancyCommencement || t.templateData?.tenancy_comm_raw || "";
+                      rentBtn.dataset.endDate = h.endDate || t.tenancyEndDate || t.templateData?.tenancy_end_raw || "";
+                      rentBtn.dataset.status = h.status || t.status || "";
+                      rentBtn.dataset.currentRent =
+                          h.currentRent || h.rentAmount || t.currentRent || t.rentAmount || t.templateData?.rent_amount || "";
+                  }
+                  if (vacateBtn) {
+                      vacateBtn.dataset.tenancyId =
+                          card.dataset.tenancyId ||
+                          t.tenancyId ||
+                          t.tenancy_id ||
+                          t.templateData?.tenancy_id ||
+                          "";
+                      vacateBtn.dataset.grn = t.grnNumber || t.grn_number || t.templateData?.grn_number || "";
+                      vacateBtn.dataset.unitLabel = h.unitLabel || t.unitLabel || t.unitNumber || t.templateData?.unit_number || "";
+                      vacateBtn.dataset.startDate = h.startDate || t.tenancyCommencement || t.templateData?.tenancy_comm_raw || "";
+                      vacateBtn.dataset.endDate = h.endDate || t.tenancyEndDate || t.templateData?.tenancy_end_raw || "";
+                      vacateBtn.dataset.status = h.status || t.status || "";
+                      vacateBtn.dataset.currentRent =
+                          h.currentRent || h.rentAmount || t.currentRent || t.rentAmount || t.templateData?.rent_amount || "";
+                  }
+                  historyList.appendChild(card);
+              });
+          }
+      }
 
     highlightSelectedRow();
 }
@@ -1266,6 +1400,26 @@ function handleRentHistoryClick(event, fallbackTenant) {
     }
 
     openRentHistoryModal(resolvedTenancy, contextTenant);
+}
+
+function handleVacateClick(event, fallbackTenant) {
+    const btn = event?.target?.closest?.(".tenant-vacate-btn");
+    if (!btn) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const { tenancy, tenant } = buildRentHistoryContext(btn, fallbackTenant);
+    const contextTenant = tenant || selectedTenantForSidebar;
+    const resolvedTenancy =
+        (tenancy && tenancy.tenancyId && tenancy) || resolveFallbackTenancyContext(contextTenant) || tenancy || null;
+
+    if (!resolvedTenancy || !resolvedTenancy.tenancyId) {
+        showToast("Select a tenancy first", "warning");
+        return;
+    }
+
+    openVacateModal(resolvedTenancy, contextTenant);
 }
 
 function handleTenancyViewClick(event, fallbackTenant) {
@@ -1766,11 +1920,19 @@ export function initTenantDirectory() {
     document.querySelectorAll(".rent-history-close").forEach((btn) => btn.addEventListener("click", closeRentHistoryModal));
     document.querySelectorAll(".family-modal-close").forEach((btn) => btn.addEventListener("click", closeFamilyModal));
 
+    const vacateConfirmBtn = document.getElementById("vacateConfirmBtn");
+    if (vacateConfirmBtn) {
+        vacateConfirmBtn.addEventListener("click", handleVacateConfirm);
+    }
+    document.querySelectorAll(".vacate-modal-close").forEach((btn) => btn.addEventListener("click", closeVacateModal));
+    document.querySelectorAll(".vacate-modal-cancel").forEach((btn) => btn.addEventListener("click", closeVacateModal));
+
     const sidebarHistory = document.getElementById("sidebarUnitHistory");
     if (sidebarHistory) {
         sidebarHistory.addEventListener("click", (event) => {
             handleTenancyViewClick(event);
             handleRentHistoryClick(event);
+            handleVacateClick(event);
         });
     }
 
@@ -1779,6 +1941,7 @@ export function initTenantDirectory() {
         if (modal && !modal.classList.contains("hidden")) return;
         handleTenancyViewClick(event);
         handleRentHistoryClick(event);
+        handleVacateClick(event);
     });
 
     syncStatusButtons();

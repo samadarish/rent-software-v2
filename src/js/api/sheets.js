@@ -10,6 +10,7 @@ import { buildUnitLabel } from "../utils/formatters.js";
 import { normalizeMonthKey, normalizeWing } from "../utils/normalizers.js";
 import { showToast, updateConnectionIndicator } from "../utils/ui.js";
 import { callAppScript, ensureAppScriptUrl } from "./appscriptClient.js";
+import { cacheSetMany } from "./localDb.js";
 import {
     LOCAL_KEYS,
     getLocalData,
@@ -2716,6 +2717,236 @@ export async function updateTenantRecord(payload) {
     } catch (e) {
         console.error("updateTenantRecord error", e);
         showToast("Failed to update tenant", "error");
+        updateConnectionIndicator(
+            navigator.onLine ? "online" : "offline",
+            navigator.onLine ? "Update failed" : "Offline"
+        );
+        throw e;
+    }
+}
+
+/**
+ * Vacates a tenancy by updating end date + vacate reason locally before syncing.
+ * @param {object} payload - vacate payload (tenantId, tenancyId, endDate, vacateReason)
+ */
+export async function vacateTenantTenancy(payload) {
+    ensureAppScriptUrl({
+        promptForConfig: true,
+        onMissing: () => {
+            alert("Please configure the Apps Script URL first.");
+            updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Set Apps Script URL");
+        },
+    });
+
+    const nextPayload = payload && typeof payload === "object" ? { ...payload } : {};
+    const endDate = nextPayload.endDate || nextPayload.end_date || "";
+    const vacateReason = nextPayload.vacateReason || nextPayload.vacate_reason || "";
+
+    try {
+        const localUpdate = async () => {
+            const tenants = await getLocalList(LOCAL_KEYS.tenants);
+            const tenancies = await getLocalList(LOCAL_KEYS.tenancies);
+            const units = await getLocalList(LOCAL_KEYS.units);
+
+            const tenancyId = nextPayload.tenancyId || nextPayload.tenancy_id || "";
+            let idx = tenants.findIndex((t) =>
+                [
+                    t.tenancyId,
+                    t.tenancy_id,
+                    t.templateData?.tenancy_id,
+                    t.templateData?.tenancyId,
+                ]
+                    .filter(Boolean)
+                    .some((id) => id.toString() === tenancyId.toString())
+            );
+            if (idx < 0 && nextPayload.tenantId) {
+                idx = tenants.findIndex(
+                    (t) => (t.tenantId || t.tenant_id || "").toString() === nextPayload.tenantId.toString()
+                );
+            }
+            if (idx < 0) {
+                return { ok: false, message: "Tenant record not found" };
+            }
+
+            const existing = tenants[idx];
+            const tenantId =
+                nextPayload.tenantId ||
+                existing.tenantId ||
+                existing.tenant_id ||
+                existing.templateData?.tenant_id ||
+                "";
+            const resolvedTenancyId =
+                tenancyId ||
+                existing.tenancyId ||
+                existing.tenancy_id ||
+                existing.templateData?.tenancy_id ||
+                "";
+
+            if (!tenantId || !resolvedTenancyId) {
+                return { ok: false, message: "Missing tenant details" };
+            }
+
+            const unitId = existing.unitId || existing.templateData?.unit_id || "";
+            const nextTenants = tenants.slice();
+            const existingHistory = Array.isArray(existing.tenancyHistory) ? existing.tenancyHistory.slice() : [];
+            let historyUpdated = false;
+            const nextHistory = existingHistory.map((h) => {
+                const id = (h.tenancyId || h.tenancy_id || "").toString();
+                if (!id || id !== resolvedTenancyId.toString()) return h;
+                historyUpdated = true;
+                return {
+                    ...h,
+                    endDate,
+                    end_date: endDate,
+                    status: "ENDED",
+                };
+            });
+            if (!historyUpdated) {
+                nextHistory.push({
+                    tenancyId: resolvedTenancyId,
+                    unitLabel:
+                        existing.unitLabel ||
+                        existing.unitNumber ||
+                        existing.templateData?.unit_number ||
+                        "",
+                    startDate:
+                        existing.tenancyCommencement ||
+                        existing.templateData?.tenancy_comm_raw ||
+                        "",
+                    endDate,
+                    status: "ENDED",
+                    grnNumber:
+                        existing.grnNumber ||
+                        existing.grn_number ||
+                        existing.templateData?.["GRN number"] ||
+                        "",
+                    rentAmount:
+                        existing.rentAmount ||
+                        existing.currentRent ||
+                        existing.templateData?.rent_amount ||
+                        0,
+                    currentRent:
+                        existing.currentRent ||
+                        existing.rentAmount ||
+                        existing.templateData?.rent_amount ||
+                        0,
+                });
+            }
+
+            const nextTemplateData = { ...(existing.templateData || {}) };
+            nextTemplateData.tenancy_end_raw = endDate;
+            nextTemplateData.vacateReason = vacateReason;
+
+            const updatedTenant = {
+                ...existing,
+                activeTenant: false,
+                tenancyEndDate: endDate,
+                vacateReason,
+                tenancyHistory: nextHistory,
+                templateData: nextTemplateData,
+            };
+
+            nextTenants[idx] = updatedTenant;
+            const nextTenantsWithHistory = nextTenants.map((tenant, index) => {
+                if (index === idx) return updatedTenant;
+                const history = Array.isArray(tenant.tenancyHistory)
+                    ? tenant.tenancyHistory.slice()
+                    : [];
+                let touched = false;
+                const revised = history.map((h) => {
+                    const id = (h.tenancyId || h.tenancy_id || "").toString();
+                    if (!id || id !== resolvedTenancyId.toString()) return h;
+                    touched = true;
+                    return {
+                        ...h,
+                        endDate,
+                        end_date: endDate,
+                        status: "ENDED",
+                    };
+                });
+                return touched ? { ...tenant, tenancyHistory: revised } : tenant;
+            });
+
+            let nextUnits = units;
+            if (unitId) {
+                const unitIdx = units.findIndex((u) => u.unit_id === unitId);
+                if (unitIdx >= 0) {
+                    const nextUnit = { ...units[unitIdx] };
+                    if (!updatedTenant.activeTenant) {
+                        nextUnit.is_occupied = false;
+                        nextUnit.current_tenancy_id = "";
+                    }
+                    nextUnits = units.slice();
+                    nextUnits[unitIdx] = nextUnit;
+                }
+            }
+
+            let hasTenancyMatch = false;
+            const nextTenancies = tenancies.map((t) => {
+                const id = (t.tenancy_id || t.tenancyId || "").toString();
+                if (!id || id !== resolvedTenancyId.toString()) return t;
+                hasTenancyMatch = true;
+                return {
+                    ...t,
+                    end_date: endDate,
+                    status: "ENDED",
+                    vacate_reason: vacateReason,
+                };
+            });
+            if (!hasTenancyMatch) {
+                nextTenancies.push(
+                    buildTenancyRecordFromEntry(updatedTenant, {
+                        tenantId,
+                        tenancyId: resolvedTenancyId,
+                        unitId,
+                        landlordId: updatedTenant.landlordId || updatedTenant.templateData?.landlord_id || "",
+                    })
+                );
+            }
+
+            const entries = [
+                { key: LOCAL_KEYS.tenants, value: nextTenantsWithHistory },
+                { key: LOCAL_KEYS.tenancies, value: nextTenancies },
+            ];
+            if (nextUnits !== units) {
+                entries.push({ key: LOCAL_KEYS.units, value: nextUnits });
+            }
+
+            const stored = await cacheSetMany(entries);
+            if (!stored) {
+                return { ok: false, message: "Local update failed" };
+            }
+
+            document.dispatchEvent(new CustomEvent("tenants:updated", { detail: nextTenantsWithHistory }));
+            if (nextUnits !== units) {
+                document.dispatchEvent(new CustomEvent("units:updated", { detail: nextUnits }));
+            }
+
+            return { ok: true, tenantId, tenancyId: resolvedTenancyId };
+        };
+
+        const localResult = await localUpdate();
+        if (localResult?.ok === false) {
+            showToast(localResult.message || "Failed to update tenant", "error");
+            return localResult;
+        }
+
+        await enqueueSyncJob({
+            action: "vacateTenancy",
+            payload: {
+                tenancyId: localResult.tenancyId || nextPayload.tenancyId || nextPayload.tenancy_id || "",
+                endDate,
+                vacateReason,
+            },
+        });
+        if (SHOW_QUEUE_TOASTS) {
+            showToast("Tenant vacated locally. Sync pending.", "warning");
+        }
+
+        return { ...localResult, queued: true };
+    } catch (e) {
+        console.error("vacateTenantTenancy error", e);
+        showToast("Failed to vacate tenant", "error");
         updateConnectionIndicator(
             navigator.onLine ? "online" : "offline",
             navigator.onLine ? "Update failed" : "Offline"

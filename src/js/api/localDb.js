@@ -26,6 +26,14 @@ export async function cacheSet(key, value) {
     return res !== null;
 }
 
+export async function cacheSetMany(entries = []) {
+    if (!Array.isArray(entries) || !entries.length) return false;
+    const normalized = entries.filter((entry) => entry && entry.key);
+    if (!normalized.length) return false;
+    const res = await safeInvoke("cache_set_many", { entries: normalized });
+    return res === true;
+}
+
 export async function cacheDelete(key) {
     if (!key) return false;
     const res = await safeInvoke("cache_delete", { key });

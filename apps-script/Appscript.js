@@ -333,6 +333,36 @@ function getRowByKey_(sheetName, headers, keyColumn, keyValue) {
   return getRowByKeys_(sheetName, headers, { [keyColumn]: keyValue });
 }
 
+function updateRowFieldsByKey_(sheetName, headers, keyColumn, keyValue, updates) {
+  const sheet = getSheetWithHeaders_(sheetName, headers);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return null;
+  const headerIndex = buildHeaderIndex_(headers);
+  const keyIndex = headerIndex[keyColumn];
+  if (keyIndex === undefined) return null;
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  for (let i = 0; i < values.length; i += 1) {
+    const row = values[i];
+    if (normalizeLookupValue_(keyColumn, row[keyIndex]) != normalizeLookupValue_(keyColumn, keyValue)) {
+      continue;
+    }
+    const record = {};
+    headers.forEach((field, idx) => {
+      record[field] = row[idx];
+    });
+    Object.keys(updates || {}).forEach((field) => {
+      if (headerIndex[field] !== undefined) {
+        record[field] = updates[field];
+      }
+    });
+    sheet.getRange(i + 2, 1, 1, headers.length).setValues([
+      headers.map((key) => record[key] ?? ''),
+    ]);
+    return record;
+  }
+  return null;
+}
+
 function updateUnitOccupancy_(unitId, tenancyId, occupied) {
   if (!unitId) return;
   const units = readTable_(UNITS_SHEET, UNITS_HEADERS);
@@ -873,6 +903,28 @@ function handleUpdateTenant_(payload) {
   }
 
   return jsonResponse({ ok: true, message: 'Tenant updated', tenantId: mapped.tenant.tenant_id, tenancyId: mapped.tenancy.tenancy_id, createdNewTenancy: createNewTenancy });
+}
+
+function handleVacateTenancy_(payload) {
+  const tenancyId = (payload && (payload.tenancyId || payload.tenancy_id) || '').toString().trim();
+  if (!tenancyId) return jsonResponse({ ok: false, error: 'Tenancy ID missing' });
+  const endDateRaw = payload.endDate || payload.end_date || '';
+  const vacateReason = payload.vacateReason || payload.vacate_reason || '';
+  const endDate = formatDateIso_(endDateRaw);
+  const updated = updateRowFieldsByKey_(
+    TENANCIES_SHEET,
+    TENANCIES_HEADERS,
+    'tenancy_id',
+    tenancyId,
+    {
+      end_date: endDate || '',
+      status: 'ENDED',
+      vacate_reason: vacateReason || '',
+    }
+  );
+  if (!updated) return jsonResponse({ ok: false, error: 'Tenancy not found' });
+  updateUnitOccupancy_(updated.unit_id, updated.tenancy_id, false);
+  return jsonResponse({ ok: true, tenancyId: updated.tenancy_id, unitId: updated.unit_id });
 }
 
 function buildTenantDirectory_() {
@@ -2119,6 +2171,7 @@ function doPost(e) {
     const action = body.action;
     if (action === 'saveTenant') return handleSaveTenant_(body.payload);
     if (action === 'updateTenant') return handleUpdateTenant_(body.payload);
+    if (action === 'vacateTenancy') return handleVacateTenancy_(body.payload || {});
     if (action === 'saveUnit') return handleSaveUnit_(body.payload || {});
     if (action === 'deleteUnit') return handleDeleteUnit_(body.payload || {});
     if (action === 'saveLandlord') return handleSaveLandlord_(body.payload || {});
