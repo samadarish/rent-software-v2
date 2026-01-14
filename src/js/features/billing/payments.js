@@ -91,6 +91,7 @@ const attachmentPreviewCache = new Map();
 let paymentHistoryLoading = false;
 let paymentModalResetTimer = null;
 let paymentModalRequestId = 0;
+let paymentsInitialized = false;
 
 function getBillsForStatus(status = "pending") {
     return status === "paid" ? paymentsState.generatedBills.paid : paymentsState.generatedBills.pending;
@@ -123,6 +124,7 @@ function createPaymentIndex() {
     return {
         byTenantMonth: new Map(),
         byTenantMonthWing: new Map(),
+        byBillLineId: new Map(),
     };
 }
 
@@ -130,6 +132,14 @@ function buildPaymentIndex(payments = []) {
     const index = createPaymentIndex();
 
     payments.forEach((payment) => {
+        const billLineId = (payment?.billLineId || payment?.bill_line_id || "").toString().trim();
+        if (billLineId) {
+            if (!index.byBillLineId.has(billLineId)) {
+                index.byBillLineId.set(billLineId, []);
+            }
+            index.byBillLineId.get(billLineId).push(payment);
+        }
+
         const monthKey = normalizeMonthKey(payment.monthKey);
         const tenantKey = normalizeKey(payment.tenantKey || payment.tenantName);
         if (!monthKey || !tenantKey) return;
@@ -152,6 +162,13 @@ function buildPaymentIndex(payments = []) {
 }
 
 function getPaymentsForBill(bill, paymentIndex = paymentsState.paymentIndex) {
+    const billLineId = (bill?.billLineId || bill?.bill_line_id || "").toString().trim();
+    const hasBillLineIndex = !!paymentIndex.byBillLineId && paymentIndex.byBillLineId.size > 0;
+    if (billLineId && hasBillLineIndex) {
+        const matches = paymentIndex.byBillLineId.get(billLineId) || [];
+        return { matches, wingMatches: matches, strictBillLine: true };
+    }
+
     const normalizedMonth = normalizeMonthKey(bill.monthKey);
     const normalizedTenant = normalizeKey(bill.tenantKey || bill.tenantName);
     const normalizedWing = normalizeKey(bill.wing);
@@ -161,8 +178,18 @@ function getPaymentsForBill(bill, paymentIndex = paymentsState.paymentIndex) {
 
     const matches = paymentIndex.byTenantMonth.get(baseKey) || [];
     const wingMatches = paymentIndex.byTenantMonthWing.get(wingKey) || [];
+    const tenancyId = bill?.tenancyId || bill?.tenancy_id;
+    if (tenancyId) {
+        const tenancyMatches = matches.filter((payment) => {
+            const paymentTenancy = payment?.tenancyId || payment?.tenancy_id;
+            return paymentTenancy && String(paymentTenancy) === String(tenancyId);
+        });
+        if (tenancyMatches.length) {
+            return { matches: tenancyMatches, wingMatches: tenancyMatches, strictBillLine: false };
+        }
+    }
 
-    return { matches, wingMatches };
+    return { matches, wingMatches, strictBillLine: false };
 }
 
 function formatCurrency(amount) {
@@ -197,6 +224,25 @@ function parsePaymentTimestamp(raw) {
     }
     const parsed = new Date(normalized);
     return isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+}
+
+function setBillStatusBadge(badge, { status, overdue } = {}) {
+    if (!badge) return;
+    const baseClass =
+        "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border";
+    let label = "Pending";
+    let style = "border-amber-200 bg-amber-100 text-amber-700";
+
+    if (status === "paid") {
+        label = "Paid";
+        style = "border-emerald-200 bg-emerald-100 text-emerald-700";
+    } else if (overdue) {
+        label = "Overdue";
+        style = "border-rose-200 bg-rose-100 text-rose-700";
+    }
+
+    badge.className = `${baseClass} ${style}`;
+    badge.textContent = label;
 }
 
 function getPaymentSortTimestamp(payment = {}) {
@@ -287,6 +333,8 @@ function trimBillForList(bill = {}) {
         hasPaid: bill.hasPaid,
         has_paid: bill.has_paid,
         payableDate: bill.payableDate || bill.payable_date,
+        billId: bill.billId || bill.bill_id,
+        bill_id: bill.bill_id || bill.billId,
         billLineId,
         bill_line_id: bill.bill_line_id || bill.billLineId,
         tenancyId: bill.tenancyId || bill.tenancy_id,
@@ -426,7 +474,8 @@ async function getBillDetailsForModal(bill) {
 }
 
 function findPaymentForBill(bill) {
-    const { matches, wingMatches } = getPaymentsForBill(bill);
+    const { matches, wingMatches, strictBillLine } = getPaymentsForBill(bill);
+    if (strictBillLine) return matches[0] || null;
 
     const byWing = wingMatches.find((p) => normalizeKey(p.wing) === normalizeKey(bill.wing));
     return byWing || matches[0] || null;
@@ -579,6 +628,7 @@ function resetPaymentForm() {
         monthKey: "",
         monthLabel: "",
         billTotal: 0,
+        billId: "",
         tenantKey: "",
         tenantName: "",
         wing: "",
@@ -604,8 +654,12 @@ function resetPaymentForm() {
     const billAmount = document.getElementById("paymentBillAmount");
     const billStatus = document.getElementById("paymentBillStatus");
     const billMonth = document.getElementById("paymentBillMonth");
+    const billId = document.getElementById("paymentBillId");
     const wingBadge = document.getElementById("paymentTenantWing");
+    const unitBadge = document.getElementById("paymentTenantUnit");
     const dueWrap = document.getElementById("paymentAmountDueWrap");
+    const amountLabel = document.getElementById("paymentAmountLabel");
+    const statusBadge = document.getElementById("paymentBillStatusBadge");
     const breakdownTotal = document.getElementById("paymentBreakdownTotal");
     const breakdownRent = document.getElementById("paymentBreakdownRent");
     const breakdownElec = document.getElementById("paymentBreakdownElectricity");
@@ -617,6 +671,7 @@ function resetPaymentForm() {
     const attachmentInput = document.getElementById("paymentAttachmentInput");
     const attachmentClear = document.getElementById("paymentAttachmentClear");
     const saveBtn = document.getElementById("paymentSaveBtn");
+    const formCard = document.getElementById("paymentFormCard");
     const formFields = document.getElementById("paymentFormFields");
     const notesSection = document.getElementById("paymentNotesSection");
     const attachmentWrapper = document.getElementById("paymentAttachmentWrapper");
@@ -639,8 +694,13 @@ function resetPaymentForm() {
     if (billTitle) billTitle.textContent = "Select a bill to record";
     if (billAmount) billAmount.textContent = zeroLabel;
     if (billStatus) billStatus.textContent = "Open this modal from a bill card to link the payment automatically.";
-    if (billMonth) billMonth.textContent = "Month • -";
-    if (wingBadge) wingBadge.textContent = "Wing • -";
+    if (billMonth) billMonth.textContent = "Month -";
+    if (billId) billId.textContent = "Bill ID -";
+    if (wingBadge) wingBadge.textContent = "Wing -";
+    if (unitBadge) unitBadge.textContent = "Unit -";
+    if (amountLabel) amountLabel.textContent = "Amount due";
+    setBillStatusBadge(statusBadge, { status: "pending", overdue: false });
+    if (statusBadge) statusBadge.classList.add("hidden");
     if (breakdownTotal) breakdownTotal.textContent = zeroLabel;
     if (breakdownRent) breakdownRent.textContent = zeroLabel;
     if (breakdownElec) breakdownElec.textContent = zeroLabel;
@@ -660,6 +720,7 @@ function resetPaymentForm() {
     if (attachmentInput) attachmentInput.disabled = false;
     if (attachmentClear) attachmentClear.disabled = false;
     if (saveBtn) saveBtn.textContent = "Save payment";
+    if (formCard) formCard.classList.remove("hidden");
     if (formFields) formFields.classList.remove("hidden");
     if (notesSection) notesSection.classList.remove("hidden");
     if (attachmentWrapper) attachmentWrapper.classList.remove("hidden");
@@ -686,6 +747,7 @@ function setPaymentFormReadOnly(isReadOnly) {
     const attachmentInput = document.getElementById("paymentAttachmentInput");
     const attachmentClear = document.getElementById("paymentAttachmentClear");
     const saveBtn = document.getElementById("paymentSaveBtn");
+    const formCard = document.getElementById("paymentFormCard");
     const formFields = document.getElementById("paymentFormFields");
     const notesSection = document.getElementById("paymentNotesSection");
     const attachmentWrapper = document.getElementById("paymentAttachmentWrapper");
@@ -697,6 +759,7 @@ function setPaymentFormReadOnly(isReadOnly) {
     if (attachmentInput) attachmentInput.disabled = isReadOnly;
     if (attachmentClear) attachmentClear.disabled = isReadOnly;
     if (saveBtn) saveBtn.textContent = isReadOnly ? "Close" : "Save payment";
+    if (formCard) formCard.classList.toggle("hidden", isReadOnly);
     if (formFields) formFields.classList.toggle("hidden", isReadOnly);
     if (notesSection) notesSection.classList.toggle("hidden", isReadOnly);
     if (attachmentWrapper) attachmentWrapper.classList.toggle("hidden", isReadOnly);
@@ -930,8 +993,12 @@ function applyBillContext(context = {}) {
     const billAmount = document.getElementById("paymentBillAmount");
     const billStatus = document.getElementById("paymentBillStatus");
     const billMonth = document.getElementById("paymentBillMonth");
+    const billId = document.getElementById("paymentBillId");
     const wingBadge = document.getElementById("paymentTenantWing");
+    const unitBadge = document.getElementById("paymentTenantUnit");
     const dueWrap = document.getElementById("paymentAmountDueWrap");
+    const amountLabel = document.getElementById("paymentAmountLabel");
+    const statusBadge = document.getElementById("paymentBillStatusBadge");
     const breakdownTotal = document.getElementById("paymentBreakdownTotal");
     const breakdownRent = document.getElementById("paymentBreakdownRent");
     const breakdownElec = document.getElementById("paymentBreakdownElectricity");
@@ -944,6 +1011,7 @@ function applyBillContext(context = {}) {
     const electricityAmount = Number(context.electricityAmount || 0) || 0;
     const motorAmount = Number(context.motorShare || 0) || 0;
     const sweepAmount = Number(context.sweepAmount || 0) || 0;
+    const billIdValue = (context.billId || context.bill_id || "").toString().trim();
     const billTotal = Number(
         context.totalAmount ||
         context.billTotal ||
@@ -951,11 +1019,14 @@ function applyBillContext(context = {}) {
         rentAmount + electricityAmount + motorAmount + sweepAmount
     ) || 0;
     const remaining = typeof context.remaining === "number" ? context.remaining : Number(context.amount || billTotal);
+    const isPaid = typeof remaining === "number" ? remaining <= 0 : false;
+    const dueInfo = getDueInfo(context);
 
     paymentsState.billContext = {
         monthKey: context.monthKey || "",
         monthLabel,
         billTotal,
+        billId: billIdValue,
         amount: typeof context.amount === "number" ? context.amount : remaining,
         remaining,
         tenantName: context.tenantName || "",
@@ -978,16 +1049,21 @@ function applyBillContext(context = {}) {
 
     if (billTitle) billTitle.textContent = context.tenantName ? `${context.tenantName}` : "Select a bill to record";
     if (billAmount) {
-        const headlineAmount = typeof remaining === "number" ? remaining : billTotal;
+        const headlineAmount = isPaid ? billTotal : (typeof remaining === "number" ? remaining : billTotal);
         billAmount.textContent = billTotal ? formatCurrency(headlineAmount) : fallbackAmountLabel;
     }
-    if (dueWrap) dueWrap.classList.toggle("hidden", typeof remaining === "number" && remaining <= 0);
+    if (dueWrap) dueWrap.classList.remove("hidden");
+    if (amountLabel) amountLabel.textContent = isPaid ? "Total billed" : "Amount due";
     if (billStatus) {
-        const dueLabel = context.payableDate ? `Due ${context.payableDate}` : "";
-        billStatus.textContent = dueLabel || "Bill selected";
+        const dueLabel = dueInfo.label || (context.payableDate ? `Due ${context.payableDate}` : "");
+        billStatus.textContent = isPaid ? "Paid in full" : (dueLabel || "Bill selected");
     }
-    if (billMonth) billMonth.textContent = `Month • ${monthLabel || "-"}`;
-    if (wingBadge) wingBadge.textContent = `Wing • ${context.wing || "-"}`;
+    if (billMonth) billMonth.textContent = `Month ${monthLabel || "-"}`;
+    if (billId) billId.textContent = billIdValue ? `Bill ID ${billIdValue}` : "Bill ID -";
+    if (wingBadge) wingBadge.textContent = `Wing ${context.wing || "-"}`;
+    if (unitBadge) unitBadge.textContent = `Unit ${context.unitNumber || context.unit_number || "-"}`;
+    setBillStatusBadge(statusBadge, { status: isPaid ? "paid" : "pending", overdue: !isPaid && dueInfo.overdue });
+    if (statusBadge) statusBadge.classList.remove("hidden");
     if (breakdownTotal) breakdownTotal.textContent = formatCurrency(billTotal || remaining || 0);
     if (breakdownRent) breakdownRent.textContent = formatCurrency(rentAmount);
     if (breakdownElec) breakdownElec.textContent = formatCurrency(electricityAmount);
@@ -1180,7 +1256,8 @@ async function openPaymentModal(payment = null, billContext = null) {
             tenantKey: payment.tenantKey,
             wing: payment.wing,
             amount: payment.amount,
-            billLineId: payment.billLineId,
+            billId: payment.billId || payment.bill_id || "",
+            billLineId: payment.billLineId || payment.bill_line_id || "",
             tenancyId: payment.tenancyId,
         };
         context = context ? { ...baseContext, ...context } : baseContext;
@@ -1212,7 +1289,7 @@ async function openPaymentModal(payment = null, billContext = null) {
         if (notesInput) notesInput.value = payment.notes || "";
         if (idField) idField.value = payment.id || "";
     } else {
-        paymentsState.viewOnly = false;
+        paymentsState.viewOnly = context?.viewOnly === true;
     }
 
     setPaymentFormReadOnly(paymentsState.viewOnly);
@@ -1811,6 +1888,7 @@ async function handleSavePayment() {
         attachmentId: paymentsState.attachmentId,
         tenancyId: context.tenancyId,
         billLineId: context.billLineId,
+        billId: context.billId || context.bill_id || "",
     };
 
     const { ok, payment } = await savePaymentRecord(payload);
@@ -2622,7 +2700,9 @@ function wireAttachmentHandlers() {
  * Boots the Payments tab by loading data, connecting click handlers,
  * and syncing bill tabs with the payment form.
  */
-export function initPaymentsFeature() {
+export function initPaymentsFeature(options = {}) {
+    if (paymentsInitialized) return;
+    paymentsInitialized = true;
     const refreshBtn = document.getElementById("paymentsRefreshBtn");
     if (refreshBtn) refreshBtn.addEventListener("click", () => {
         refreshPaymentsIfNeeded(true);
@@ -2655,7 +2735,7 @@ export function initPaymentsFeature() {
     const paidTab = document.getElementById("billsPaidTab");
     if (pendingTab) pendingTab.addEventListener("click", () => setBillsTab("pending"));
     if (paidTab) paidTab.addEventListener("click", () => setBillsTab("paid"));
-    setBillsTab(paymentsState.activeBillTab || "pending");
+    setBillsTab(paymentsState.activeBillTab || "pending", { skipLoad: !!options.skipBillLoad });
 
     const closeBtn = document.getElementById("paymentModalClose");
     const cancelBtn = document.getElementById("paymentModalCancel");
@@ -2676,6 +2756,29 @@ export async function refreshPaymentsIfNeeded(force = false) {
     } else {
         renderGeneratedBills();
     }
+}
+
+export async function openBillFromDashboard(bill) {
+    if (!bill || typeof bill !== "object") return;
+    initPaymentsFeature({ skipBillLoad: true });
+    const status = summarizeBillPayments(bill);
+    const remaining = typeof status.remaining === "number" ? status.remaining : 0;
+    const context = { ...bill, remaining, viewOnly: remaining <= 0 };
+
+    if (remaining <= 0) {
+        if (!paymentsState.loaded) {
+            try {
+                await loadPayments();
+            } catch (err) {
+                console.error("Failed to load payments for bill details", err);
+            }
+        }
+        const payment = findPaymentForBill(bill);
+        openPaymentModal(payment || null, context);
+        return;
+    }
+
+    await openPaymentModalFromBill(context);
 }
 
 

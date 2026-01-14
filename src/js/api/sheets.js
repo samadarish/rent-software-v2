@@ -885,6 +885,8 @@ function buildLocalPaymentRecord(payload = {}) {
         prevReading: payload.prevReading || "",
         newReading: payload.newReading || "",
         payableDate: payload.payableDate || "",
+        billId: payload.billId || payload.bill_id || "",
+        bill_id: payload.bill_id || payload.billId || "",
         billLineId: payload.billLineId || payload.bill_line_id || "",
         tenancyId: payload.tenancyId || payload.tenancy_id || "",
         paymentDateTime,
