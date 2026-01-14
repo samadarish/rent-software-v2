@@ -134,20 +134,27 @@ async function openBillFromResults(bill) {
     }
 }
 
-export function initBillIdSearch() {
-    const input = document.getElementById("billIdSearchInput");
-    const dropdown = document.getElementById("billIdSearchDropdown");
-    const list = document.getElementById("billIdSearchList");
-    const empty = document.getElementById("billIdSearchEmpty");
-    const statusEl = document.getElementById("billIdSearchStatus");
-    if (!input || !dropdown || !list) return;
+/**
+ * Creates a bill search widget for a given set of DOM element IDs.
+ * Allows the same logic to power multiple search widgets (dashboard, sidebar, etc.)
+ */
+function createBillSearchWidget({ inputId, dropdownId, listId, emptyId, statusId }) {
+    const input = document.getElementById(inputId);
+    const dropdown = document.getElementById(dropdownId);
+    const list = document.getElementById(listId);
+    const empty = document.getElementById(emptyId);
+    const statusEl = document.getElementById(statusId);
+    if (!input || !dropdown || !list) return null;
 
     let debounceTimer = null;
+    let localResults = [];
+
     const runSearch = async (query) => {
         const requestId = ++billSearchState.requestId;
         const bills = await loadBills({ statusEl });
         if (requestId !== billSearchState.requestId) return;
         const results = filterBills(query, bills);
+        localResults = results;
         billSearchState.results = results;
         renderResults({ results, dropdown, list, empty });
     };
@@ -155,6 +162,7 @@ export function initBillIdSearch() {
     const handleInput = () => {
         const query = input.value || "";
         if (!query.trim()) {
+            localResults = [];
             billSearchState.results = [];
             if (empty) empty.classList.add("hidden");
             hideDropdown(dropdown);
@@ -174,10 +182,11 @@ export function initBillIdSearch() {
         if (event.key === "Escape") {
             hideDropdown(dropdown);
         }
-        if (event.key === "Enter" && billSearchState.results.length === 1) {
+        if (event.key === "Enter" && localResults.length === 1) {
             event.preventDefault();
-            openBillFromResults(billSearchState.results[0]);
+            openBillFromResults(localResults[0]);
             hideDropdown(dropdown);
+            input.value = "";
         }
     });
 
@@ -187,12 +196,13 @@ export function initBillIdSearch() {
         const button = target.closest("button[data-bill-line-id]");
         if (!button) return;
         const billLineId = button.dataset.billLineId || "";
-        const match = billSearchState.results.find(
+        const match = localResults.find(
             (bill) => getBillLineIdValue(bill) === billLineId
         );
         if (!match) return;
         openBillFromResults(match);
         hideDropdown(dropdown);
+        input.value = "";
     });
 
     document.addEventListener("click", (event) => {
@@ -201,14 +211,31 @@ export function initBillIdSearch() {
         hideDropdown(dropdown);
     });
 
-    document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") hideDropdown(dropdown);
-    });
-
     document.addEventListener("sync:completed", () => {
         loadBills({ force: true, statusEl }).then(() => {
             if (input.value.trim()) handleInput();
         });
     });
 
+    return { input, dropdown, list, empty, statusEl, handleInput };
+}
+
+export function initBillIdSearch() {
+    createBillSearchWidget({
+        inputId: "billIdSearchInput",
+        dropdownId: "billIdSearchDropdown",
+        listId: "billIdSearchList",
+        emptyId: "billIdSearchEmpty",
+        statusId: "billIdSearchStatus",
+    });
+}
+
+export function initSidebarBillIdSearch() {
+    createBillSearchWidget({
+        inputId: "sidebarBillIdSearchInput",
+        dropdownId: "sidebarBillIdSearchDropdown",
+        listId: "sidebarBillIdSearchList",
+        emptyId: "sidebarBillIdSearchEmpty",
+        statusId: "sidebarBillIdSearchStatus",
+    });
 }

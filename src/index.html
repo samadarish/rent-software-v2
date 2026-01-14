@@ -909,6 +909,24 @@
                     class="px-2 py-0.5 rounded border border-rose-200 bg-rose-50 text-[8px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed">Delete</button>
                 </div>
               </div>
+
+              <!-- SIDEBAR BILL ID SEARCH -->
+              <div class="border rounded-md p-1.5 space-y-1.5 bg-white relative">
+                <div class="flex items-center justify-between">
+                  <p class="text-[10px] font-semibold text-slate-700">Bill ID search</p>
+                  <span id="sidebarBillIdSearchStatus" class="text-[8px] text-slate-500">Local lookup</span>
+                </div>
+                <div class="relative">
+                  <input id="sidebarBillIdSearchInput" type="text" autocomplete="off"
+                    class="w-full border rounded px-2 py-1.5 text-[11px] focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    placeholder="Type bill ID..." />
+                  <div id="sidebarBillIdSearchDropdown"
+                    class="hidden absolute left-0 right-0 mt-1 z-30 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                    <div id="sidebarBillIdSearchEmpty" class="hidden px-2 py-1.5 text-[10px] text-slate-500">No bills found.</div>
+                    <div id="sidebarBillIdSearchList" class="divide-y divide-slate-100"></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- DIRECTORY MODE SIDEBAR (Tenant details + history) -->

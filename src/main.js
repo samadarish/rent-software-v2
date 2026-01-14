@@ -26,7 +26,7 @@ import { attachEventHandlers } from "./js/events.js";
 import { initToastHistoryUi, showToast, updateConnectionIndicator } from "./js/utils/ui.js";
 import { initDraftUi } from "./js/features/shared/drafts.js";
 import { initNotesFeature } from "./js/features/shared/notes.js";
-import { initBillIdSearch } from "./js/features/dashboard/billSearch.js";
+import { initBillIdSearch, initSidebarBillIdSearch } from "./js/features/dashboard/billSearch.js";
 import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
 import { currentFlow } from "./js/state.js";
@@ -48,6 +48,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   initToastHistoryUi();
   initNotesFeature();
   initBillIdSearch();
+  initSidebarBillIdSearch();
+
   const offlineOverlay = document.getElementById("offlineOverlay");
   const appShell = document.getElementById("appShell");
   const setOfflineState = (offline) => {
