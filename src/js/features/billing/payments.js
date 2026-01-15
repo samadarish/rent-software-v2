@@ -763,6 +763,21 @@ function setPaymentFormReadOnly(isReadOnly) {
     if (formFields) formFields.classList.toggle("hidden", isReadOnly);
     if (notesSection) notesSection.classList.toggle("hidden", isReadOnly);
     if (attachmentWrapper) attachmentWrapper.classList.toggle("hidden", isReadOnly);
+
+    // Hide entire right column and switch to single-column layout for paid bills
+    const formColumn = document.getElementById("paymentFormColumn");
+    const columnsGrid = document.getElementById("paymentColumnsGrid");
+    const modalPanel = document.getElementById("paymentModalPanel");
+    if (formColumn) formColumn.classList.toggle("hidden", isReadOnly);
+    if (columnsGrid) {
+        columnsGrid.classList.toggle("md:grid-cols-2", !isReadOnly);
+        columnsGrid.classList.toggle("md:grid-cols-1", isReadOnly);
+    }
+    // Adjust modal width: narrow for paid bills, wide for new payments
+    if (modalPanel) {
+        modalPanel.classList.toggle("max-w-3xl", !isReadOnly);
+        modalPanel.classList.toggle("max-w-xl", isReadOnly);
+    }
 }
 
 function renderPaymentHistory(context = {}) {
@@ -2737,6 +2752,7 @@ export function initPaymentsFeature(options = {}) {
     if (paidTab) paidTab.addEventListener("click", () => setBillsTab("paid"));
     setBillsTab(paymentsState.activeBillTab || "pending", { skipLoad: !!options.skipBillLoad });
 
+
     const closeBtn = document.getElementById("paymentModalClose");
     const cancelBtn = document.getElementById("paymentModalCancel");
     if (closeBtn) closeBtn.addEventListener("click", closePaymentModal);
@@ -2744,6 +2760,27 @@ export function initPaymentsFeature(options = {}) {
 
     const saveBtn = document.getElementById("paymentSaveBtn");
     if (saveBtn) saveBtn.addEventListener("click", handleSavePayment);
+
+    // Copy Bill ID button
+    const copyBillIdBtn = document.getElementById("paymentBillIdCopy");
+    if (copyBillIdBtn) {
+        copyBillIdBtn.addEventListener("click", async () => {
+            const billIdEl = document.getElementById("paymentBillId");
+            const billId = (billIdEl?.textContent || "").trim();
+            if (!billId || billId === "-") {
+                showToast("No bill ID to copy", "warning");
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(billId);
+                showToast("Bill ID copied", "success");
+            } catch (err) {
+                console.warn("Clipboard write failed", err);
+                showToast("Could not copy to clipboard", "error");
+            }
+        });
+    }
+
     wireAttachmentHandlers();
 }
 
