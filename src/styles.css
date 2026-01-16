@@ -16,6 +16,9 @@ html,
 body {
   margin: 0;
   padding: 0;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 html {
@@ -208,6 +211,13 @@ button:active,
 
 .input-no-spinner[type="number"] {
   -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input,
+textarea,
+select {
+  cursor: default;
 }
 
 /* ========== FORM LABELS & HELP TEXT ========== */
