@@ -286,6 +286,33 @@ function normalizeMonthRange(fromMonth, toMonth) {
     return { from, to };
 }
 
+function getBillMonthSortValue(bill = {}) {
+    const monthKey = normalizeMonthKey(
+        bill?.monthKey ||
+            bill?.month_key ||
+            bill?.monthLabel ||
+            bill?.month_label ||
+            ""
+    );
+    if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) return 0;
+    const [year, month] = monthKey.split("-").map((value) => Number(value));
+    if (!year || !month) return 0;
+    const timestamp = Date.UTC(year, month - 1, 1);
+    return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function sortBillsByRecentMonth(bills = []) {
+    if (!Array.isArray(bills)) return [];
+    return [...bills].sort((a, b) => {
+        const aTime = getBillMonthSortValue(a);
+        const bTime = getBillMonthSortValue(b);
+        if (bTime !== aTime) return bTime - aTime;
+        const aId = (a?.billLineId || a?.bill_line_id || "").toString();
+        const bId = (b?.billLineId || b?.bill_line_id || "").toString();
+        return bId.localeCompare(aId);
+    });
+}
+
 function resolveBillPaidFlag(bill = {}) {
     const remainingRaw = bill?.remainingAmount ?? bill?.remaining_amount;
     const amountPaidRaw = bill?.amountPaid ?? bill?.amount_paid;
@@ -361,8 +388,9 @@ function applyPaidBillFilters(bills = [], filters = {}) {
         return true;
     });
 
-    if (!limit) return filtered;
-    return filtered.slice(0, limit);
+    const sorted = sortBillsByRecentMonth(filtered);
+    if (!limit) return sorted;
+    return sorted.slice(0, limit);
 }
 
 function clampPendingPage(totalItems) {
@@ -1789,6 +1817,9 @@ async function loadGeneratedBills(
             paymentsState.pendingPagination.pageSize = PENDING_PAGE_SIZE;
         }
         renderGeneratedBills();
+        if (bucket === "paid") {
+            document.dispatchEvent(new CustomEvent("paid-bills:updated"));
+        }
     } catch (err) {
         console.error("Failed to load generated bills", err);
         setBillsForStatus(bucket, []);
@@ -2789,6 +2820,59 @@ export function initPaymentsFeature(options = {}) {
     }
 
     wireAttachmentHandlers();
+}
+
+export async function fetchPaidBillsSummary(options = {}) {
+    const limitValue = Number(options?.limit) || 0;
+    const force = options?.force === true;
+    const monthsBack =
+        Number(options?.monthsBack) ||
+        (paymentsState.paidFilters?.hasSearched
+            ? computeMonthsBackForRange(
+                  paymentsState.paidFilters?.fromMonth,
+                  paymentsState.paidFilters?.toMonth
+              )
+            : BILL_MONTHS_BACK);
+
+    if (!force && isBillsLoaded("paid")) {
+        const filters = paymentsState.paidFilters?.hasSearched
+            ? { ...paymentsState.paidFilters, limit: limitValue || paymentsState.paidFilters.limit }
+            : { fromMonth: "", toMonth: "", limit: limitValue };
+        return applyPaidBillFilters(paymentsState.generatedBills.paid, filters);
+    }
+
+    try {
+        const payload = await fetchBillsMinimal("paid", { monthsBack });
+        const bills = payload && Array.isArray(payload.bills) ? payload.bills : [];
+        const normalizedBills = await enrichBillsWithUnits(bills, { allowFetch: false });
+        const trimmedBills = normalizedBills.map(trimBillForList);
+        if (paymentsState.paidFilters?.hasSearched) {
+            const filters = { ...paymentsState.paidFilters, limit: limitValue || paymentsState.paidFilters.limit };
+            return applyPaidBillFilters(trimmedBills, filters);
+        }
+        const sorted = sortBillsByRecentMonth(trimmedBills);
+        return limitValue ? sorted.slice(0, limitValue) : sorted;
+    } catch (err) {
+        console.error("Failed to load paid bills summary", err);
+        return [];
+    }
+}
+
+export async function openPaidBillDetails(bill) {
+    if (!bill || typeof bill !== "object") return;
+    initPaymentsFeature({ skipBillLoad: true });
+
+    if (!paymentsState.loaded) {
+        try {
+            await loadPayments();
+        } catch (err) {
+            console.error("Failed to load payments for paid bill details", err);
+        }
+    }
+
+    const status = summarizeBillPayments(bill);
+    const payment = findPaymentForBill(bill);
+    openPaymentModal(payment || null, { ...bill, remaining: status.remaining });
 }
 
 export async function refreshPaymentsIfNeeded(force = false) {

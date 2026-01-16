@@ -28,6 +28,7 @@ import { initDraftUi } from "./js/features/shared/drafts.js";
 import { initNotesFeature } from "./js/features/shared/notes.js";
 import { initWindowControls } from "./js/utils/windowControls.js";
 import { initBillIdSearch, initSidebarBillIdSearch } from "./js/features/dashboard/billSearch.js";
+import { initRecentPayments } from "./js/features/dashboard/recentPayments.js";
 import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
 import { currentFlow } from "./js/state.js";
@@ -51,6 +52,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initWindowControls();
   initBillIdSearch();
   initSidebarBillIdSearch();
+  initRecentPayments();
 
   const offlineOverlay = document.getElementById("offlineOverlay");
   const appShell = document.getElementById("appShell");
