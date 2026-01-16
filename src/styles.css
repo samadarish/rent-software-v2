@@ -144,6 +144,8 @@ main {
 
 .fade-overlay.is-visible {
   opacity: 1;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
 .fade-overlay.is-hiding {
