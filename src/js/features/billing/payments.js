@@ -1956,6 +1956,9 @@ async function handleSavePayment() {
     setBillsTab(activeTab, { skipLoad: true });
     closePaymentModal();
     await loadGeneratedBills(activeTab, true);
+
+    // Notify other components (e.g., bill search) to refresh their cached data
+    document.dispatchEvent(new CustomEvent("payment:saved"));
 }
 
 function isPaymentModalVisible() {
@@ -2766,7 +2769,11 @@ export function initPaymentsFeature(options = {}) {
     if (copyBillIdBtn) {
         copyBillIdBtn.addEventListener("click", async () => {
             const billIdEl = document.getElementById("paymentBillId");
-            const billId = (billIdEl?.textContent || "").trim();
+            let billId = (billIdEl?.textContent || "").trim();
+            // Strip "Bill ID " prefix if present
+            if (billId.startsWith("Bill ID ")) {
+                billId = billId.slice(8).trim();
+            }
             if (!billId || billId === "-") {
                 showToast("No bill ID to copy", "warning");
                 return;
@@ -2798,19 +2805,40 @@ export async function refreshPaymentsIfNeeded(force = false) {
 export async function openBillFromDashboard(bill) {
     if (!bill || typeof bill !== "object") return;
     initPaymentsFeature({ skipBillLoad: true });
-    const status = summarizeBillPayments(bill);
-    const remaining = typeof status.remaining === "number" ? status.remaining : 0;
-    const context = { ...bill, remaining, viewOnly: remaining <= 0 };
+
+    // Always load fresh payments data first to get accurate status
+    try {
+        await loadPayments();
+    } catch (err) {
+        console.error("Failed to load payments for bill details", err);
+    }
+
+    // Get bill line id for fresh lookup
+    const billLineId = bill.billLineId || bill.bill_line_id || "";
+    let freshBill = bill;
+
+    // Try to get fresh bill data if we have a billLineId
+    if (billLineId) {
+        try {
+            const res = await fetchBillDetails(billLineId);
+            if (res && res.ok && res.bill) {
+                freshBill = { ...bill, ...res.bill };
+            }
+        } catch (err) {
+            console.error("Failed to fetch fresh bill details", err);
+        }
+    }
+
+    // Calculate remaining using actual payments from paymentsState (most accurate)
+    const billTotal = Number(freshBill.totalAmount ?? freshBill.total_amount) || 0;
+    const { matches } = getPaymentsForBill(freshBill);
+    const paidAmount = matches.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const remaining = Math.max(0, billTotal - paidAmount);
+
+    const context = { ...freshBill, remaining, viewOnly: remaining <= 0 };
 
     if (remaining <= 0) {
-        if (!paymentsState.loaded) {
-            try {
-                await loadPayments();
-            } catch (err) {
-                console.error("Failed to load payments for bill details", err);
-            }
-        }
-        const payment = findPaymentForBill(bill);
+        const payment = findPaymentForBill(freshBill);
         openPaymentModal(payment || null, context);
         return;
     }

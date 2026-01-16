@@ -4,6 +4,8 @@ import { escapeHtml } from "../../utils/htmlUtils.js";
 
 const SEARCH_DEBOUNCE_MS = 140;
 const MAX_RESULTS = 8;
+const MAX_RECENT_SEARCHES = 3;
+const RECENT_SEARCHES_KEY = "billIdRecentSearches";
 
 const billSearchState = {
     loaded: false,
@@ -134,16 +136,102 @@ async function openBillFromResults(bill) {
     }
 }
 
+// --- Recent Searches Functions ---
+
+function getRecentSearches() {
+    try {
+        const stored = localStorage.getItem(RECENT_SEARCHES_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveRecentSearch(bill) {
+    if (!bill) return;
+    const billId = getBillIdValue(bill);
+    const billLineId = getBillLineIdValue(bill);
+    if (!billId || !billLineId) return;
+
+    const entry = {
+        billId,
+        billLineId,
+        tenantName: bill?.tenantName || bill?.tenant_name || "Unknown",
+        wing: bill?.wing || "",
+        unitNumber: bill?.unitNumber || bill?.unit_number || "",
+        monthKey: bill?.monthKey || "",
+        monthLabel: bill?.monthLabel || "",
+        totalAmount: bill?.totalAmount ?? bill?.total_amount ?? 0,
+        savedAt: Date.now(),
+    };
+
+    let recent = getRecentSearches();
+    // Remove existing entry with same billLineId
+    recent = recent.filter((r) => r.billLineId !== billLineId);
+    // Add to front
+    recent.unshift(entry);
+    // Keep only last MAX_RECENT_SEARCHES
+    recent = recent.slice(0, MAX_RECENT_SEARCHES);
+
+    try {
+        localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(recent));
+        // Dispatch event so all search widgets can refresh their recent searches
+        document.dispatchEvent(new CustomEvent("recentSearches:updated"));
+    } catch {
+        // Ignore storage errors
+    }
+}
+
+function renderRecentSearches(container, onOpenBill) {
+    if (!container) return;
+    const recent = getRecentSearches();
+    container.innerHTML = "";
+
+    if (!recent.length) {
+        container.innerHTML = `<span class="text-[9px] text-slate-400 italic">No recent searches</span>`;
+        return;
+    }
+
+    recent.forEach((entry) => {
+        const tenantName = escapeHtml(entry.tenantName || "Unknown");
+        const billIdDisplay = escapeHtml(entry.billId || "-");
+        const unitLabel = escapeHtml(buildUnitLabel(entry));
+        const monthLabel = escapeHtml(formatMonthLabel(entry.monthKey, entry.monthLabel));
+
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "w-full flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-slate-100 text-left group transition";
+        item.dataset.recentBillLineId = entry.billLineId;
+        item.innerHTML = `
+            <div class="min-w-0 flex-1">
+                <div class="text-[10px] font-medium text-slate-700 truncate">${tenantName}</div>
+                <div class="text-[9px] text-slate-400 truncate">${unitLabel} • ${monthLabel}</div>
+            </div>
+            <div class="text-[8px] text-slate-400 font-mono shrink-0 max-w-[80px] truncate">${billIdDisplay}</div>
+        `;
+        item.title = `Open bill: ${billIdDisplay}`;
+
+        item.addEventListener("click", () => {
+            if (typeof onOpenBill === "function") {
+                onOpenBill(entry);
+            }
+        });
+
+        container.appendChild(item);
+    });
+}
+
 /**
  * Creates a bill search widget for a given set of DOM element IDs.
  * Allows the same logic to power multiple search widgets (dashboard, sidebar, etc.)
  */
-function createBillSearchWidget({ inputId, dropdownId, listId, emptyId, statusId }) {
+function createBillSearchWidget({ inputId, dropdownId, listId, emptyId, statusId, recentContainerId }) {
     const input = document.getElementById(inputId);
     const dropdown = document.getElementById(dropdownId);
     const list = document.getElementById(listId);
     const empty = document.getElementById(emptyId);
     const statusEl = document.getElementById(statusId);
+    const recentContainer = document.getElementById(recentContainerId);
     if (!input || !dropdown || !list) return null;
 
     let debounceTimer = null;
@@ -174,6 +262,31 @@ function createBillSearchWidget({ inputId, dropdownId, listId, emptyId, statusId
         }, SEARCH_DEBOUNCE_MS);
     };
 
+    // Handler for opening a bill (from search or recent)
+    const handleOpenBill = async (bill) => {
+        saveRecentSearch(bill);
+        await openBillFromResults(bill);
+        hideDropdown(dropdown);
+        input.value = "";
+        // Refresh recent searches display
+        if (recentContainer) {
+            renderRecentSearches(recentContainer, handleOpenBill);
+        }
+    };
+
+    // Handler for opening from recent searches
+    const handleOpenFromRecent = async (entry) => {
+        // Try to find the full bill data in loaded bills
+        const bills = await loadBills({ statusEl });
+        const match = bills.find((b) => getBillLineIdValue(b) === entry.billLineId);
+        if (match) {
+            await handleOpenBill(match);
+        } else {
+            // Fallback: use the saved entry data
+            await handleOpenBill(entry);
+        }
+    };
+
     input.addEventListener("input", handleInput);
     input.addEventListener("focus", () => {
         if (input.value.trim()) handleInput();
@@ -184,9 +297,7 @@ function createBillSearchWidget({ inputId, dropdownId, listId, emptyId, statusId
         }
         if (event.key === "Enter" && localResults.length === 1) {
             event.preventDefault();
-            openBillFromResults(localResults[0]);
-            hideDropdown(dropdown);
-            input.value = "";
+            handleOpenBill(localResults[0]);
         }
     });
 
@@ -200,9 +311,7 @@ function createBillSearchWidget({ inputId, dropdownId, listId, emptyId, statusId
             (bill) => getBillLineIdValue(bill) === billLineId
         );
         if (!match) return;
-        openBillFromResults(match);
-        hideDropdown(dropdown);
-        input.value = "";
+        handleOpenBill(match);
     });
 
     document.addEventListener("click", (event) => {
@@ -217,6 +326,23 @@ function createBillSearchWidget({ inputId, dropdownId, listId, emptyId, statusId
         });
     });
 
+    // Refresh bill cache when a payment is saved
+    document.addEventListener("payment:saved", () => {
+        loadBills({ force: true, statusEl });
+    });
+
+    // Listen for recent searches updates from other widgets
+    document.addEventListener("recentSearches:updated", () => {
+        if (recentContainer) {
+            renderRecentSearches(recentContainer, handleOpenFromRecent);
+        }
+    });
+
+    // Initial render of recent searches
+    if (recentContainer) {
+        renderRecentSearches(recentContainer, handleOpenFromRecent);
+    }
+
     return { input, dropdown, list, empty, statusEl, handleInput };
 }
 
@@ -227,6 +353,7 @@ export function initBillIdSearch() {
         listId: "billIdSearchList",
         emptyId: "billIdSearchEmpty",
         statusId: "billIdSearchStatus",
+        recentContainerId: "billIdRecentSearches",
     });
 }
 
@@ -237,5 +364,6 @@ export function initSidebarBillIdSearch() {
         listId: "sidebarBillIdSearchList",
         emptyId: "sidebarBillIdSearchEmpty",
         statusId: "sidebarBillIdSearchStatus",
+        recentContainerId: "sidebarBillIdRecentSearches",
     });
 }
