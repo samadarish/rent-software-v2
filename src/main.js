@@ -26,6 +26,7 @@ import { attachEventHandlers } from "./js/events.js";
 import { initToastHistoryUi, showToast, updateConnectionIndicator } from "./js/utils/ui.js";
 import { initDraftUi } from "./js/features/shared/drafts.js";
 import { initNotesFeature } from "./js/features/shared/notes.js";
+import { initWindowControls } from "./js/utils/windowControls.js";
 import { initBillIdSearch, initSidebarBillIdSearch } from "./js/features/dashboard/billSearch.js";
 import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
@@ -47,6 +48,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDraftUi();
   initToastHistoryUi();
   initNotesFeature();
+  initWindowControls();
   initBillIdSearch();
   initSidebarBillIdSearch();
 
