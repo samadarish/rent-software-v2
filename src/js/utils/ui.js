@@ -31,7 +31,7 @@ export function showToast(message, type = "success") {
         toast.classList.add("bg-slate-700");
     }
 
-    toast.innerHTML = `<span class="flex-1">${message}</span>`;
+    toast.innerHTML = `<span class="flex-1 break-words break-all">${message}</span>`;
     container.appendChild(toast);
 
     // Animate in
