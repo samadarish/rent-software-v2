@@ -226,7 +226,7 @@
           class="space-y-3 fade-section is-visible">
 
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 space-y-2" data-notes-widget="dashboard">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3 space-y-2" data-notes-widget="dashboard">
               <div class="flex items-center justify-center gap-2 text-[9px]">
                 <span data-note-position
                   class="font-semibold px-2.5 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-800">Note
@@ -260,7 +260,7 @@
                   class="px-3 py-1.5 rounded border border-rose-200 bg-rose-50 text-[9px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed">Delete</button>
               </div>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 space-y-2 relative">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3 space-y-2 relative">
               <div class="flex items-center justify-between">
                 <p class="text-[11px] font-semibold text-slate-700">Bill ID search</p>
                 <span id="billIdSearchStatus" class="text-[9px] text-slate-500">Local lookup</span>
@@ -281,7 +281,7 @@
                 <div id="billIdRecentSearches" class="space-y-0.5"></div>
               </div>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 space-y-2">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3 space-y-2">
               <div class="flex items-center justify-between">
                 <p class="text-[11px] font-semibold text-slate-700">Recent payments</p>
                 <span class="text-[9px] text-slate-500">Last 5</span>
@@ -289,40 +289,40 @@
               <div id="dashboardRecentPaymentsEmpty" class="text-[10px] text-slate-500">Loading recent payments...</div>
               <div id="dashboardRecentPaymentsList" class="space-y-1.5"></div>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Quick view</p>
               <p class="text-[11px] text-slate-500">Insights and charts will appear here.</p>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Shortcuts</p>
               <p class="text-[11px] text-slate-500">Use the left navigation to jump into billing, payments, or
                 agreements.</p>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Reminders</p>
               <p class="text-[11px] text-slate-500">Track upcoming renewals and payment follow-ups.</p>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Collections</p>
               <p class="text-[11px] text-slate-500">Overdue totals and follow-ups will surface here.</p>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Occupancy</p>
               <p class="text-[11px] text-slate-500">Track vacant units and active tenancies.</p>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">New activity</p>
               <p class="text-[11px] text-slate-500">Recent changes will show here.</p>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Billing status</p>
               <p class="text-[11px] text-slate-500">Generated bills and pending items summary.</p>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Payments</p>
               <p class="text-[11px] text-slate-500">Recent receipts and totals by month.</p>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">System health</p>
               <p class="text-[11px] text-slate-500">Connection status and sync checks.</p>
             </div>
@@ -865,10 +865,10 @@
         <!-- RIGHT COLUMN: FORM SIDEBAR (clauses + actions) -->
         <section id="formRightSection" class="space-y-3 min-w-0 fade-section is-visible">
           <!-- CLAUSES CARD -->
-          <div id="clausesCard" class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-2.5">
+          <div id="clausesCard" class="space-y-2.5">
 
             <!-- AGREEMENT MODE CONTENT -->
-            <div id="clausesAgreementContent" class="hidden fade-section">
+            <div id="clausesAgreementContent" class="hidden fade-section bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4">
               <div class="flex items-center justify-between">
                 <h3 class="text-xs font-semibold">Clauses (for Preview / Reference)</h3>
                 <div class="flex items-center gap-2">
@@ -901,7 +901,7 @@
             <!-- GENERAL UTILITIES (Dashboard / Billing / Payments) -->
             <div id="utilitySidebarContent" class="space-y-2 fade-section is-visible">
               <h3 class="text-xs font-semibold mb-1.5">Quick utilities</h3>
-              <div class="border rounded-md p-1.5 space-y-1.5" data-notes-widget="sidebar">
+              <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3 space-y-1.5" data-notes-widget="sidebar">
                 <div class="flex items-center justify-center gap-1.5 text-[8px]">
                   <span data-note-position
                     class="font-semibold px-1.5 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-800">Note
@@ -937,7 +937,7 @@
               </div>
 
               <!-- SIDEBAR BILL ID SEARCH -->
-              <div class="border rounded-md p-1.5 space-y-1.5 bg-white relative">
+              <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3 space-y-1.5 relative">
                 <div class="flex items-center justify-between">
                   <p class="text-[10px] font-semibold text-slate-700">Bill ID search</p>
                   <span id="sidebarBillIdSearchStatus" class="text-[8px] text-slate-500">Local lookup</span>
@@ -958,7 +958,7 @@
                   <div id="sidebarBillIdRecentSearches" class="space-y-0.5"></div>
                 </div>
               </div>
-              <div class="border rounded-md p-1.5 space-y-1.5 bg-white">
+              <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3 space-y-1.5">
                 <div class="flex items-center justify-between">
                   <p class="text-[10px] font-semibold text-slate-700">Recent payments</p>
                   <span class="text-[8px] text-slate-500">Last 5</span>
