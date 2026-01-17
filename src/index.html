@@ -865,7 +865,7 @@
         <!-- RIGHT COLUMN: FORM SIDEBAR (clauses + actions) -->
         <section id="formRightSection" class="space-y-3 min-w-0 fade-section is-visible">
           <!-- CLAUSES CARD -->
-          <div id="clausesCard" class="space-y-2.5">
+          <div id="clausesCard">
 
             <!-- AGREEMENT MODE CONTENT -->
             <div id="clausesAgreementContent" class="hidden fade-section bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4">
@@ -900,7 +900,6 @@
 
             <!-- GENERAL UTILITIES (Dashboard / Billing / Payments) -->
             <div id="utilitySidebarContent" class="space-y-2 fade-section is-visible">
-              <h3 class="text-xs font-semibold mb-1.5">Quick utilities</h3>
               <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3 space-y-1.5" data-notes-widget="sidebar">
                 <div class="flex items-center justify-center gap-1.5 text-[8px]">
                   <span data-note-position
@@ -944,7 +943,8 @@
                 </div>
                 <div class="relative">
                   <input id="sidebarBillIdSearchInput" type="text" autocomplete="off"
-                    class="w-full border rounded px-2 py-1.5 text-[11px] focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    class="w-full border border-slate-200 rounded-md px-2 py-1.5 text-[11px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    style="box-shadow: inset 0 4px 12px rgba(15, 23, 42, 0.08);"
                     placeholder="Type bill ID..." />
                   <div id="sidebarBillIdSearchDropdown"
                     class="hidden absolute left-0 right-0 mt-1 z-30 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
