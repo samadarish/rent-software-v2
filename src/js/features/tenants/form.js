@@ -244,7 +244,21 @@ export function collectFormDataForTemplate() {
     }));
 
     // Get family members
-    const familyArr = getFamilyMembersFromTable().filter((f) => f.name);
+    let familyArr = getFamilyMembersFromTable().filter((f) => f.name);
+
+    // Create main tenant object
+    const mainTenant = {
+        name: getTrimmedValue("Tenant_Full_Name"),
+        relationship: "Self",
+        occupation: getTrimmedValue("Tenant_occupation"),
+        aadhaar: getTrimmedValue("tenant_Aadhar"),
+        address: getTrimmedValue("Tenant_Permanent_Address"),
+    };
+
+    // Prepend main tenant to family array if name exists
+    if (mainTenant.name) {
+        familyArr = [mainTenant, ...familyArr];
+    }
 
     // Format family members as a text block
     const familyBlock = familyArr
@@ -298,6 +312,7 @@ export function collectFormDataForTemplate() {
         tenant_mobile: getTrimmedValue("tenant_mobile"),
         unit_id: selectedUnit?.unit_id || "",
         unit_number: selectedUnit?.unit_number || "",
+        unit_name: selectedUnit?.unit_number || "",
 
         "floor_of_building": getValue("floor_of_building"),
         direction_build: getValue("direction_build"),
