@@ -223,13 +223,10 @@
 
         <!-- MIDDLE VIEW: DASHBOARD PLACEHOLDER -->
         <section id="dashboardSection"
-          class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-3 fade-section is-visible">
-          <div class="flex items-center justify-between">
-            <h2 class="text-sm md:text-base font-semibold">Dashboard</h2>
-            <span class="text-[10px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 border">Coming soon</span>
-          </div>
+          class="space-y-3 fade-section is-visible">
+
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div class="border rounded-lg p-3 space-y-2" data-notes-widget="dashboard">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 space-y-2" data-notes-widget="dashboard">
               <div class="flex items-center justify-center gap-2 text-[9px]">
                 <span data-note-position
                   class="font-semibold px-2.5 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-800">Note
@@ -263,7 +260,7 @@
                   class="px-3 py-1.5 rounded border border-rose-200 bg-rose-50 text-[9px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed">Delete</button>
               </div>
             </div>
-            <div class="border rounded-lg p-3 space-y-2 bg-white relative">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 space-y-2 relative">
               <div class="flex items-center justify-between">
                 <p class="text-[11px] font-semibold text-slate-700">Bill ID search</p>
                 <span id="billIdSearchStatus" class="text-[9px] text-slate-500">Local lookup</span>
@@ -284,7 +281,7 @@
                 <div id="billIdRecentSearches" class="space-y-0.5"></div>
               </div>
             </div>
-            <div class="border rounded-lg p-3 space-y-2 bg-white">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 space-y-2">
               <div class="flex items-center justify-between">
                 <p class="text-[11px] font-semibold text-slate-700">Recent payments</p>
                 <span class="text-[9px] text-slate-500">Last 5</span>
@@ -292,40 +289,40 @@
               <div id="dashboardRecentPaymentsEmpty" class="text-[10px] text-slate-500">Loading recent payments...</div>
               <div id="dashboardRecentPaymentsList" class="space-y-1.5"></div>
             </div>
-            <div class="border rounded-lg p-3 bg-slate-50">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Quick view</p>
               <p class="text-[11px] text-slate-500">Insights and charts will appear here.</p>
             </div>
-            <div class="border rounded-lg p-3 bg-slate-50">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Shortcuts</p>
               <p class="text-[11px] text-slate-500">Use the left navigation to jump into billing, payments, or
                 agreements.</p>
             </div>
-            <div class="border rounded-lg p-3 bg-slate-50">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Reminders</p>
               <p class="text-[11px] text-slate-500">Track upcoming renewals and payment follow-ups.</p>
             </div>
-            <div class="border rounded-lg p-3 bg-slate-50">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Collections</p>
               <p class="text-[11px] text-slate-500">Overdue totals and follow-ups will surface here.</p>
             </div>
-            <div class="border rounded-lg p-3 bg-slate-50">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Occupancy</p>
               <p class="text-[11px] text-slate-500">Track vacant units and active tenancies.</p>
             </div>
-            <div class="border rounded-lg p-3 bg-slate-50">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">New activity</p>
               <p class="text-[11px] text-slate-500">Recent changes will show here.</p>
             </div>
-            <div class="border rounded-lg p-3 bg-slate-50">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Billing status</p>
               <p class="text-[11px] text-slate-500">Generated bills and pending items summary.</p>
             </div>
-            <div class="border rounded-lg p-3 bg-slate-50">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Payments</p>
               <p class="text-[11px] text-slate-500">Recent receipts and totals by month.</p>
             </div>
-            <div class="border rounded-lg p-3 bg-slate-50">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">System health</p>
               <p class="text-[11px] text-slate-500">Connection status and sync checks.</p>
             </div>
@@ -723,17 +720,10 @@
 
         <!-- MIDDLE VIEW: BILLING CALENDAR -->
         <section id="generateBillSection"
-          class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-4 hidden fade-section">
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div>
-              <h2 class="text-sm md:text-base font-semibold">Generate Bills</h2>
-              <p class="text-[11px] text-slate-500">Pick a past month (oldest to newest) and choose a wing to start bill
-                creation.</p>
-            </div>
-          </div>
+          class="space-y-4 hidden fade-section">
 
           <div
-            class="bg-gradient-to-r from-indigo-50 via-white to-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+            class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
             <div class="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <p class="text-xs font-semibold text-slate-800">Billing calendar</p>
