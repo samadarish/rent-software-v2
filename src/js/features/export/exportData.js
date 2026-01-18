@@ -58,6 +58,13 @@ function normalizeSearchValue(value) {
     return normalizeId(value).toLowerCase();
 }
 
+function normalizeUrl(value) {
+    if (typeof value !== "string") return "";
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    return /^https?:\/\//i.test(trimmed) ? trimmed : "";
+}
+
 function getTemplateValue(record, key) {
     if (!record || typeof record !== "object") return undefined;
     const template = record.templateData;
@@ -739,16 +746,25 @@ function buildRentUpdateRow(revision) {
     return row;
 }
 
-function buildPaymentRow(payment) {
-    const row = Array(20).fill("");
-    row[13] = formatNumber(payment.amount, { decimals: 2 }) || "";
-    row[14] = normalizeId(payment.mode || "");
-    row[15] = formatDateShort(
+function buildPaymentRow(payment, { compact = false } = {}) {
+    const amount = formatNumber(payment.amount, { decimals: 2 }) || "";
+    const mode = normalizeId(payment.mode || "");
+    const paidOn = formatDateShort(
         payment.paymentDateTime || payment.payment_date || payment.paymentDate || payment.date || ""
     );
     const link = normalizeId(payment.attachmentUrl || payment.attachment_url || "");
-    row[16] = link && link.startsWith("http") ? link : normalizeId(payment.attachmentName || "");
-    row[17] = normalizeId(payment.notes || payment.reference || "");
+    const attachment = link && link.startsWith("http") ? link : normalizeId(payment.attachmentName || "");
+    const notes = normalizeId(payment.notes || payment.reference || "");
+    const row = compact ? [amount, mode, paidOn, attachment, notes] : Array(20).fill("");
+
+    if (!compact) {
+        row[13] = amount;
+        row[14] = mode;
+        row[15] = paidOn;
+        row[16] = attachment;
+        row[17] = notes;
+    }
+
     row.__type = "payment";
     return row;
 }
@@ -895,6 +911,7 @@ function buildBillRows(payload) {
         const billPayments = matchPaymentsForBill(bill, payload.payments, paymentsFallback, tenantKey, wing).sort(
             (a, b) => getPaymentSortTimestamp(a) - getPaymentSortTimestamp(b)
         );
+        const mergePayments = billPayments.length > 1;
         const paymentTotal = billPayments.reduce((sum, payment) => sum + (Number(payment?.amount) || 0), 0);
         const totalAmount = Number(bill?.total_amount ?? bill?.totalAmount) || 0;
         const rawPaid = Number(bill?.amount_paid ?? bill?.amountPaid) || 0;
@@ -947,11 +964,23 @@ function buildBillRows(payload) {
             formatNumber(amountPaid, { decimals: 2 }),
             status,
         ];
+        if (mergePayments) {
+            const rowSpan = billPayments.length;
+            const mergeIndexes = [
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 19,
+            ];
+            mergeIndexes.forEach((index) => {
+                row[index] = {
+                    content: row[index] ?? "",
+                    rowSpan,
+                };
+            });
+        }
         row.__type = "bill";
         rows.push(row);
 
         billPayments.slice(1).forEach((payment) => {
-            rows.push(buildPaymentRow(payment));
+            rows.push(buildPaymentRow(payment, { compact: mergePayments }));
         });
     });
 
@@ -1308,6 +1337,30 @@ function buildPdfDocument(payload) {
                 if (data.column.index > 0) {
                     data.cell.text = [""];
                 }
+            }
+            if (data.column.index === 16) {
+                const rawValue = typeof data.cell.raw === "string" ? data.cell.raw : "";
+                const link = normalizeUrl(rawValue);
+                if (link) {
+                    data.cell._link = link;
+                    data.cell.text = ["Open"];
+                    data.cell.styles.fillColor = [37, 99, 235];
+                    data.cell.styles.textColor = [255, 255, 255];
+                    data.cell.styles.fontStyle = "bold";
+                    data.cell.styles.lineColor = [30, 64, 175];
+                    data.cell.styles.lineWidth = 0.6;
+                    data.cell.styles.halign = "center";
+                    data.cell.styles.valign = "middle";
+                }
+            }
+        },
+        didDrawCell: (data) => {
+            const link = data.cell?._link;
+            if (link) {
+                doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, {
+                    url: link,
+                    newWindow: true,
+                });
             }
         },
     });
