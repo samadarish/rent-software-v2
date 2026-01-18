@@ -27,6 +27,8 @@
   <script src="./libs/pizzip.min.js"></script>
   <script src="./libs/docxtemplater.js"></script>
   <script src="./libs/FileSaver.min.js"></script>
+  <script src="./libs/jspdf.umd.min.js"></script>
+  <script src="./libs/jspdf.plugin.autotable.min.js"></script>
 
   <!-- Your app logic (the stripped-down main.js I gave you) -->
   <script src="./main.js" type="module"></script>
@@ -850,15 +852,70 @@
         <!-- MIDDLE VIEW: EXPORT DATA -->
         <section id="exportDataSection"
           class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4 space-y-3 hidden fade-section">
-          <div class="flex items-center justify-between">
-            <h2 class="text-sm md:text-base font-semibold">Export data</h2>
-            <span class="text-[10px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 border">Coming soon</span>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="text-sm md:text-base font-semibold">Export data</h2>
+              <p class="text-[11px] text-slate-500">Create a styled PDF dossier from local data.</p>
+            </div>
+            <span class="text-[10px] px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Local database</span>
           </div>
 
-          <div class="border border-slate-200 rounded-xl bg-slate-50 p-4 space-y-2">
-            <p class="text-[11px] text-slate-500">
-              Export tools will appear here soon.
-            </p>
+          <div class="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+            <div class="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+              <div class="grid gap-3 sm:grid-cols-2">
+                <label class="text-[10px] text-slate-500 sm:col-span-2">
+                  <span class="block uppercase font-semibold">Tenant name</span>
+                  <input id="exportTenantSearch" type="text" list="exportTenantOptions" autocomplete="off"
+                    placeholder="Start typing a tenant name"
+                    class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-[11px] bg-white" />
+                  <datalist id="exportTenantOptions"></datalist>
+                </label>
+
+                <label class="text-[10px] text-slate-500 sm:col-span-2">
+                  <span class="block uppercase font-semibold">Tenancy</span>
+                  <select id="exportTenancySelect"
+                    class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-[11px] bg-white" disabled>
+                    <option value="">Select a tenant first</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                <p id="exportTenantHint" class="text-[10px] text-slate-500">
+                  Select a tenant and tenancy to enable export.
+                </p>
+                <button id="exportPdfBtn"
+                  class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled>
+                  <span id="exportPdfSpinner" class="hidden h-3.5 w-3.5 rounded-full border-2 border-white/50 border-t-white animate-spin"></span>
+                  <span id="exportPdfLabel">Export PDF</span>
+                </button>
+              </div>
+              <p id="exportDataEmpty" class="hidden text-[10px] text-rose-600">
+                No tenants found in local storage. Run Sync Now to refresh this device.
+              </p>
+            </div>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              <div>
+                <h3 class="text-[11px] font-semibold text-slate-700">Included in the export</h3>
+                <p class="text-[10px] text-slate-500">Tenant profile, tenancy details, family members, totals, rent revisions, bills, and payments.</p>
+              </div>
+              <div class="space-y-2 text-[10px] text-slate-600">
+                <div class="flex items-start gap-2">
+                  <span class="mt-1 h-2 w-2 rounded-full bg-emerald-500"></span>
+                  <span>Uses local SQLite data only (no online fetch).</span>
+                </div>
+                <div class="flex items-start gap-2">
+                  <span class="mt-1 h-2 w-2 rounded-full bg-amber-500"></span>
+                  <span>Partial payments appear as separate rows beneath each bill.</span>
+                </div>
+                <div class="flex items-start gap-2">
+                  <span class="mt-1 h-2 w-2 rounded-full bg-slate-500"></span>
+                  <span>Rent updates insert a dedicated line before the effective month.</span>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1922,6 +1979,33 @@
         <div class="flex justify-end gap-2">
           <a id="docxExportOpen" href="#" target="_blank" rel="noopener"
             class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500">Open file</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- PDF EXPORT CONFIRMATION -->
+    <div id="pdfExportModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 fade-overlay">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-4 md:p-5 space-y-3 modal-panel">
+        <div class="flex items-start justify-between gap-3">
+          <div class="space-y-1">
+            <p class="text-xs font-semibold leading-tight">PDF saved</p>
+            <p id="pdfExportLocation" class="text-[11px] text-slate-600 break-all">
+              Saved to: Downloads/Tenant_Export.pdf
+            </p>
+          </div>
+          <button id="pdfExportClose"
+            class="px-3 py-1.5 rounded border border-slate-300 text-[11px] font-semibold hover:bg-slate-100 shrink-0">Close</button>
+        </div>
+
+        <div class="border border-slate-200 rounded-lg bg-slate-50 p-3 space-y-1">
+          <p class="text-[11px] font-semibold text-slate-700">File name</p>
+          <p id="pdfExportFileName" class="text-[11px] text-slate-800 break-all">Tenant_Export.pdf</p>
+          <p class="text-[10px] text-slate-500">You can open the exported PDF directly from here.</p>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <a id="pdfExportOpen" href="#" target="_blank" rel="noopener"
+            class="px-3 py-2 rounded-lg bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">Open file</a>
         </div>
       </div>
     </div>

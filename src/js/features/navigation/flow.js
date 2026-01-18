@@ -16,6 +16,7 @@ const DRAFT_GUARDED_FLOWS = new Set(["agreement", "createTenantNew"]);
 let tenantDirectoryInitialized = false;
 let billingInitialized = false;
 let paymentsInitialized = false;
+let exportInitialized = false;
 
 async function ensureTenantDirectoryInitialized() {
     const mod = await import("../tenants/tenants.js");
@@ -40,6 +41,15 @@ async function ensurePaymentsInitialized() {
     if (!paymentsInitialized) {
         mod.initPaymentsFeature();
         paymentsInitialized = true;
+    }
+    return mod;
+}
+
+async function ensureExportInitialized() {
+    const mod = await import("../export/exportData.js");
+    if (!exportInitialized) {
+        mod.initExportDataFeature();
+        exportInitialized = true;
     }
     return mod;
 }
@@ -222,6 +232,14 @@ export function switchFlow(mode, options = { bypassGuard: false }) {
 
     if (mode === "generateBill") {
         void ensureBillingInitialized();
+    }
+
+    if (isExportData) {
+        void ensureExportInitialized().then((mod) => {
+            if (typeof mod.refreshExportData === "function") {
+                mod.refreshExportData();
+            }
+        });
     }
 
     if (isFormFlow) {
