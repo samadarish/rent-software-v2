@@ -885,6 +885,16 @@ function buildBillRows(payload) {
         });
     }
 
+    const totals = {
+        units: 0,
+        elecAmt: 0,
+        motor: 0,
+        sweep: 0,
+        rent: 0,
+        total: 0,
+        totalPaid: 0,
+    };
+
     const rows = [];
     let revisionIndex = 0;
 
@@ -964,6 +974,15 @@ function buildBillRows(payload) {
             formatNumber(amountPaid, { decimals: 2 }),
             status,
         ];
+
+        totals.units += Number(electricityUnits) || 0;
+        totals.elecAmt += Number(bill?.electricity_amount ?? bill?.electricityAmount) || 0;
+        totals.motor += Number(bill?.motor_share_amount ?? bill?.motorShare) || 0;
+        totals.sweep += Number(bill?.sweep_amount ?? bill?.sweepAmount) || 0;
+        totals.rent += Number(bill?.rent_amount ?? bill?.rentAmount) || 0;
+        totals.total += totalAmount;
+        totals.totalPaid += Number(amountPaid) || 0;
+
         if (mergePayments) {
             const rowSpan = billPayments.length;
             const mergeIndexes = [
@@ -983,6 +1002,20 @@ function buildBillRows(payload) {
             rows.push(buildPaymentRow(payment, { compact: mergePayments }));
         });
     });
+
+    if (bills.length) {
+        const totalRow = Array(20).fill("");
+        totalRow[0] = "Totals";
+        totalRow[7] = formatUnits(totals.units) || "0";
+        totalRow[8] = formatNumber(totals.elecAmt, { decimals: 2 }) || "0.00";
+        totalRow[9] = formatNumber(totals.motor, { decimals: 2 }) || "0.00";
+        totalRow[10] = formatNumber(totals.sweep, { decimals: 2 }) || "0.00";
+        totalRow[11] = formatNumber(totals.rent, { decimals: 2 }) || "0.00";
+        totalRow[12] = formatNumber(totals.total, { decimals: 2 }) || "0.00";
+        totalRow[18] = formatNumber(totals.totalPaid, { decimals: 2 }) || "0.00";
+        totalRow.__type = "bill-total";
+        rows.push(totalRow);
+    }
 
     if (!rows.length) {
         const row = ["No bills recorded for this tenancy."];
@@ -1219,9 +1252,42 @@ function buildPdfDocument(payload) {
 
     cursorY = addSectionTitle(doc, "Totals", cursorY, layout);
     const totals = computeTotals(payload.bills);
+    const totalsCells = [
+        {
+            label: "Total Rent Paid",
+            value: formatNumber(totals.rentPaid, { decimals: 2 }) || "0.00",
+            fillColor: [191, 219, 254],
+            textColor: [15, 23, 42],
+        },
+        {
+            label: "Total Electricity Paid",
+            value: formatNumber(totals.electricityPaid, { decimals: 2 }) || "0.00",
+            fillColor: [187, 247, 208],
+            textColor: [15, 23, 42],
+        },
+        {
+            label: "Total Electricity Units Consumed",
+            value: formatUnits(totals.electricityUnits) || "0",
+            fillColor: [233, 213, 255],
+            textColor: [15, 23, 42],
+        },
+        {
+            label: "Total Motor Share Paid",
+            value: formatNumber(totals.motorPaid, { decimals: 2 }) || "0.00",
+            fillColor: [254, 215, 170],
+            textColor: [15, 23, 42],
+        },
+        {
+            label: "Total rent + Electricity + Motor + sweep",
+            value: formatNumber(totals.totalPaid, { decimals: 2 }) || "0.00",
+            fillColor: [15, 23, 42],
+            textColor: [255, 255, 255],
+        },
+    ];
+    const totalsColWidth = layout.contentWidth / totalsCells.length;
     doc.autoTable({
         startY: cursorY,
-        theme: "grid",
+        theme: "plain",
         margin: {
             left: layout.padding,
             right: layout.padding,
@@ -1232,19 +1298,30 @@ function buildPdfDocument(payload) {
         styles: {
             font: "helvetica",
             fontSize: 9,
-            cellPadding: 3,
+            cellPadding: 6,
+            lineWidth: 0,
+            halign: "center",
+            valign: "middle",
             textColor: layout.sectionText,
         },
         columnStyles: {
-            0: { cellWidth: 220, fontStyle: "bold" },
-            1: { cellWidth: 120 },
+            0: { cellWidth: totalsColWidth },
+            1: { cellWidth: totalsColWidth },
+            2: { cellWidth: totalsColWidth },
+            3: { cellWidth: totalsColWidth },
+            4: { cellWidth: totalsColWidth },
         },
         body: [
-            ["Total Rent Paid", formatNumber(totals.rentPaid, { decimals: 2 }) || "0.00"],
-            ["Total Electricity Paid", formatNumber(totals.electricityPaid, { decimals: 2 }) || "0.00"],
-            ["Total Electricity Units Consumed", formatUnits(totals.electricityUnits) || "0"],
-            ["Total Motor Share Paid", formatNumber(totals.motorPaid, { decimals: 2 }) || "0.00"],
-            ["Total Paid (All Charges)", formatNumber(totals.totalPaid, { decimals: 2 }) || "0.00"],
+            totalsCells.map((cell) => ({
+                content: `${cell.label}\n${cell.value}`,
+                styles: {
+                    fillColor: cell.fillColor,
+                    textColor: cell.textColor,
+                    fontStyle: "bold",
+                    halign: "center",
+                    valign: "middle",
+                },
+            })),
         ],
     });
     cursorY = doc.lastAutoTable.finalY + 12;
@@ -1323,6 +1400,10 @@ function buildPdfDocument(payload) {
                 if (data.column.index > 0) {
                     data.cell.text = [""];
                 }
+            }
+            if (rowType === "bill-total") {
+                data.cell.styles.fillColor = [241, 245, 249];
+                data.cell.styles.fontStyle = "bold";
             }
             if (data.column.index === 16) {
                 const rawValue = typeof data.cell.raw === "string" ? data.cell.raw : "";
