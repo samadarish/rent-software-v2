@@ -4,7 +4,11 @@ import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
 let initialized = false;
 let elements = null;
-let tenantOptionMap = new Map();
+const MAX_TENANT_RESULTS = 8;
+let tenantSearchItems = [];
+let tenantSearchResults = [];
+let tenantSearchMap = new Map();
+let selectedTenantEntry = null;
 
 const exportState = {
     tenants: [],
@@ -29,7 +33,10 @@ let pdfModalWired = false;
 function getExportElements() {
     return {
         tenantInput: document.getElementById("exportTenantSearch"),
-        tenantOptions: document.getElementById("exportTenantOptions"),
+        tenantDropdown: document.getElementById("exportTenantDropdown"),
+        tenantList: document.getElementById("exportTenantList"),
+        tenantEmpty: document.getElementById("exportTenantEmpty"),
+        tenantClear: document.getElementById("exportTenantClear"),
         tenancySelect: document.getElementById("exportTenancySelect"),
         exportBtn: document.getElementById("exportPdfBtn"),
         spinner: document.getElementById("exportPdfSpinner"),
@@ -44,6 +51,10 @@ function normalizeId(value) {
 }
 
 function normalizeKey(value) {
+    return normalizeId(value).toLowerCase();
+}
+
+function normalizeSearchValue(value) {
     return normalizeId(value).toLowerCase();
 }
 
@@ -88,21 +99,47 @@ function resolveTenantStatus(tenant, tenancies) {
     return "inactive";
 }
 
-function buildTenantLabel(tenant, unitLabel) {
-    const name =
+function getTenantName(tenant) {
+    return (
         tenant?.tenantFullName ||
         tenant?.tenantName ||
         tenant?.tenant_name ||
         tenant?.templateData?.Tenant_Full_Name ||
-        "Tenant";
-    const grn = tenant?.grnNumber || tenant?.grn_number || getTemplateValue(tenant, "GRN number");
-    const statusRaw = normalizeId(tenant?.status);
-    const statusLabel = statusRaw ? (statusRaw === "active" ? "Active" : "Inactive") : "";
-    const parts = [name];
-    if (grn) parts.push(grn);
-    if (unitLabel) parts.push(unitLabel);
-    if (statusLabel) parts.push(statusLabel);
-    return parts.join(" - ");
+        "Tenant"
+    );
+}
+
+function buildTenantLabel(tenant) {
+    return getTenantName(tenant);
+}
+
+function getTenantGrn(tenant) {
+    return (
+        tenant?.grnNumber ||
+        tenant?.grn_number ||
+        getTemplateValue(tenant, "GRN number") ||
+        ""
+    );
+}
+
+function buildTenantSearchEntry(tenant) {
+    const tenantId = normalizeId(tenant?.tenantId || tenant?.tenant_id);
+    const name = getTenantName(tenant);
+    const grn = normalizeId(getTenantGrn(tenant));
+    const unitLabel = normalizeId(
+        tenant?.unitLabel || tenant?.unitNumber || tenant?.unit_number || ""
+    );
+    const statusKey = normalizeId(tenant?.status).toLowerCase();
+    const statusLabel = statusKey ? (statusKey === "active" ? "Active" : "Inactive") : "";
+    const searchValue = normalizeSearchValue(
+        [name, grn, unitLabel, statusLabel].filter(Boolean).join(" ")
+    );
+    return {
+        tenantId,
+        tenant,
+        name,
+        searchValue,
+    };
 }
 
 function buildTenantDirectory() {
@@ -167,22 +204,23 @@ function setExportButtonState(enabled) {
     }
 }
 
-function clearTenantSelection() {
+function clearTenantSelection({ keepInput = false } = {}) {
     selection.tenantId = "";
     selection.tenancyId = "";
-    if (elements?.tenantInput) elements.tenantInput.value = "";
+    selectedTenantEntry = null;
+    if (elements?.tenantInput && !keepInput) elements.tenantInput.value = "";
     if (elements?.tenancySelect) {
         elements.tenancySelect.innerHTML = '<option value="">Select a tenant first</option>';
         elements.tenancySelect.disabled = true;
     }
     setExportButtonState(false);
     setExportHint("Select a tenant and tenancy to enable export.");
+    syncTenantClearButton();
 }
 
 function updateTenantOptions() {
-    if (!elements?.tenantOptions) return;
-    tenantOptionMap = new Map();
-    elements.tenantOptions.innerHTML = "";
+    tenantSearchItems = [];
+    tenantSearchMap = new Map();
 
     const filtered = exportState.directory
         .slice()
@@ -193,17 +231,15 @@ function updateTenantOptions() {
         });
 
     filtered.forEach((tenant) => {
-        const label = buildTenantLabel(tenant, tenant.unitLabel);
-        if (!label) return;
-        tenantOptionMap.set(label, tenant);
-        const option = document.createElement("option");
-        option.value = label;
-        elements.tenantOptions.appendChild(option);
+        const entry = buildTenantSearchEntry(tenant);
+        if (!entry.tenantId) return;
+        tenantSearchItems.push(entry);
+        tenantSearchMap.set(entry.tenantId, entry);
     });
 
     const current = selection.tenantId;
-    const stillAvailable = filtered.some((tenant) => normalizeId(tenant.tenantId) === current);
-    if (!stillAvailable) {
+    selectedTenantEntry = current ? tenantSearchMap.get(normalizeId(current)) || null : null;
+    if (current && !selectedTenantEntry) {
         clearTenantSelection();
     }
 
@@ -211,6 +247,90 @@ function updateTenantOptions() {
         const hasAnyTenants = exportState.directory.length > 0;
         elements.empty.classList.toggle("hidden", hasAnyTenants);
     }
+
+    if (elements?.tenantInput) {
+        const query = normalizeId(elements.tenantInput.value);
+        const shouldRefresh =
+            document.activeElement === elements.tenantInput ||
+            (elements.tenantDropdown && !elements.tenantDropdown.classList.contains("hidden"));
+        if (query && shouldRefresh) {
+            renderTenantResults(filterTenantResults(query));
+        } else {
+            hideTenantDropdown();
+        }
+    }
+
+    syncTenantClearButton();
+}
+
+function syncTenantClearButton() {
+    if (!elements?.tenantClear || !elements?.tenantInput) return;
+    const hasValue = Boolean(normalizeId(elements.tenantInput.value));
+    elements.tenantClear.classList.toggle("hidden", !hasValue);
+}
+
+function hideTenantDropdown() {
+    if (elements?.tenantDropdown) {
+        elements.tenantDropdown.classList.add("hidden");
+    }
+}
+
+function filterTenantResults(query) {
+    const needle = normalizeSearchValue(query);
+    if (!needle) return [];
+    return tenantSearchItems
+        .filter((entry) => entry.searchValue.includes(needle))
+        .slice(0, MAX_TENANT_RESULTS);
+}
+
+function renderTenantResults(results) {
+    if (!elements?.tenantDropdown || !elements?.tenantList) return;
+    tenantSearchResults = results;
+    elements.tenantList.innerHTML = "";
+
+    if (!results.length) {
+        if (elements.tenantEmpty) elements.tenantEmpty.classList.remove("hidden");
+        elements.tenantDropdown.classList.remove("hidden");
+        return;
+    }
+
+    if (elements.tenantEmpty) elements.tenantEmpty.classList.add("hidden");
+
+    results.forEach((entry) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "w-full text-left px-3 py-2 hover:bg-slate-50";
+        row.dataset.tenantId = entry.tenantId;
+        const nameLine = document.createElement("div");
+        nameLine.className = "text-[11px] font-semibold text-slate-800";
+        nameLine.textContent = entry.name || "Tenant";
+        row.appendChild(nameLine);
+        elements.tenantList.appendChild(row);
+    });
+
+    elements.tenantDropdown.classList.remove("hidden");
+}
+
+function findExactTenantMatch(value) {
+    const needle = normalizeSearchValue(value);
+    if (!needle) return null;
+    const matches = tenantSearchItems.filter(
+        (entry) => normalizeSearchValue(entry.name) === needle
+    );
+    return matches.length === 1 ? matches[0] : null;
+}
+
+function selectTenant(entry) {
+    if (!entry) return;
+    selection.tenantId = normalizeId(entry.tenantId);
+    selection.tenancyId = "";
+    selectedTenantEntry = entry;
+    if (elements?.tenantInput) {
+        elements.tenantInput.value = entry.name;
+    }
+    syncTenantClearButton();
+    populateTenancyOptions(entry.tenant);
+    hideTenantDropdown();
 }
 
 function formatDateShort(value) {
@@ -343,8 +463,18 @@ function buildTenancyLabel(tenancy, tenant, unitMap) {
         unitMap.get(normalizeId(tenancy?.unit_id || tenancy?.unitId)) ||
         unitMap.get(normalizeId(tenant?.unitId)) ||
         null;
+    const fallbackWing = normalizeId(tenancy?.wing || tenant?.wing || "");
+    const fallbackUnitNumber = normalizeId(
+        tenancy?.unitNumber ||
+            tenancy?.unit_number ||
+            tenant?.unitNumber ||
+            tenant?.unit_number ||
+            ""
+    );
+    const fallbackLabel = [fallbackWing, fallbackUnitNumber].filter(Boolean).join(" - ");
     const unitLabel =
         buildUnitLabel(unit) ||
+        fallbackLabel ||
         tenancy?.unitLabel ||
         tenant?.unitLabel ||
         tenant?.unitNumber ||
@@ -415,25 +545,34 @@ function populateTenancyOptions(tenant) {
 function handleTenantInput({ force = false } = {}) {
     if (!elements?.tenantInput) return;
     const value = normalizeId(elements.tenantInput.value);
+    syncTenantClearButton();
     if (!value) {
         clearTenantSelection();
+        hideTenantDropdown();
         return;
     }
 
-    const match = tenantOptionMap.get(value);
-    if (!match) {
-        if (force) {
-            showToast("Select a tenant from the list.", "warning");
+    if (selectedTenantEntry && normalizeSearchValue(selectedTenantEntry.name) !== normalizeSearchValue(value)) {
+        clearTenantSelection({ keepInput: true });
+    }
+
+    const results = filterTenantResults(value);
+    renderTenantResults(results);
+
+    if (force) {
+        const exact = findExactTenantMatch(value);
+        if (exact) {
+            selectTenant(exact);
+            return;
         }
-        selection.tenantId = "";
-        selection.tenancyId = "";
-        setExportButtonState(false);
-        setExportHint("Select a tenant and tenancy to enable export.");
-        return;
+        if (results.length === 1) {
+            selectTenant(results[0]);
+            return;
+        }
+        showToast("Select a tenant from the list.", "warning");
+        clearTenantSelection({ keepInput: true });
+        hideTenantDropdown();
     }
-
-    selection.tenantId = normalizeId(match.tenantId);
-    populateTenancyOptions(match);
 }
 
 function setExportLoading(loading) {
@@ -1304,7 +1443,7 @@ export function initExportDataFeature() {
     if (initialized) return;
     initialized = true;
     elements = getExportElements();
-    if (!elements?.tenantInput || !elements?.tenancySelect || !elements?.exportBtn) {
+    if (!elements?.tenantInput || !elements?.tenancySelect || !elements?.exportBtn || !elements?.tenantDropdown || !elements?.tenantList) {
         return;
     }
 
@@ -1314,8 +1453,61 @@ export function initExportDataFeature() {
         handleTenantInput();
     });
 
+    elements.tenantInput.addEventListener("focus", () => {
+        const value = normalizeId(elements.tenantInput.value);
+        if (value) {
+            renderTenantResults(filterTenantResults(value));
+        }
+    });
+
+    elements.tenantInput.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            hideTenantDropdown();
+            return;
+        }
+        if (event.key === "Enter") {
+            const value = normalizeId(elements.tenantInput.value);
+            if (!value) return;
+            const exact = findExactTenantMatch(value);
+            if (exact) {
+                event.preventDefault();
+                selectTenant(exact);
+                return;
+            }
+            if (tenantSearchResults.length === 1) {
+                event.preventDefault();
+                selectTenant(tenantSearchResults[0]);
+            }
+        }
+    });
+
     elements.tenantInput.addEventListener("change", () => {
         handleTenantInput({ force: true });
+    });
+
+    if (elements.tenantClear) {
+        elements.tenantClear.addEventListener("click", () => {
+            clearTenantSelection();
+            hideTenantDropdown();
+            elements.tenantInput.focus();
+        });
+    }
+
+    elements.tenantList.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const button = target.closest("button[data-tenant-id]");
+        if (!button) return;
+        const tenantId = normalizeId(button.dataset.tenantId);
+        const entry = tenantSearchMap.get(tenantId);
+        if (!entry) return;
+        selectTenant(entry);
+    });
+
+    document.addEventListener("click", (event) => {
+        if (elements.tenantDropdown.classList.contains("hidden")) return;
+        if (elements.tenantDropdown.contains(event.target) || elements.tenantInput.contains(event.target)) return;
+        hideTenantDropdown();
     });
 
     elements.tenancySelect.addEventListener("change", () => {
@@ -1335,6 +1527,7 @@ export function initExportDataFeature() {
         refreshExportData();
     });
 
+    syncTenantClearButton();
     refreshExportData();
 }
 

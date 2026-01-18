@@ -865,10 +865,20 @@
               <div class="grid gap-3 sm:grid-cols-2">
                 <label class="text-[10px] text-slate-500 sm:col-span-2">
                   <span class="block uppercase font-semibold">Tenant name</span>
-                  <input id="exportTenantSearch" type="text" list="exportTenantOptions" autocomplete="off"
-                    placeholder="Start typing a tenant name"
-                    class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-[11px] bg-white" />
-                  <datalist id="exportTenantOptions"></datalist>
+                  <div class="relative mt-1">
+                    <input id="exportTenantSearch" type="text" autocomplete="off"
+                      placeholder="Start typing a tenant name"
+                      class="w-full border border-slate-200 rounded-lg px-3 py-2 pr-8 text-[11px] bg-white" />
+                    <button id="exportTenantClear" type="button" aria-label="Clear tenant search"
+                      class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-slate-400 hover:text-slate-600">
+                      x
+                    </button>
+                    <div id="exportTenantDropdown"
+                      class="hidden absolute left-0 right-0 mt-1 z-30 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                      <div id="exportTenantEmpty" class="hidden px-3 py-2 text-[11px] text-slate-500">No tenants found.</div>
+                      <div id="exportTenantList" class="divide-y divide-slate-100"></div>
+                    </div>
+                  </div>
                 </label>
 
                 <label class="text-[10px] text-slate-500 sm:col-span-2">
