@@ -723,11 +723,18 @@ function computeTotals(bills) {
 
 function buildRentUpdateRow(revision) {
     const rentLabel = formatNumber(revision.rentAmount, { decimals: 2 }) || "-";
-    const note = normalizeId(revision.note) || "No notes";
+    const note = normalizeId(revision.note);
     const monthLabel = normalizeId(revision.effectiveMonth);
-    const lineA = `RENT UPDATE: ${rentLabel}${monthLabel ? ` (Effective ${monthLabel})` : ""}`;
-    const row = [lineA, `NOTE: ${note}`];
-    while (row.length < 20) row.push("");
+    const lines = [`RENT UPDATE: ${rentLabel}${monthLabel ? ` (Effective ${monthLabel})` : ""}`];
+    if (note) {
+        lines.push(`NOTE: ${note}`);
+    }
+    const row = [
+        {
+            content: lines.join("\n"),
+            colSpan: 20,
+        },
+    ];
     row.__type = "rent-update";
     return row;
 }
@@ -744,6 +751,37 @@ function buildPaymentRow(payment) {
     row[17] = normalizeId(payment.notes || payment.reference || "");
     row.__type = "payment";
     return row;
+}
+
+function buildBillRentRevisions(bills) {
+    const revisions = [];
+    let lastRent = null;
+    bills.forEach((bill) => {
+        const monthKey = bill._monthKey || normalizeMonthKey(bill?.month_key || bill?.monthKey || "");
+        if (!monthKey) return;
+        const rentAmount = Number(bill?.rent_amount ?? bill?.rentAmount) || 0;
+        if (!rentAmount) return;
+        if (lastRent === null) {
+            lastRent = rentAmount;
+            revisions.push({
+                effectiveMonth: monthKey,
+                rentAmount,
+                note: "",
+                createdAt: bill?.generated_at || bill?.generatedAt || bill?.created_at || "",
+            });
+            return;
+        }
+        if (rentAmount !== lastRent) {
+            revisions.push({
+                effectiveMonth: monthKey,
+                rentAmount,
+                note: "",
+                createdAt: bill?.generated_at || bill?.generatedAt || bill?.created_at || "",
+            });
+            lastRent = rentAmount;
+        }
+    });
+    return revisions;
 }
 
 function buildBillRows(payload) {
@@ -784,13 +822,46 @@ function buildBillRows(payload) {
             return formatDateShort(a.createdAt).localeCompare(formatDateShort(b.createdAt));
         });
 
+    const billRevisions = buildBillRentRevisions(bills);
+    const revisionMap = new Map();
+
+    revisions.forEach((rev) => {
+        const existing = revisionMap.get(rev.effectiveMonth);
+        if (!existing) {
+            revisionMap.set(rev.effectiveMonth, rev);
+            return;
+        }
+        const existingDate = formatDateShort(existing.createdAt);
+        const nextDate = formatDateShort(rev.createdAt);
+        if (nextDate && (!existingDate || nextDate >= existingDate)) {
+            revisionMap.set(rev.effectiveMonth, rev);
+        }
+    });
+
+    billRevisions.forEach((rev) => {
+        const existing = revisionMap.get(rev.effectiveMonth);
+        if (!existing || existing.rentAmount !== rev.rentAmount) {
+            revisionMap.set(rev.effectiveMonth, {
+                ...existing,
+                ...rev,
+                note: existing?.note || rev.note,
+            });
+        }
+    });
+
+    const mergedRevisions = Array.from(revisionMap.values()).sort((a, b) => {
+        const monthDiff = a.effectiveMonth.localeCompare(b.effectiveMonth);
+        if (monthDiff !== 0) return monthDiff;
+        return formatDateShort(a.createdAt).localeCompare(formatDateShort(b.createdAt));
+    });
+
     const baseRent =
         Number(payload.tenant?.rentAmount ?? payload.tenant?.currentRent) ||
         Number(bills[0]?.rent_amount ?? bills[0]?.rentAmount) ||
         0;
 
-    if (baseRent && (!revisions.length || (bills[0]?._monthKey && revisions[0].effectiveMonth > bills[0]._monthKey))) {
-        revisions.unshift({
+    if (baseRent && (!mergedRevisions.length || (bills[0]?._monthKey && mergedRevisions[0].effectiveMonth > bills[0]._monthKey))) {
+        mergedRevisions.unshift({
             effectiveMonth: bills[0]?._monthKey || "",
             rentAmount: baseRent,
             note: "Initial rent",
@@ -804,8 +875,8 @@ function buildBillRows(payload) {
     // Insert rent revision rows before the first bill of each effective month.
     bills.forEach((bill) => {
         const billMonth = bill._monthKey;
-        while (revisionIndex < revisions.length && revisions[revisionIndex].effectiveMonth <= billMonth) {
-            rows.push(buildRentUpdateRow(revisions[revisionIndex]));
+        while (revisionIndex < mergedRevisions.length && mergedRevisions[revisionIndex].effectiveMonth <= billMonth) {
+            rows.push(buildRentUpdateRow(mergedRevisions[revisionIndex]));
             revisionIndex += 1;
         }
 
@@ -1223,11 +1294,10 @@ function buildPdfDocument(payload) {
         didParseCell: (data) => {
             const rowType = data.row.raw?.__type;
             if (rowType === "rent-update") {
-                data.cell.styles.fillColor = [224, 231, 255];
+                data.cell.styles.fillColor = [220, 252, 231];
+                data.cell.styles.textColor = [21, 128, 61];
                 data.cell.styles.fontStyle = "bold";
-                if (data.column.index > 1) {
-                    data.cell.text = [""];
-                }
+                data.cell.styles.halign = "left";
             }
             if (rowType === "payment") {
                 data.cell.styles.textColor = layout.mutedText;
