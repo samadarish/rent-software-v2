@@ -1291,34 +1291,20 @@ function buildPdfDocument(payload) {
             fontSize: 7,
             cellPadding: 2,
             overflow: "linebreak",
+            valign: "middle",
+            halign: "left",
             textColor: layout.sectionText,
         },
         headStyles: {
             fillColor: layout.headerFill,
             textColor: 255,
             fontStyle: "bold",
+            valign: "middle",
+            halign: "left",
+            overflow: "ellipsize",
         },
         columnStyles: {
-            0: { cellWidth: 36 },
-            1: { cellWidth: 60 },
-            2: { cellWidth: 48 },
-            3: { cellWidth: 28 },
-            4: { cellWidth: 34 },
-            5: { cellWidth: 34 },
-            6: { cellWidth: 34 },
-            7: { cellWidth: 28 },
-            8: { cellWidth: 38 },
-            9: { cellWidth: 34 },
-            10: { cellWidth: 34 },
-            11: { cellWidth: 38 },
-            12: { cellWidth: 38 },
-            13: { cellWidth: 38 },
-            14: { cellWidth: 30 },
-            15: { cellWidth: 48 },
-            16: { cellWidth: 52 },
-            17: { cellWidth: 94 },
-            18: { cellWidth: 42 },
-            19: { cellWidth: 30 },
+            17: { cellWidth: 60 },
         },
         didParseCell: (data) => {
             const rowType = data.row.raw?.__type;
@@ -1344,10 +1330,19 @@ function buildPdfDocument(payload) {
                 if (link) {
                     data.cell._link = link;
                     data.cell.text = ["Open"];
-                    data.cell.styles.fillColor = [37, 99, 235];
-                    data.cell.styles.textColor = [255, 255, 255];
+                    data.cell.styles.fillColor = [191, 219, 254];
+                    data.cell.styles.textColor = [30, 64, 175];
                     data.cell.styles.fontStyle = "bold";
-                    data.cell.styles.lineColor = [30, 64, 175];
+                    data.cell.styles.lineColor = [147, 197, 253];
+                    data.cell.styles.lineWidth = 0.6;
+                    data.cell.styles.halign = "center";
+                    data.cell.styles.valign = "middle";
+                } else if (!rawValue) {
+                    data.cell.text = ["N/A"];
+                    data.cell.styles.fillColor = [254, 226, 226];
+                    data.cell.styles.textColor = [153, 27, 27];
+                    data.cell.styles.fontStyle = "bold";
+                    data.cell.styles.lineColor = [254, 202, 202];
                     data.cell.styles.lineWidth = 0.6;
                     data.cell.styles.halign = "center";
                     data.cell.styles.valign = "middle";
