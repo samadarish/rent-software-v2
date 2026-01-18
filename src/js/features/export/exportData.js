@@ -1692,7 +1692,7 @@ export function initExportDataFeature() {
         });
     }
 
-    elements.tenantList.addEventListener("click", (event) => {
+    elements.tenantList.addEventListener("pointerdown", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
         const button = target.closest("button[data-tenant-id]");
@@ -1700,6 +1700,7 @@ export function initExportDataFeature() {
         const tenantId = normalizeId(button.dataset.tenantId);
         const entry = tenantSearchMap.get(tenantId);
         if (!entry) return;
+        event.preventDefault();
         selectTenant(entry);
     });
 
