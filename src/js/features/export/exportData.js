@@ -702,32 +702,6 @@ function matchPaymentsForBill(bill, payments, fallbackPayments, tenantKey, wing)
     });
 }
 
-function computeTotals(bills) {
-    return bills.reduce(
-        (acc, bill) => {
-            const total = Number(bill?.total_amount ?? bill?.totalAmount) || 0;
-            const amountPaid = Number(bill?.amount_paid ?? bill?.amountPaid) || 0;
-            const paid = total > 0 ? Math.min(amountPaid, total) : 0;
-            const ratio = total > 0 ? paid / total : 0;
-            acc.rentPaid += (Number(bill?.rent_amount ?? bill?.rentAmount) || 0) * ratio;
-            acc.electricityPaid += (Number(bill?.electricity_amount ?? bill?.electricityAmount) || 0) * ratio;
-            acc.motorPaid += (Number(bill?.motor_share_amount ?? bill?.motorShare) || 0) * ratio;
-            acc.sweepPaid += (Number(bill?.sweep_amount ?? bill?.sweepAmount) || 0) * ratio;
-            acc.electricityUnits += Number(bill?.electricity_units ?? bill?.electricityUnits) || 0;
-            acc.totalPaid += paid;
-            return acc;
-        },
-        {
-            rentPaid: 0,
-            electricityPaid: 0,
-            motorPaid: 0,
-            sweepPaid: 0,
-            electricityUnits: 0,
-            totalPaid: 0,
-        }
-    );
-}
-
 function buildRentUpdateRow(revision) {
     const rentLabel = formatNumber(revision.rentAmount, { decimals: 2 }) || "-";
     const note = normalizeId(revision.note);
@@ -894,6 +868,8 @@ function buildBillRows(payload) {
         total: 0,
         totalPaid: 0,
     };
+    let paymentDateSum = 0;
+    let paymentDateCount = 0;
 
     const rows = [];
     let revisionIndex = 0;
@@ -983,6 +959,15 @@ function buildBillRows(payload) {
         totals.total += totalAmount;
         totals.totalPaid += Number(amountPaid) || 0;
 
+        billPayments.forEach((payment) => {
+            if (!Number(payment?.amount)) return;
+            const ts = getPaymentSortTimestamp(payment);
+            if (ts > 0) {
+                paymentDateSum += ts;
+                paymentDateCount += 1;
+            }
+        });
+
         if (mergePayments) {
             const rowSpan = billPayments.length;
             const mergeIndexes = [
@@ -1004,6 +989,9 @@ function buildBillRows(payload) {
     });
 
     if (bills.length) {
+        const avgPaymentDate = paymentDateCount
+            ? formatDateShort(new Date(Math.round(paymentDateSum / paymentDateCount)).toISOString())
+            : "";
         const totalRow = Array(20).fill("");
         totalRow[0] = "Totals";
         totalRow[7] = formatUnits(totals.units) || "0";
@@ -1012,6 +1000,7 @@ function buildBillRows(payload) {
         totalRow[10] = formatNumber(totals.sweep, { decimals: 2 }) || "0.00";
         totalRow[11] = formatNumber(totals.rent, { decimals: 2 }) || "0.00";
         totalRow[12] = formatNumber(totals.total, { decimals: 2 }) || "0.00";
+        totalRow[15] = avgPaymentDate || "-";
         totalRow[18] = formatNumber(totals.totalPaid, { decimals: 2 }) || "0.00";
         totalRow.__type = "bill-total";
         rows.push(totalRow);
@@ -1024,7 +1013,10 @@ function buildBillRows(payload) {
         rows.push(row);
     }
 
-    return rows;
+    const averagePaymentDate = paymentDateCount
+        ? formatDateShort(new Date(Math.round(paymentDateSum / paymentDateCount)).toISOString())
+        : "";
+    return { rows, totals, averagePaymentDate };
 }
 
 function addSectionTitle(doc, title, y, layout) {
@@ -1250,38 +1242,58 @@ function buildPdfDocument(payload) {
     });
     cursorY = doc.lastAutoTable.finalY + 12;
 
+    const billData = buildBillRows(payload);
+    const billRows = billData.rows;
+    const billTotals = billData.totals || {
+        units: 0,
+        elecAmt: 0,
+        motor: 0,
+        sweep: 0,
+        rent: 0,
+        total: 0,
+        totalPaid: 0,
+    };
+    const averagePaymentDate = billData.averagePaymentDate || "-";
+
     cursorY = addSectionTitle(doc, "Totals", cursorY, layout);
-    const totals = computeTotals(payload.bills);
+    const totalsPalette = {
+        rentPaid: { fillColor: [191, 219, 254], textColor: [15, 23, 42] },
+        elecAmt: { fillColor: [187, 247, 208], textColor: [15, 23, 42] },
+        units: { fillColor: [233, 213, 255], textColor: [15, 23, 42] },
+        motor: { fillColor: [254, 215, 170], textColor: [15, 23, 42] },
+        total: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
+        avgDate: { fillColor: [254, 240, 138], textColor: [120, 53, 15] },
+    };
     const totalsCells = [
         {
             label: "Total Rent Paid",
-            value: formatNumber(totals.rentPaid, { decimals: 2 }) || "0.00",
-            fillColor: [191, 219, 254],
-            textColor: [15, 23, 42],
+            value: formatNumber(billTotals.totalPaid, { decimals: 2 }) || "0.00",
+            ...totalsPalette.rentPaid,
         },
         {
-            label: "Total Electricity Paid",
-            value: formatNumber(totals.electricityPaid, { decimals: 2 }) || "0.00",
-            fillColor: [187, 247, 208],
-            textColor: [15, 23, 42],
+            label: "Total Electricity Amount",
+            value: formatNumber(billTotals.elecAmt, { decimals: 2 }) || "0.00",
+            ...totalsPalette.elecAmt,
         },
         {
             label: "Total Electricity Units Consumed",
-            value: formatUnits(totals.electricityUnits) || "0",
-            fillColor: [233, 213, 255],
-            textColor: [15, 23, 42],
+            value: formatUnits(billTotals.units) || "0",
+            ...totalsPalette.units,
         },
         {
-            label: "Total Motor Share Paid",
-            value: formatNumber(totals.motorPaid, { decimals: 2 }) || "0.00",
-            fillColor: [254, 215, 170],
-            textColor: [15, 23, 42],
+            label: "Total Motor Share",
+            value: formatNumber(billTotals.motor, { decimals: 2 }) || "0.00",
+            ...totalsPalette.motor,
         },
         {
-            label: "Total rent + Electricity + Motor + sweep",
-            value: formatNumber(totals.totalPaid, { decimals: 2 }) || "0.00",
-            fillColor: [15, 23, 42],
-            textColor: [255, 255, 255],
+            label: "Total rent + Electricity + Motor + Sweep",
+            value: formatNumber(billTotals.total, { decimals: 2 }) || "0.00",
+            ...totalsPalette.total,
+        },
+        {
+            label: "Average payment date",
+            value: averagePaymentDate || "-",
+            ...totalsPalette.avgDate,
         },
     ];
     const totalsColWidth = layout.contentWidth / totalsCells.length;
@@ -1327,7 +1339,6 @@ function buildPdfDocument(payload) {
     cursorY = doc.lastAutoTable.finalY + 12;
 
     cursorY = addSectionTitle(doc, "Bills", cursorY, layout);
-    const billRows = buildBillRows(payload);
     const billHeaders = [
         "Month",
         "Bill ID",
@@ -1404,6 +1415,19 @@ function buildPdfDocument(payload) {
             if (rowType === "bill-total") {
                 data.cell.styles.fillColor = [241, 245, 249];
                 data.cell.styles.fontStyle = "bold";
+                const totalsHighlightMap = {
+                    7: totalsPalette.units,
+                    8: totalsPalette.elecAmt,
+                    9: totalsPalette.motor,
+                    12: totalsPalette.total,
+                    15: totalsPalette.avgDate,
+                    18: totalsPalette.rentPaid,
+                };
+                const highlight = totalsHighlightMap[data.column.index];
+                if (highlight) {
+                    data.cell.styles.fillColor = highlight.fillColor;
+                    data.cell.styles.textColor = highlight.textColor;
+                }
             }
             if (data.column.index === 16) {
                 const rawValue = typeof data.cell.raw === "string" ? data.cell.raw : "";
@@ -1439,6 +1463,31 @@ function buildPdfDocument(payload) {
                 });
             }
         },
+    });
+
+    const legendItems = [
+        { label: "Total Rent Paid", color: totalsPalette.rentPaid.fillColor },
+        { label: "Total Electricity Amount", color: totalsPalette.elecAmt.fillColor },
+        { label: "Total Electricity Units Consumed", color: totalsPalette.units.fillColor },
+        { label: "Total Motor Share", color: totalsPalette.motor.fillColor },
+        { label: "Total rent + Electricity + Motor + Sweep", color: totalsPalette.total.fillColor },
+        { label: "Average payment date", color: totalsPalette.avgDate.fillColor },
+    ];
+    let legendY = doc.lastAutoTable.finalY + 10;
+    const legendLineHeight = 10;
+    const legendMaxY = layout.pageHeight - layout.padding - legendLineHeight;
+    if (legendY + legendItems.length * legendLineHeight > legendMaxY) {
+        doc.addPage();
+        legendY = layout.padding;
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...layout.sectionText);
+    legendItems.forEach((item) => {
+        doc.setFillColor(...item.color);
+        doc.rect(layout.padding, legendY - 6, 8, 8, "F");
+        doc.text(item.label, layout.padding + 14, legendY);
+        legendY += legendLineHeight;
     });
 
     applyPdfFooter(doc, layout, { generatedAt: new Date().toLocaleString() });
