@@ -386,11 +386,17 @@ function readTable_(sheetName, headers) {
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) return [];
   const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  const tz = Session.getScriptTimeZone() || 'Asia/Kolkata';
   return values
     .map((row) => {
       const record = {};
       headers.forEach((key, idx) => {
-        record[key] = row[idx];
+        let val = row[idx];
+        // Convert Date objects to ISO date strings in local timezone to avoid UTC serialization issues
+        if (val instanceof Date && !isNaN(val.getTime())) {
+          val = Utilities.formatDate(val, tz, 'yyyy-MM-dd');
+        }
+        record[key] = val;
       });
       return record;
     })
@@ -407,17 +413,24 @@ function readTableColumns_(sheetName, headers, columns) {
   if (!indices.length) return [];
   const maxIndex = Math.max.apply(null, indices);
   const values = sheet.getRange(2, 1, lastRow - 1, maxIndex + 1).getValues();
+  const tz = Session.getScriptTimeZone() || 'Asia/Kolkata';
   return values
     .map((row) => {
       const record = {};
       requested.forEach((key) => {
         const idx = headerIndex[key];
-        record[key] = idx !== undefined ? row[idx] : '';
+        let val = idx !== undefined ? row[idx] : '';
+        // Convert Date objects to ISO date strings in local timezone
+        if (val instanceof Date && !isNaN(val.getTime())) {
+          val = Utilities.formatDate(val, tz, 'yyyy-MM-dd');
+        }
+        record[key] = val;
       });
       return record;
     })
     .filter((r) => Object.values(r).some((v) => v !== ''));
 }
+
 
 function getScriptCache_() {
   return CacheService.getScriptCache();

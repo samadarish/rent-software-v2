@@ -227,25 +227,30 @@ function formatDateShort(value) {
 
 function coerceIsoDate(value) {
     if (!value) return "";
+    // If already a Date object, use UTC methods to avoid timezone shift
     if (value instanceof Date && !Number.isNaN(value.getTime())) {
-        const year = value.getFullYear();
-        const month = String(value.getMonth() + 1).padStart(2, "0");
-        const day = String(value.getDate()).padStart(2, "0");
+        const year = value.getUTCFullYear();
+        const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(value.getUTCDate()).padStart(2, "0");
         return `${year}-${month}-${day}`;
     }
     const raw = normalizeId(value);
     if (!raw) return "";
+    // Match YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD format - return directly without parsing
     const matchYmd = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
     if (matchYmd) {
         const [, year, month, day] = matchYmd;
         return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
     }
+    // Match DD-MM-YYYY or DD/MM/YYYY format
     const matchDmy = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
     if (matchDmy) {
         const [, day, month, year] = matchDmy;
         return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
     }
-    const parsed = new Date(raw);
+    // For other date formats, parse with T00:00:00 to ensure local time interpretation
+    const hasTime = raw.includes("T") || raw.includes(" ");
+    const parsed = new Date(hasTime ? raw : raw + "T00:00:00");
     if (!Number.isNaN(parsed.getTime())) {
         const year = parsed.getFullYear();
         const month = String(parsed.getMonth() + 1).padStart(2, "0");
@@ -254,6 +259,7 @@ function coerceIsoDate(value) {
     }
     return "";
 }
+
 
 function formatDateForExport(value) {
     const iso = coerceIsoDate(value);
@@ -344,10 +350,14 @@ function buildTenancyLabel(tenancy, tenant, unitMap) {
         tenant?.unitNumber ||
         tenant?.unit_number ||
         "Unit";
+    // Use commencement_date directly from tenancy table; only use tenant data if tenancy is empty
     const startDate = formatDateForExport(
         tenancy?.commencement_date ||
             tenancy?.commencementDate ||
-            tenant?.tenancyCommencement ||
+            tenancy?.agreement_date ||
+            ""
+    ) || formatDateForExport(
+        tenant?.tenancyCommencement ||
             tenant?.templateData?.tenancy_comm_raw ||
             ""
     );
@@ -881,10 +891,14 @@ function buildPdfDocument(payload) {
     cursorY = doc.lastAutoTable.finalY + 12;
 
     cursorY = addSectionTitle(doc, "Tenancy Detail", cursorY, layout);
+    // Use commencement_date directly from tenancy table; only use tenant data if tenancy is empty
     const tenancyStart = formatDateForExport(
         payload.tenancy?.commencement_date ||
             payload.tenancy?.commencementDate ||
-            payload.tenant?.tenancyCommencement ||
+            payload.tenancy?.agreement_date ||
+            ""
+    ) || formatDateForExport(
+        payload.tenant?.tenancyCommencement ||
             payload.tenant?.templateData?.tenancy_comm_raw ||
             ""
     );
