@@ -1,4 +1,6 @@
 ﻿import { getLocalList, LOCAL_KEYS } from "../../api/localStore.js";
+import { ensureAppScriptConfigured } from "../../api/config.js";
+import { startInitialSync } from "../../api/syncManager.js";
 import { buildUnitLabel, formatDateForDoc, normalizeMonthKey, toOrdinal } from "../../utils/formatters.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
@@ -391,6 +393,14 @@ function coerceIsoDate(value) {
 function formatDateForExport(value) {
     const iso = coerceIsoDate(value);
     return iso ? formatDateForDoc(iso) : "";
+}
+
+function formatDayOnly(value) {
+    const iso = coerceIsoDate(value);
+    if (!iso) return "";
+    const day = Number(iso.slice(8, 10));
+    if (Number.isNaN(day)) return "";
+    return toOrdinal(day);
 }
 
 function formatPayableDate(value) {
@@ -988,10 +998,11 @@ function buildBillRows(payload) {
         });
     });
 
+    const averagePaymentDay = paymentDateCount
+        ? formatDayOnly(new Date(Math.round(paymentDateSum / paymentDateCount)))
+        : "";
+
     if (bills.length) {
-        const avgPaymentDate = paymentDateCount
-            ? formatDateShort(new Date(Math.round(paymentDateSum / paymentDateCount)).toISOString())
-            : "";
         const totalRow = Array(20).fill("");
         totalRow[0] = "Totals";
         totalRow[7] = formatUnits(totals.units) || "0";
@@ -1000,7 +1011,7 @@ function buildBillRows(payload) {
         totalRow[10] = formatNumber(totals.sweep, { decimals: 2 }) || "0.00";
         totalRow[11] = formatNumber(totals.rent, { decimals: 2 }) || "0.00";
         totalRow[12] = formatNumber(totals.total, { decimals: 2 }) || "0.00";
-        totalRow[15] = avgPaymentDate || "-";
+        totalRow[15] = averagePaymentDay || "-";
         totalRow[18] = formatNumber(totals.totalPaid, { decimals: 2 }) || "0.00";
         totalRow.__type = "bill-total";
         rows.push(totalRow);
@@ -1013,9 +1024,7 @@ function buildBillRows(payload) {
         rows.push(row);
     }
 
-    const averagePaymentDate = paymentDateCount
-        ? formatDateShort(new Date(Math.round(paymentDateSum / paymentDateCount)).toISOString())
-        : "";
+    const averagePaymentDate = averagePaymentDay;
     return { rows, totals, averagePaymentDate };
 }
 
@@ -1079,7 +1088,8 @@ function buildPdfDocument(payload) {
         payload.tenant?.unitNumber ||
         payload.tenant?.unit_number ||
         "";
-    const statusLabel = isTenancyActive(payload.tenancy) ? "Active" : "Inactive";
+    const tenancyIsActive = isTenancyActive(payload.tenancy);
+    const statusLabel = tenancyIsActive ? "Active" : "Inactive";
     const tenantGrn =
         payload.tenant?.grnNumber ||
         payload.tenant?.grn_number ||
@@ -1173,6 +1183,10 @@ function buildPdfDocument(payload) {
             payload.tenant?.templateData?.tenancy_end_raw ||
             ""
     );
+    const tenancyStatusPalette = {
+        active: { fillColor: [220, 252, 231], textColor: [21, 128, 61] },
+        inactive: { fillColor: [254, 226, 226], textColor: [153, 27, 27] },
+    };
     doc.autoTable({
         startY: cursorY,
         theme: "plain",
@@ -1195,6 +1209,20 @@ function buildPdfDocument(payload) {
             1: { cellWidth: 180 },
             2: { cellWidth: 120, fontStyle: "bold" },
             3: { cellWidth: 180 },
+        },
+        didParseCell: (data) => {
+            if (data.section !== "body") return;
+            if (data.row.index !== 4) return;
+            let palette = null;
+            if (data.column.index === 1) {
+                palette = tenancyEnd ? tenancyStatusPalette.inactive : tenancyStatusPalette.active;
+            } else if (data.column.index === 3) {
+                palette = tenancyIsActive ? tenancyStatusPalette.active : tenancyStatusPalette.inactive;
+            }
+            if (!palette) return;
+            data.cell.styles.fillColor = palette.fillColor;
+            data.cell.styles.textColor = palette.textColor;
+            data.cell.styles.fontStyle = "bold";
         },
         body: [
             ["GRN No", tenantGrn || "-", "Rent Revision", formatRentRevision(payload.tenancy?.rent_revision_number || payload.tenant?.rentRevisionNumber || payload.tenant?.templateData?.rent_rev_number, payload.tenancy?.rent_revision_unit || payload.tenant?.rentRevisionUnit || getTemplateValue(payload.tenant, "rent_rev year_mon"))],
@@ -1361,6 +1389,25 @@ function buildPdfDocument(payload) {
         "Total Paid",
         "Status",
     ];
+    const billStatusPalette = {
+        paid: { fillColor: [187, 247, 208], textColor: [22, 101, 52] },
+        unpaid: { fillColor: [255, 228, 230], textColor: [153, 27, 27] },
+        partial: { fillColor: [254, 215, 170], textColor: [154, 52, 18] },
+    };
+    const getBillStatusText = (row) => {
+        if (!Array.isArray(row)) return "";
+        const raw = row[19];
+        if (typeof raw === "string" || typeof raw === "number") return normalizeId(raw);
+        if (raw && typeof raw === "object") {
+            if (typeof raw.content === "string" || typeof raw.content === "number") {
+                return normalizeId(raw.content);
+            }
+            if (Array.isArray(raw.content)) {
+                return normalizeId(raw.content.join(" "));
+            }
+        }
+        return "";
+    };
 
     doc.autoTable({
         startY: cursorY,
@@ -1400,6 +1447,7 @@ function buildPdfDocument(payload) {
                 data.cell.styles.fillColor = [220, 252, 231];
                 data.cell.styles.textColor = [21, 128, 61];
                 data.cell.styles.fontStyle = "bold";
+                data.cell.styles.fontSize = 8;
                 data.cell.styles.halign = "left";
             }
             if (rowType === "payment") {
@@ -1429,6 +1477,17 @@ function buildPdfDocument(payload) {
                     data.cell.styles.textColor = highlight.textColor;
                 }
             }
+            if (rowType === "bill" && data.column.index === 19) {
+                const statusKey = getBillStatusText(data.row.raw).toLowerCase();
+                const palette = billStatusPalette[statusKey];
+                if (palette) {
+                    data.cell.styles.fillColor = palette.fillColor;
+                    data.cell.styles.textColor = palette.textColor;
+                    data.cell.styles.fontStyle = "bold";
+                    data.cell.styles.halign = "center";
+                    data.cell.styles.valign = "middle";
+                }
+            }
             if (data.column.index === 16) {
                 const rawValue = typeof data.cell.raw === "string" ? data.cell.raw : "";
                 const link = normalizeUrl(rawValue);
@@ -1443,12 +1502,12 @@ function buildPdfDocument(payload) {
                     data.cell.styles.halign = "center";
                     data.cell.styles.valign = "middle";
                 } else if (!rawValue) {
-                    data.cell.text = ["N/A"];
-                    data.cell.styles.fillColor = [254, 226, 226];
-                    data.cell.styles.textColor = [153, 27, 27];
-                    data.cell.styles.fontStyle = "bold";
-                    data.cell.styles.lineColor = [254, 202, 202];
-                    data.cell.styles.lineWidth = 0.6;
+                    data.cell.text = ["-"];
+                    data.cell.styles.fillColor = [248, 250, 252];
+                    data.cell.styles.textColor = [100, 116, 139];
+                    data.cell.styles.fontStyle = "normal";
+                    data.cell.styles.lineColor = [226, 232, 240];
+                    data.cell.styles.lineWidth = 0.4;
                     data.cell.styles.halign = "center";
                     data.cell.styles.valign = "middle";
                 }
@@ -1499,6 +1558,16 @@ function revokeLastPdfUrl() {
         URL.revokeObjectURL(lastPdfDownloadUrl);
         lastPdfDownloadUrl = "";
     }
+}
+
+function showExportSyncModal() {
+    const modal = document.getElementById("exportSyncModal");
+    if (modal) showModal(modal);
+}
+
+function hideExportSyncModal() {
+    const modal = document.getElementById("exportSyncModal");
+    if (modal) hideModal(modal);
 }
 
 function syncPdfExportModal(fileName, objectUrlOrPath) {
@@ -1611,6 +1680,25 @@ async function handleExportClick() {
 
     setExportLoading(true);
     try {
+        const configured = await ensureAppScriptConfigured({ autoSync: false });
+        if (!configured?.ok) return;
+        showExportSyncModal();
+        const syncResult = await startInitialSync();
+        if (syncResult?.ok === false) {
+            const reason = syncResult?.reason;
+            let message = "Sync failed. Export aborted.";
+            let type = "error";
+            if (reason === "cancelled") {
+                message = "Sync cancelled. Export aborted.";
+                type = "warning";
+            } else if (reason === "already-running") {
+                message = "Sync already running. Try exporting again once it finishes.";
+                type = "warning";
+            }
+            showToast(message, type);
+            return;
+        }
+
         const [
             tenants,
             tenancies,
@@ -1667,6 +1755,7 @@ async function handleExportClick() {
             await fs.writeFile(filePath, uint8);
             lastPdfFilePath = filePath;
             revokeLastPdfUrl();
+            hideExportSyncModal();
             syncPdfExportModal(fileName, filePath);
             showToast(`Saved to Downloads: ${fileName}`, "success");
             return;
@@ -1677,12 +1766,14 @@ async function handleExportClick() {
         lastPdfBlob = blob;
         lastPdfDownloadUrl = URL.createObjectURL(blob);
         saveAs(blob, fileName);
+        hideExportSyncModal();
         syncPdfExportModal(fileName, lastPdfDownloadUrl);
         showToast(`PDF downloaded as "${fileName}"`, "success");
     } catch (err) {
         console.error("PDF export failed", err);
         showToast("PDF export failed. Check the console for details.", "error");
     } finally {
+        hideExportSyncModal();
         setExportLoading(false);
     }
 }
