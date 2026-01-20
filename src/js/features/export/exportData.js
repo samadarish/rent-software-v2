@@ -1741,10 +1741,34 @@ async function handleExportClick() {
             payload.tenant?.grn_number ||
             getTemplateValue(payload.tenant, "GRN number") ||
             "GRN";
-        const safeTenant = sanitizeFileName(payload.tenant?.tenantFullName || payload.tenant?.tenantName, "Tenant");
+        const tenantName =
+            payload.tenant?.tenantFullName || payload.tenant?.tenantName || payload.tenant?.tenant_name || "";
+        const wingName = payload.wing || payload.unit?.wing || payload.tenancy?.wing || payload.tenant?.wing || "";
+        let unitName =
+            payload.unit?.unit_number ||
+            payload.unit?.unitNumber ||
+            payload.tenancy?.unitNumber ||
+            payload.tenancy?.unit_number ||
+            payload.tenant?.unitNumber ||
+            payload.tenant?.unit_number ||
+            "";
+        if (!unitName) {
+            const label = buildUnitLabel(payload.unit);
+            const wingPrefix = normalizeId(wingName);
+            if (label) {
+                if (wingPrefix && label.toLowerCase().startsWith(wingPrefix.toLowerCase())) {
+                    unitName = label.slice(wingPrefix.length).replace(/^[-\s]+/, "");
+                } else {
+                    unitName = label;
+                }
+            }
+        }
+
+        const safeTenant = sanitizeFileName(tenantName, "Tenant");
+        const safeWing = sanitizeFileName(wingName, "Wing");
+        const safeUnit = sanitizeFileName(unitName, "Unit");
         const safeGrn = sanitizeFileName(grn, "GRN");
-        const safeTenancy = sanitizeFileName(tenancyId, "Tenancy");
-        const fileName = `${safeTenant}_${safeGrn}_${safeTenancy}_Export.pdf`;
+        const fileName = `${safeTenant}_${safeWing}_${safeUnit}_${safeGrn}.pdf`;
 
         if (window.__TAURI__) {
             const out = doc.output("arraybuffer");
