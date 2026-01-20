@@ -69,14 +69,14 @@ const paymentsState = {
     paidFilters: {
         fromMonth: "",
         toMonth: "",
-        limit: 9,
+        limit: 10,
         hasSearched: false,
     },
 };
 
 const BILL_MONTHS_BACK = 24;
 const PENDING_PAGE_SIZE = 9;
-const PAID_DEFAULT_LIMIT = 9;
+const PAID_DEFAULT_LIMIT = 10;
 const RECEIPT_MAX_DIM = 1100;
 const RECEIPT_WEBP_QUALITY = 0.68;
 const RECEIPT_TARGET_BYTES = 20 * 1024;
@@ -613,7 +613,9 @@ function setPaymentModalLoading(isLoading, label = "Loading details...") {
 
 function updatePaymentModalTitle(modalTitle, payment, context) {
     if (!modalTitle) return;
-    const isSettled = payment && (context?.remaining ?? 0) <= 0;
+    const remaining = typeof context?.remaining === "number" ? context.remaining : Number(context?.remaining);
+    const isSettled =
+        context?.viewOnly === true || (Number.isFinite(remaining) && remaining <= 0);
     if (isSettled) {
         modalTitle.textContent = "Payment details";
         return;
@@ -1318,8 +1320,13 @@ async function openPaymentModal(payment = null, billContext = null) {
 
     if (context) applyBillContext(context);
 
+    const remainingValue =
+        typeof context?.remaining === "number" ? context.remaining : Number(context?.remaining);
+    const viewOnly =
+        context?.viewOnly === true || (Number.isFinite(remainingValue) && remainingValue <= 0);
+    paymentsState.viewOnly = viewOnly;
+
     if (payment) {
-        paymentsState.viewOnly = (context?.remaining ?? 0) <= 0;
         paymentsState.editingId = payment.id;
         paymentsState.attachmentName = payment.attachmentName || "";
         paymentsState.attachmentUrl = normalizeAttachmentUrl(payment.attachmentUrl || "");
@@ -1331,8 +1338,6 @@ async function openPaymentModal(payment = null, billContext = null) {
         if (dateInput) dateInput.value = payment.date || dateInput.value;
         if (notesInput) notesInput.value = payment.notes || "";
         if (idField) idField.value = payment.id || "";
-    } else {
-        paymentsState.viewOnly = context?.viewOnly === true;
     }
 
     setPaymentFormReadOnly(paymentsState.viewOnly);
@@ -1375,11 +1380,15 @@ async function openPaymentModal(payment = null, billContext = null) {
                 let updatedContext = { ...detailedBill, remaining: status.remaining };
                 updatedContext = mergePaymentOverrides(updatedContext, payment);
                 applyBillContext(updatedContext);
-                if (payment) {
-                    paymentsState.viewOnly = (updatedContext?.remaining ?? 0) <= 0;
-                    setPaymentFormReadOnly(paymentsState.viewOnly);
-                    updatePaymentModalTitle(modalTitle, payment, updatedContext);
-                }
+                const updatedRemaining =
+                    typeof updatedContext?.remaining === "number"
+                        ? updatedContext.remaining
+                        : Number(updatedContext?.remaining);
+                paymentsState.viewOnly =
+                    updatedContext?.viewOnly === true ||
+                    (Number.isFinite(updatedRemaining) && updatedRemaining <= 0);
+                setPaymentFormReadOnly(paymentsState.viewOnly);
+                updatePaymentModalTitle(modalTitle, payment, updatedContext);
             })
             .finally(() => {
                 if (isActiveRequest()) setPaymentModalLoading(false);
