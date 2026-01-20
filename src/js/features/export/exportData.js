@@ -1,5 +1,5 @@
 ﻿import { getLocalList, LOCAL_KEYS } from "../../api/localStore.js";
-import { ensureAppScriptConfigured } from "../../api/config.js";
+import { ensureAppScriptConfigured, ensureDownloadLocationConfigured } from "../../api/config.js";
 import { startInitialSync } from "../../api/syncManager.js";
 import { buildUnitLabel, formatDateForDoc, normalizeMonthKey, toOrdinal } from "../../utils/formatters.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
@@ -1581,7 +1581,11 @@ function syncPdfExportModal(fileName, objectUrlOrPath) {
 
     if (fileNameLabel) fileNameLabel.textContent = safeFileName;
     if (locationLabel) {
-        locationLabel.textContent = `Saved to: Downloads/${safeFileName}`;
+        if (window.__TAURI__ && objectUrlOrPath) {
+            locationLabel.textContent = `Saved to: ${objectUrlOrPath}`;
+        } else {
+            locationLabel.textContent = `Saved to: Downloads/${safeFileName}`;
+        }
     }
 
     if (openLink) {
@@ -1677,6 +1681,13 @@ async function handleExportClick() {
         return;
     }
     if (!ensurePdfLibsReady()) return;
+
+    let downloadDir = "";
+    if (window.__TAURI__) {
+        const location = await ensureDownloadLocationConfigured();
+        if (!location?.ok) return;
+        downloadDir = location.path || "";
+    }
 
     setExportLoading(true);
     try {
@@ -1774,14 +1785,14 @@ async function handleExportClick() {
             const out = doc.output("arraybuffer");
             const uint8 = new Uint8Array(out);
             const { path, fs } = window.__TAURI__;
-            const downloadDir = await path.downloadDir();
-            const filePath = await path.join(downloadDir, fileName);
+            const baseDir = downloadDir || (await path.downloadDir());
+            const filePath = await path.join(baseDir, fileName);
             await fs.writeFile(filePath, uint8);
             lastPdfFilePath = filePath;
             revokeLastPdfUrl();
             hideExportSyncModal();
             syncPdfExportModal(fileName, filePath);
-            showToast(`Saved to Downloads: ${fileName}`, "success");
+            showToast(`Saved to: ${filePath}`, "success");
             return;
         }
 

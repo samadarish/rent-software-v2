@@ -1625,8 +1625,16 @@
         <div class="flex items-start justify-between">
           <div>
             <h3 class="text-xs font-semibold">Landlord configuration</h3>
-            <p class="text-[10px] text-slate-500">Defaults will auto-fill across Agreement and Active tenant flows.
-            </p>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-600">
+              <span class="uppercase font-semibold text-slate-500">Download location</span>
+              <input id="downloadLocationValue" type="text"
+                class="flex-1 min-w-[200px] border rounded px-2 py-1 text-[10px] bg-white"
+                placeholder="Not set" readonly />
+              <button id="downloadLocationChangeBtn"
+                class="px-2.5 py-1 rounded bg-slate-900 text-white text-[10px] font-semibold hover:bg-slate-800">
+                Change
+              </button>
+            </div>
           </div>
           <button id="landlordDefaultsCancelBtn" class="text-slate-500 hover:text-slate-800">✕</button>
         </div>
@@ -2087,6 +2095,49 @@
           <p class="text-[10px] text-slate-500">
             Please keep the app open. This keeps your local database up to date.
           </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- DOWNLOAD LOCATION MODAL -->
+    <div id="downloadLocationModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 fade-overlay">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-4 md:p-5 modal-panel border border-slate-200">
+        <div class="flex items-start gap-3">
+          <div class="h-10 w-10 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-sm font-semibold">
+            Save
+          </div>
+          <div class="flex-1">
+            <h3 class="text-sm font-semibold text-slate-900">Download location</h3>
+            <p class="text-[11px] text-slate-500">Used for PDF and DOCX exports.</p>
+          </div>
+          <button id="downloadLocationModalClose" class="text-slate-400 hover:text-slate-700 text-lg leading-none px-1" aria-label="Close">
+            &times;
+          </button>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          <div class="space-y-1">
+            <label class="text-[11px] font-semibold text-slate-700">Folder</label>
+            <div class="flex items-center gap-2">
+              <input id="downloadLocationPath" type="text"
+                class="flex-1 border rounded-lg px-3 py-2 text-xs bg-white" placeholder="Select a folder" readonly />
+              <button id="downloadLocationBrowseBtn"
+                class="px-3 py-2 text-[11px] rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100">
+                Browse
+              </button>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-3 pt-3 border-t border-slate-100">
+            <button id="downloadLocationCancelBtn"
+              class="px-3 py-1.5 text-[11px] rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100">
+              Cancel
+            </button>
+            <button id="downloadLocationSaveBtn"
+              class="px-3 py-1.5 text-[11px] rounded-lg bg-slate-900 text-white hover:bg-slate-800 font-semibold">
+              Save
+            </button>
+          </div>
         </div>
       </div>
     </div>

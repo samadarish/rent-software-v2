@@ -11,6 +11,8 @@ import { startInitialSync } from "./syncManager.js";
 const APPS_SCRIPT_PATH_REGEX = /^\/macros\/s\/[A-Za-z0-9_-]+\/(exec|dev)(\/)?$/;
 const FULL_SYNC_STALE_MS = 2 * 60 * 60 * 1000;
 let modalProgressBound = false;
+let downloadLocationModalBound = false;
+let downloadLocationResolver = null;
 
 /**
  * Retrieves the Google Apps Script URL from local storage
@@ -188,6 +190,161 @@ export async function startManualSync() {
     return runFullSyncWithModal({ reason: "stale" });
 }
 
+export function getDownloadLocation() {
+    return (localStorage.getItem(STORAGE_KEYS.DOWNLOAD_LOCATION) || "").trim();
+}
+
+function syncDownloadLocationUi(location) {
+    const value = (location || "").trim();
+    const label = document.getElementById("downloadLocationValue");
+    if (label) {
+        label.value = value;
+        label.placeholder = "Not set";
+        label.title = value || "Not set";
+    }
+    const modalInput = document.getElementById("downloadLocationPath");
+    if (modalInput) {
+        modalInput.value = value;
+        modalInput.placeholder = "Select a folder";
+        modalInput.title = value || "";
+    }
+}
+
+export function setDownloadLocation(location, options = {}) {
+    const { showMessage = true } = options || {};
+    const next = (location || "").trim();
+    if (!next) {
+        showToast("Select a download folder first.", "warning");
+        return false;
+    }
+    localStorage.setItem(STORAGE_KEYS.DOWNLOAD_LOCATION, next);
+    syncDownloadLocationUi(next);
+    if (showMessage) {
+        showToast("Download location saved", "success");
+    }
+    return true;
+}
+
+async function pickDownloadLocation() {
+    if (!window.__TAURI__) {
+        showToast("Download location is only available in the desktop app.", "warning");
+        return "";
+    }
+    if (!window.__TAURI__?.dialog?.open) {
+        showToast("Folder picker is not enabled in this build yet.", "warning");
+        return "";
+    }
+    try {
+        const selected = await window.__TAURI__.dialog.open({
+            directory: true,
+            multiple: false,
+            title: "Select download folder",
+        });
+        if (Array.isArray(selected)) return selected[0] || "";
+        return selected || "";
+    } catch (err) {
+        console.error("Failed to open folder picker", err);
+        showToast("Could not open folder picker.", "error");
+        return "";
+    }
+}
+
+function resolveDownloadLocationModal(result) {
+    if (downloadLocationResolver) {
+        downloadLocationResolver(result);
+        downloadLocationResolver = null;
+    }
+}
+
+function bindDownloadLocationModal() {
+    if (downloadLocationModalBound) return;
+    downloadLocationModalBound = true;
+
+    const modal = document.getElementById("downloadLocationModal");
+    const closeBtn = document.getElementById("downloadLocationModalClose");
+    const cancelBtn = document.getElementById("downloadLocationCancelBtn");
+    const saveBtn = document.getElementById("downloadLocationSaveBtn");
+    const browseBtn = document.getElementById("downloadLocationBrowseBtn");
+    const pathInput = document.getElementById("downloadLocationPath");
+
+    const close = (result) => {
+        if (modal) hideModal(modal);
+        resolveDownloadLocationModal(result);
+    };
+
+    if (browseBtn) {
+        browseBtn.addEventListener("click", async () => {
+            const selected = await pickDownloadLocation();
+            if (selected && pathInput) {
+                pathInput.value = selected;
+                pathInput.title = selected;
+            }
+        });
+    }
+
+    if (saveBtn) {
+        saveBtn.addEventListener("click", () => {
+            const next = (pathInput?.value || "").trim();
+            if (!setDownloadLocation(next)) return;
+            close({ ok: true, path: next });
+        });
+    }
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener("click", () => {
+            close({ ok: false, reason: "cancelled" });
+        });
+    }
+
+    if (closeBtn) {
+        closeBtn.addEventListener("click", () => {
+            close({ ok: false, reason: "cancelled" });
+        });
+    }
+
+    if (modal) {
+        modal.addEventListener("click", (event) => {
+            if (event.target === modal) {
+                close({ ok: false, reason: "cancelled" });
+            }
+        });
+    }
+}
+
+export async function openDownloadLocationModal(options = {}) {
+    bindDownloadLocationModal();
+    const modal = document.getElementById("downloadLocationModal");
+    if (!modal) {
+        return { ok: false, reason: "missing-modal" };
+    }
+    syncDownloadLocationUi(getDownloadLocation());
+    showModal(modal);
+    return new Promise((resolve) => {
+        downloadLocationResolver = resolve;
+    });
+}
+
+export async function ensureDownloadLocationConfigured(options = {}) {
+    if (!window.__TAURI__) {
+        return { ok: true, path: "" };
+    }
+    if (!window.__TAURI__?.dialog?.open) {
+        showToast("Folder picker is not enabled in this build yet.", "warning");
+        return { ok: false, reason: "dialog-unavailable" };
+    }
+    const current = getDownloadLocation();
+    if (current) {
+        syncDownloadLocationUi(current);
+        return { ok: true, path: current };
+    }
+    const result = await openDownloadLocationModal(options);
+    if (result?.ok) {
+        const updated = getDownloadLocation();
+        return { ok: true, path: updated };
+    }
+    return { ok: false, reason: result?.reason || "cancelled" };
+}
+
 /**
  * Reads landlord defaults from local storage and returns an object shape.
  * @returns {{ name?: string, aadhaar?: string, address?: string }} persisted defaults
@@ -240,6 +397,7 @@ export function openLandlordConfigModal() {
     if (aadhaar) aadhaar.value = defaults.aadhaar || "";
     if (address) address.value = defaults.address || "";
     if (wing) wing.value = "";
+    syncDownloadLocationUi(getDownloadLocation());
 
     showModal(modal);
 }

@@ -14,16 +14,21 @@
     "core:window:allow-set-focus",
     "core:window:allow-start-dragging",
     "opener:default",
+    "dialog:allow-open",
     {
       "identifier": "opener:allow-open-path",
       "allow": [
         {
           "path": "$DOWNLOAD/**"
+        },
+        {
+          "path": "$HOME/**"
         }
       ]
     },
     "fs:default",
     "fs:allow-download-write",
+    "fs:allow-home-write-recursive",
     "core:path:default"
   ]
 }

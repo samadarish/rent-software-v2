@@ -14,6 +14,7 @@ import {
     openLandlordConfigModal,
     saveLandlordDefaults,
     saveWingFromLandlordConfig,
+    openDownloadLocationModal,
 } from "./api/config.js";
 import {
     saveClausesToSheet,
@@ -366,6 +367,13 @@ export function attachEventHandlers() {
         clearLandlordEditMode();
         openLandlordConfigModal();
     });
+
+    const downloadLocationChangeBtn = document.getElementById("downloadLocationChangeBtn");
+    if (downloadLocationChangeBtn) {
+        downloadLocationChangeBtn.addEventListener("click", () => {
+            openDownloadLocationModal({ source: "landlord-config" });
+        });
+    }
 
     bindClick("appscriptCancelBtn", () => {
         const modal = document.getElementById("appscriptModal");

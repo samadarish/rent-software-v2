@@ -5,6 +5,7 @@
  */
 
 import { collectFormDataForTemplate } from "../tenants/form.js";
+import { ensureDownloadLocationConfigured } from "../../api/config.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
 
 let lastDocxDownloadUrl = "";
@@ -32,7 +33,11 @@ function syncDocxExportModal(fileName, objectUrlOrPath) {
     if (fileNameLabel) fileNameLabel.textContent = safeFileName;
 
     if (locationLabel) {
-        locationLabel.textContent = `Saved to: Downloads/${safeFileName}`;
+        if (window.__TAURI__ && objectUrlOrPath) {
+            locationLabel.textContent = `Saved to: ${objectUrlOrPath}`;
+        } else {
+            locationLabel.textContent = `Saved to: Downloads/${safeFileName}`;
+        }
     }
 
     if (openLink) {
@@ -226,6 +231,13 @@ export function exportDocxFromTemplate() {
                 const aadhaar = sanitize(data.tenant_Aadhar, "Aadhaar");
                 const fileName = `${tenantName}_${grnNumber}_${aadhaar}_Agreement.docx`;
 
+                let downloadDir = "";
+                if (window.__TAURI__) {
+                    const location = await ensureDownloadLocationConfigured();
+                    if (!location?.ok) return;
+                    downloadDir = location.path || "";
+                }
+
                 // Handle Tauri Export
                 if (window.__TAURI__) {
                     const out = outZip.generate({
@@ -234,8 +246,8 @@ export function exportDocxFromTemplate() {
                     });
 
                     const { path, fs } = window.__TAURI__;
-                    const downloadDir = await path.downloadDir();
-                    const filePath = await path.join(downloadDir, fileName);
+                    const baseDir = downloadDir || (await path.downloadDir());
+                    const filePath = await path.join(baseDir, fileName);
 
                     await fs.writeFile(filePath, out);
 
@@ -243,7 +255,7 @@ export function exportDocxFromTemplate() {
                     revokeLastDocxUrl(); // Clean up any previous web blobs
 
                     syncDocxExportModal(fileName, filePath);
-                    showToast(`Saved to Downloads: ${fileName}`, "success");
+                    showToast(`Saved to: ${filePath}`, "success");
                     return;
                 }
 
