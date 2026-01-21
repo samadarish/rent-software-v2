@@ -59,7 +59,7 @@
           </p>
         </div>
       </div>
-      <div class="flex justify-center py-2.5">
+      <div class="flex justify-center items-center py-2.5">
         <div id="syncIndicator"
           class="flex items-center gap-2 text-[11px] px-3 py-1 rounded-full border bg-slate-700">
           <span class="sync-dot w-2 h-2 rounded-full bg-slate-500"></span>
@@ -67,7 +67,7 @@
         </div>
       </div>
       <div class="relative flex justify-end items-stretch gap-2 pr-0">
-        <div class="flex items-center gap-2 py-2.5 pr-3">
+        <div class="flex items-center gap-2 pr-3 py-2.5">
           <div id="connectionIndicator"
             class="flex items-center gap-2 text-[11px] px-3 py-1 rounded-full border bg-slate-700">
             <span class="status-dot w-2 h-2 rounded-full bg-slate-500"></span>
@@ -85,21 +85,21 @@
         <!-- Custom Window Controls -->
         <div class="flex items-stretch gap-0 border-l border-slate-600">
           <button id="windowMinimizeBtn"
-            class="inline-flex items-center justify-center w-12 h-full rounded-none hover:bg-slate-700 transition"
+            class="flex-none inline-flex items-center justify-center h-full aspect-square rounded-none hover:bg-slate-700 transition"
             title="Minimize">
             <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <path d="M4 12h16" stroke-linecap="round"/>
             </svg>
           </button>
           <button id="windowMaximizeBtn"
-            class="inline-flex items-center justify-center w-12 h-full rounded-none hover:bg-slate-700 transition"
+            class="flex-none inline-flex items-center justify-center h-full aspect-square rounded-none hover:bg-slate-700 transition"
             title="Maximize">
             <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <rect x="5" y="5" width="14" height="14" rx="2" stroke-linecap="round"/>
             </svg>
           </button>
           <button id="windowCloseBtn"
-            class="inline-flex items-center justify-center w-12 h-full rounded-none hover:bg-rose-600 transition"
+            class="flex-none inline-flex items-center justify-center h-full aspect-square rounded-none hover:bg-rose-600 transition"
             title="Close">
             <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <path d="M6 6l12 12M6 18L18 6" stroke-linecap="round"/>
