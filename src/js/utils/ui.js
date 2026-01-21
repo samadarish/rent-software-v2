@@ -108,7 +108,7 @@ function renderToastHistory(list) {
                 <span class="mt-1.5 h-2 w-2 rounded-full ${styles.dot}"></span>
                 <div class="flex-1">
                     <div class="text-[11px] font-semibold ${styles.text}">${entry?.type || "info"}</div>
-                    <div class="text-[12px] text-slate-800">${message}</div>
+                    <div class="text-[12px] text-slate-800 break-words break-all whitespace-normal">${message}</div>
                     <div class="text-[10px] text-slate-500 mt-0.5">${time}</div>
                 </div>
             </div>
