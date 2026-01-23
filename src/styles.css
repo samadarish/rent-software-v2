@@ -158,7 +158,9 @@ main {
 .modal-panel {
   opacity: 0;
   transform: translateY(10px) scale(0.98);
-  transition: opacity 200ms ease, transform 200ms ease;
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
 }
 
 .fade-overlay.is-visible .modal-panel {
@@ -174,7 +176,9 @@ main {
 .fade-section {
   opacity: 0;
   transform: translateY(8px);
-  transition: opacity 200ms ease, transform 200ms ease;
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
   will-change: opacity, transform;
 }
 
@@ -193,8 +197,12 @@ button,
 input,
 select,
 textarea {
-  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease,
-    box-shadow 200ms ease, transform 120ms ease;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 200ms ease,
+    transform 120ms ease;
 }
 
 button:active,
@@ -239,7 +247,9 @@ label {
   #appLayout {
     grid-template-columns: 220px minmax(0, 1.35fr) minmax(280px, 0.65fr);
     min-height: calc(100vh - 160px);
-    transition: grid-template-columns 220ms ease, gap 200ms ease;
+    transition:
+      grid-template-columns 220ms ease,
+      gap 200ms ease;
     align-items: stretch;
   }
 
@@ -266,3 +276,40 @@ label {
     padding-bottom: 0.3rem;
   }
 }
+
+/* ========== CUSTOM TOOLTIPS ========== */
+
+/* JS-based tooltip appended to body - not affected by parent overflow */
+#unit-tooltip {
+  position: fixed;
+  padding: 5px 10px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: #047857; /* Emerald-700 */
+  background: #fff;
+  border: 1px solid #10b981; /* Emerald-500 */
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  z-index: 99999;
+}
+
+#unit-tooltip.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+#unit-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #10b981; /* Emerald-500 */
+}
+

@@ -29,6 +29,7 @@ import { initNotesFeature } from "./js/features/shared/notes.js";
 import { initWindowControls } from "./js/utils/windowControls.js";
 import { initBillIdSearch, initSidebarBillIdSearch } from "./js/features/dashboard/billSearch.js";
 import { initRecentPayments } from "./js/features/dashboard/recentPayments.js";
+import { initUnitStatus } from "./js/features/dashboard/unitStatus.js";
 import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
 import { currentFlow } from "./js/state.js";
@@ -53,6 +54,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initBillIdSearch();
   initSidebarBillIdSearch();
   initRecentPayments();
+  initUnitStatus();
 
   const offlineOverlay = document.getElementById("offlineOverlay");
   const appShell = document.getElementById("appShell");

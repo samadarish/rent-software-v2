@@ -304,17 +304,24 @@
               <p class="text-[11px] font-semibold text-slate-700">Reminders</p>
               <p class="text-[11px] text-slate-500">Track upcoming renewals and payment follow-ups.</p>
             </div>
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
-              <p class="text-[11px] font-semibold text-slate-700">Collections</p>
-              <p class="text-[11px] text-slate-500">Overdue totals and follow-ups will surface here.</p>
-            </div>
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
-              <p class="text-[11px] font-semibold text-slate-700">Occupancy</p>
-              <p class="text-[11px] text-slate-500">Track vacant units and active tenancies.</p>
-            </div>
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
-              <p class="text-[11px] font-semibold text-slate-700">New activity</p>
-              <p class="text-[11px] text-slate-500">Recent changes will show here.</p>
+            <div id="unitStatusContainer" class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3 space-y-2 overflow-visible">
+              <div class="flex items-center justify-between">
+                <p class="text-[11px] font-semibold text-slate-700">Unit Status</p>
+                <div class="flex items-center gap-2 text-[9px]">
+                  <span class="flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span id="unitStatusOccupied" class="font-semibold text-emerald-600">0</span>
+                    <span class="text-slate-500">occupied</span>
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                    <span id="unitStatusVacant" class="font-semibold text-rose-600">0</span>
+                    <span class="text-slate-500">vacant</span>
+                  </span>
+                </div>
+              </div>
+              <div id="unitStatusEmpty" class="text-[10px] text-slate-500">Loading units...</div>
+              <div id="unitStatusList" class="max-h-[180px] overflow-y-auto overflow-x-hidden"></div>
             </div>
             <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3">
               <p class="text-[11px] font-semibold text-slate-700">Billing status</p>

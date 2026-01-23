@@ -10,7 +10,7 @@ import { buildUnitLabel } from "../utils/formatters.js";
 import { normalizeMonthKey, normalizeWing } from "../utils/normalizers.js";
 import { showToast, updateConnectionIndicator } from "../utils/ui.js";
 import { callAppScript, ensureAppScriptUrl } from "./appscriptClient.js";
-import { cacheSetMany } from "./localDb.js";
+import { cacheSetMany, queueCount } from "./localDb.js";
 import {
     LOCAL_KEYS,
     getLocalData,
@@ -1769,7 +1769,12 @@ export async function fetchUnitsFromSheet(force = false) {
             cache: { useLocal: false, revalidate: false },
         });
         if (Array.isArray(data?.units)) {
-            await setLocalData(LOCAL_KEYS.units, data.units);
+            // Only update local SQLite if there are no pending sync jobs
+            // This prevents overwriting optimistic local updates before they sync
+            const pendingJobs = await queueCount();
+            if (pendingJobs === 0) {
+                await setLocalData(LOCAL_KEYS.units, data.units);
+            }
             return { units: data.units };
         }
         return { units: cached || [] };
