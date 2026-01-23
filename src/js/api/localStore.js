@@ -10,6 +10,8 @@ export const LOCAL_KEYS = {
     clauses: "data:clauses",
     payments: "data:payments",
     attachments: "data:attachments",
+    docs: "data:docs",
+    docsCache: "data:docsCache",
     billLines: "data:billLines",
     wingMonthlyConfig: "data:wingMonthlyConfig",
     tenantMonthlyReadings: "data:tenantMonthlyReadings",

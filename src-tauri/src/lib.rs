@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -12,6 +12,15 @@ use tauri::{Emitter, Manager};
 #[serde(rename_all = "camelCase")]
 struct UploadProgress {
     upload_id: String,
+    loaded: u64,
+    total: u64,
+    done: bool,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DownloadProgress {
+    download_id: String,
     loaded: u64,
     total: u64,
     done: bool,
@@ -410,8 +419,105 @@ fn upload_payment_attachment(
 }
 
 #[tauri::command]
+fn upload_tenant_document(
+    app: tauri::AppHandle,
+    state: tauri::State<UploadState>,
+    url: String,
+    payload: serde_json::Value,
+    upload_id: String,
+) -> Result<serde_json::Value, String> {
+    if url.trim().is_empty() {
+        return Err("Missing Apps Script URL".to_string());
+    }
+    let body = serde_json::json!({
+        "action": "uploadTenantDocument",
+        "payload": payload,
+    });
+    let body_bytes = serde_json::to_vec(&body).map_err(|e| e.to_string())?;
+    let total = body_bytes.len() as u64;
+    let cancel_flag = state.register(&upload_id);
+
+    let result = (|| {
+        let reader = ProgressReader::new(
+            io::Cursor::new(body_bytes),
+            total,
+            app.clone(),
+            upload_id.clone(),
+            cancel_flag.clone(),
+        );
+        let response = ureq::post(&url)
+            .set("Content-Type", "text/plain")
+            .set("Content-Length", &total.to_string())
+            .send(reader)
+            .map_err(|e| e.to_string())?;
+        let text = response.into_string().map_err(|e| e.to_string())?;
+        serde_json::from_str(&text).map_err(|e| e.to_string())
+    })();
+
+    state.remove(&upload_id);
+    result
+}
+
+#[tauri::command]
 fn cancel_upload(state: tauri::State<UploadState>, upload_id: String) -> bool {
     state.cancel(&upload_id)
+}
+
+#[tauri::command]
+fn download_file_to_path(
+    app: tauri::AppHandle,
+    url: String,
+    file_path: String,
+    download_id: String,
+) -> Result<serde_json::Value, String> {
+    if url.trim().is_empty() {
+        return Err("Missing URL".to_string());
+    }
+    if file_path.trim().is_empty() {
+        return Err("Missing file path".to_string());
+    }
+
+    let response = ureq::get(&url)
+        .call()
+        .map_err(|e| e.to_string())?;
+    let total = response
+        .header("Content-Length")
+        .and_then(|val| val.parse::<u64>().ok())
+        .unwrap_or(0);
+
+    let mut reader = response.into_reader();
+    let mut file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
+    let mut buf = [0u8; 64 * 1024];
+    let mut loaded = 0u64;
+    let mut last_emit = 0u64;
+
+    loop {
+        let read = reader.read(&mut buf).map_err(|e| e.to_string())?;
+        if read == 0 {
+            let payload = DownloadProgress {
+                download_id: download_id.clone(),
+                loaded,
+                total,
+                done: true,
+            };
+            let _ = app.emit("download-progress", payload);
+            break;
+        }
+        file.write_all(&buf[..read]).map_err(|e| e.to_string())?;
+        loaded = loaded.saturating_add(read as u64);
+        if loaded - last_emit >= 64 * 1024 || (total > 0 && loaded >= total) {
+            let payload = DownloadProgress {
+                download_id: download_id.clone(),
+                loaded,
+                total,
+                done: loaded >= total && total > 0,
+            };
+            let _ = app.emit("download-progress", payload);
+            last_emit = loaded;
+        }
+    }
+
+    Ok(serde_json::json!({ "ok": true, "filePath": file_path }))
 }
 
 #[tauri::command]
@@ -764,7 +870,9 @@ pub fn run() {
             queue_clear,
             queue_count,
             upload_payment_attachment,
+            upload_tenant_document,
             cancel_upload,
+            download_file_to_path,
             open_whatsapp,
             send_whatsapp_message
         ])

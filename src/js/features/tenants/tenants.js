@@ -11,6 +11,7 @@ import { escapeHtml } from "../../utils/htmlUtils.js";
 import { generateNoGrnValue } from "../../utils/grn.js";
 import { cloneSelectOptions, hideModal, showModal, showToast } from "../../utils/ui.js";
 import { createFamilyRow } from "./family.js";
+import { initTenantDocuments, openTenantDocumentsModal } from "./documents.js";
 import {
     getUnitCache as getUnitCacheStore,
     getLandlordCache as getLandlordCacheStore,
@@ -1087,6 +1088,7 @@ function updateSidebarSnapshot() {
     const familyList = document.getElementById("sidebarFamilyList");
     const familyViewBtn = document.getElementById("sidebarFamilyViewBtn");
     const historyList = document.getElementById("sidebarUnitHistory");
+    const docsBtn = document.getElementById("sidebarTenantDocsBtn");
 
     if (!selectedTenantForSidebar) {
         familySnapshotRequestId += 1;
@@ -1104,6 +1106,10 @@ function updateSidebarSnapshot() {
         if (familyList) familyList.innerHTML = '<li class="text-[10px] text-slate-500">No tenant selected.</li>';
         setFamilyViewButtonState(familyViewBtn, false);
         if (historyList) historyList.innerHTML = '<div class="text-[10px] text-slate-500">No tenant selected.</div>';
+        if (docsBtn) {
+            docsBtn.disabled = true;
+            docsBtn.classList.add("opacity-50", "cursor-not-allowed");
+        }
         return;
     }
 
@@ -1120,6 +1126,10 @@ function updateSidebarSnapshot() {
     if (occupationEl) occupationEl.textContent = t.tenantOccupation || "-";
     if (addressEl) addressEl.textContent = t.tenantPermanentAddress || "-";
     void updateSidebarFamilySnapshot(t);
+    if (docsBtn) {
+        docsBtn.disabled = false;
+        docsBtn.classList.remove("opacity-50", "cursor-not-allowed");
+    }
 
     if (historyList) {
         const history = Array.isArray(t.tenancyHistory) ? [...t.tenancyHistory] : [];
@@ -1865,6 +1875,14 @@ export function initTenantDirectory() {
         });
     }
 
+    const docsBtn = document.getElementById("sidebarTenantDocsBtn");
+    if (docsBtn) {
+        docsBtn.addEventListener("click", () => {
+            if (!selectedTenantForSidebar) return;
+            openTenantDocumentsModal(selectedTenantForSidebar);
+        });
+    }
+
     const familyViewBtn = document.getElementById("sidebarFamilyViewBtn");
     if (familyViewBtn) {
         familyViewBtn.addEventListener("click", () => openFamilyModal(selectedTenantForSidebar));
@@ -1942,5 +1960,6 @@ export function initTenantDirectory() {
         handleVacateClick(event);
     });
 
+    initTenantDocuments();
     syncStatusButtons();
 }

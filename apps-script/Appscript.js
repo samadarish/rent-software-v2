@@ -5,7 +5,7 @@
  * - Master data: TENANTS, UNITS, TENANCIES, FAMILY_MEMBERS, CLAUSES
  * - Monthly inputs: WING_MONTHLY_CONFIG, TENANT_MONTHLY_READINGS
  * - Outputs: BILL_LINES
- * - Events: PAYMENTS, ATTACHMENTS (for payment proofs)
+ * - Events: PAYMENTS, ATTACHMENTS (for payment proofs), DOCS (tenant documents)
  *
  * Actions exposed via doGet/doPost mirror the previous API surface while
  * internally writing to the normalized tables.
@@ -25,6 +25,7 @@ const BILL_LINES_SHEET = 'BillLines';
 const NOTES_SHEET = 'Notes';
 const PAYMENTS_SHEET = 'Payments';
 const ATTACHMENTS_SHEET = 'Attachments';
+const DOCS_SHEET = 'Docs';
 const INDEX_SHEET = 'Index';
 const TENANCY_RENT_REVISIONS_SHEET = 'TenancyRentRevisions';
 
@@ -181,6 +182,23 @@ const ATTACHMENT_HEADERS = [
   'file_drive_id',
   'uploaded_at',
 ];
+
+const DOC_HEADERS = [
+  'doc_id',
+  'tenant_id',
+  'tenant_name',
+  'file_name',
+  'file_url',
+  'file_drive_id',
+  'file_mime',
+  'file_size',
+  'uploaded_at',
+];
+
+const BASE_DRIVE_FOLDER = 'Tenant_App_Data (Do not Delete ❌)';
+const PAYMENT_FOLDER_NAME = 'payment_bill_images';
+const DOCS_FOLDER_NAME = 'Tenant_Docs';
+const LEGACY_PAYMENT_FOLDER = 'Payment Proofs test';
 
 
 
@@ -1778,7 +1796,7 @@ function savePaymentAttachment_(dataUrl, tenantName, monthKey, wing, unitNumber)
   const extension = getFileExtension_(mimeType, '');
   const blobName = `${safeTenant}_${safeMonthYear}_${safeWing}_${safeUnit}_${suffix}${extension ? '.' + extension : ''}`;
   const blob = Utilities.newBlob(bytes, mimeType).setName(blobName);
-  const folder = getOrCreateFolder_('Payment Proofs test');
+  const folder = ensurePaymentFolder_();
   const file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   const ensured = ensureDriveFileShareable_(file.getUrl());
@@ -1818,10 +1836,132 @@ function deleteAttachmentById_(attachmentId) {
   return true;
 }
 
-function getOrCreateFolder_(name) {
-  const existing = DriveApp.getFoldersByName(name);
-  if (existing.hasNext()) return existing.next();
-  return DriveApp.createFolder(name);
+function saveTenantDocument_(payload) {
+  if (!payload) return { ok: false, error: 'Missing payload' };
+  const base64 = (payload.dataBase64 || payload.data_base64 || '').toString().trim();
+  if (!base64) return { ok: false, error: 'Missing document data' };
+  const tenantId = (payload.tenantId || payload.tenant_id || '').toString().trim();
+  const tenantName = (payload.tenantName || payload.tenant_name || '').toString().trim();
+  const mimeType = (payload.mimeType || payload.mime_type || 'application/octet-stream').toString();
+  const originalName = payload.fileName || payload.file_name || payload.name || 'document';
+  const compression = (payload.compression || '').toString().trim().toLowerCase();
+  const cleanBase64 = base64.replace(/\s/g, '');
+  const bytes = Utilities.base64Decode(cleanBase64);
+
+  let blob = Utilities.newBlob(bytes, mimeType);
+  let resolvedName = originalName;
+
+  if (compression === 'zip') {
+    const zipBlob = Utilities.newBlob(bytes, 'application/zip');
+    const unzipped = Utilities.unzip(zipBlob);
+    if (!unzipped || !unzipped.length) {
+      return { ok: false, error: 'Unable to unzip document' };
+    }
+    blob = unzipped[0];
+    resolvedName = blob.getName() || resolvedName;
+  }
+
+  if (mimeType && blob.getContentType() === 'application/octet-stream') {
+    blob = blob.setContentType(mimeType);
+  }
+
+  const maxBytes = 10 * 1024 * 1024;
+  if (blob.getBytes().length > maxBytes) {
+    return { ok: false, error: 'Document exceeds 10MB limit' };
+  }
+
+  const folder = ensureTenantDocsFolder_(tenantName, tenantId);
+  const safeName = sanitizeFileName_(resolvedName, 'document');
+  const uniqueName = buildUniqueFileName_(folder, safeName);
+  blob.setName(uniqueName);
+
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  const ensured = ensureDriveFileShareable_(file.getUrl());
+
+  const doc = {
+    doc_id: Utilities.getUuid(),
+    tenant_id: tenantId,
+    tenant_name: tenantName,
+    file_name: file.getName(),
+    file_url: ensured.viewUrl,
+    file_drive_id: file.getId(),
+    file_mime: blob.getContentType(),
+    file_size: blob.getBytes().length,
+    uploaded_at: new Date(),
+  };
+  upsertUnique_(DOCS_SHEET, DOC_HEADERS, ['doc_id'], doc);
+  return { ok: true, doc: doc };
+}
+
+function getOrCreateFolder_(name, parent) {
+  const iterator = parent ? parent.getFoldersByName(name) : DriveApp.getFoldersByName(name);
+  if (iterator.hasNext()) return iterator.next();
+  return parent ? parent.createFolder(name) : DriveApp.createFolder(name);
+}
+
+function findFolder_(name, parent) {
+  const iterator = parent ? parent.getFoldersByName(name) : DriveApp.getFoldersByName(name);
+  if (iterator.hasNext()) return iterator.next();
+  return null;
+}
+
+function ensureBaseFolder_() {
+  return getOrCreateFolder_(BASE_DRIVE_FOLDER);
+}
+
+function ensurePaymentFolder_() {
+  const base = ensureBaseFolder_();
+  const existing = findFolder_(PAYMENT_FOLDER_NAME, base);
+  if (existing) return existing;
+  const legacy = findFolder_(LEGACY_PAYMENT_FOLDER);
+  if (legacy) {
+    let migrated = false;
+    try {
+      legacy.setName(PAYMENT_FOLDER_NAME);
+      base.addFolder(legacy);
+      migrated = true;
+    } catch (err) {
+      // Ignore move errors; fallback to creating a new folder.
+    }
+    if (migrated) return legacy;
+  }
+  return getOrCreateFolder_(PAYMENT_FOLDER_NAME, base);
+}
+
+function ensureTenantDocsRootFolder_() {
+  const base = ensureBaseFolder_();
+  return getOrCreateFolder_(DOCS_FOLDER_NAME, base);
+}
+
+function ensureTenantDocsFolder_(tenantName, tenantId) {
+  const root = ensureTenantDocsRootFolder_();
+  const safeTenant = sanitizeFileSegment_(tenantName || tenantId, 'Tenant');
+  return getOrCreateFolder_(safeTenant, root);
+}
+
+function sanitizeFileName_(value, fallback) {
+  const raw = (value || '').toString().trim();
+  if (!raw) return fallback || 'document';
+  const name = raw.split('/').pop().split('\\').pop();
+  const dot = name.lastIndexOf('.');
+  const ext = dot > 0 ? name.slice(dot + 1).replace(/[^A-Za-z0-9]/g, '') : '';
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const cleanedBase = sanitizeFileSegment_(base, fallback || 'document');
+  return ext ? `${cleanedBase}.${ext}` : cleanedBase;
+}
+
+function buildUniqueFileName_(folder, name) {
+  let finalName = name;
+  let counter = 1;
+  while (folder.getFilesByName(finalName).hasNext()) {
+    const dot = name.lastIndexOf('.');
+    const base = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : '';
+    finalName = `${base}_${counter}${ext}`;
+    counter += 1;
+  }
+  return finalName;
 }
 
 function updateBillPaymentStatus_(billLineIds) {
@@ -2078,6 +2218,7 @@ function handleExportAll_() {
     notes: readTable_(NOTES_SHEET, NOTES_HEADERS),
     payments: handleFetchPayments_(),
     attachments: readTable_(ATTACHMENTS_SHEET, ATTACHMENT_HEADERS),
+    docs: readTable_(DOCS_SHEET, DOC_HEADERS),
     rentRevisions,
     generatedBills: handleFetchGeneratedBills_(),
   };
@@ -2150,6 +2291,15 @@ function doGet(e) {
     if (action === 'payments') {
       const payments = handleFetchPayments_();
       return jsonResponse({ ok: true, payments });
+    }
+
+    if (action === 'docs') {
+      const tenantId = (e.parameter && e.parameter.tenantId || '').toString().trim();
+      const docs = readTable_(DOCS_SHEET, DOC_HEADERS);
+      const filtered = tenantId
+        ? docs.filter((doc) => (doc.tenant_id || '').toString().trim() === tenantId)
+        : docs;
+      return jsonResponse({ ok: true, docs: filtered });
     }
 
     if (action === 'rentrevisions') {
@@ -2248,6 +2398,13 @@ function doPost(e) {
           resolvedUnitNumber
         );
         return jsonResponse({ ok: true, attachment: result });
+      } catch (err) {
+        return jsonResponse({ ok: false, error: String(err) });
+      }
+    }
+    if (action === 'uploadTenantDocument') {
+      try {
+        return jsonResponse(saveTenantDocument_(body.payload || {}));
       } catch (err) {
         return jsonResponse({ ok: false, error: String(err) });
       }

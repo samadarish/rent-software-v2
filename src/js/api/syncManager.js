@@ -184,6 +184,10 @@ async function applyExportAll(data) {
     if (Array.isArray(data.attachments)) {
         await setLocalData(LOCAL_KEYS.attachments, data.attachments);
     }
+    if (Array.isArray(data.docs)) {
+        await setLocalData(LOCAL_KEYS.docs, data.docs);
+        dispatchUpdateEvent("docs:updated", data.docs);
+    }
     if (Array.isArray(data.billLines)) {
         await setLocalData(LOCAL_KEYS.billLines, data.billLines);
     }
