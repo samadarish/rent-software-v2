@@ -22,12 +22,18 @@
           "path": "$DOWNLOAD/**"
         },
         {
+          "path": "$TEMP/**"
+        },
+        {
           "path": "$HOME/**"
         }
       ]
     },
     "fs:default",
     "fs:allow-download-write",
+    "fs:allow-temp-read-recursive",
+    "fs:allow-temp-write-recursive",
+    "fs:allow-temp-meta-recursive",
     "fs:allow-home-write-recursive",
     "core:path:default"
   ]

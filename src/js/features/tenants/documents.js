@@ -35,7 +35,28 @@ const docsState = {
     modalBound: false,
     uploadInProgress: false,
     downloadInProgress: false,
+    downloads: new Map(),
+    renderPending: false,
 };
+
+function scheduleDocsRender() {
+    if (docsState.renderPending) return;
+    docsState.renderPending = true;
+    requestAnimationFrame(() => {
+        docsState.renderPending = false;
+        renderDocsList();
+    });
+}
+
+function setDocDownloadState(docId, state) {
+    if (!docId) return;
+    if (!state) {
+        docsState.downloads.delete(docId);
+    } else {
+        docsState.downloads.set(docId, state);
+    }
+    scheduleDocsRender();
+}
 
 function normalizeId(value) {
     return value === undefined || value === null ? "" : String(value).trim();
@@ -66,6 +87,9 @@ function getElements() {
         closeBtn: document.getElementById("tenantDocsClose"),
         tenantName: document.getElementById("tenantDocsTenantName"),
         fileInput: document.getElementById("tenantDocsFileInput"),
+        typeSelect: document.getElementById("tenantDocsTypeSelect"),
+        otherWrap: document.getElementById("tenantDocsOtherWrap"),
+        otherInput: document.getElementById("tenantDocsOtherInput"),
         uploadBtn: document.getElementById("tenantDocsUploadBtn"),
         progressWrap: document.getElementById("tenantDocsProgressWrap"),
         progressLabel: document.getElementById("tenantDocsProgressLabel"),
@@ -104,6 +128,154 @@ function getFileStem(name = "") {
     const idx = name.lastIndexOf(".");
     if (idx <= 0) return name;
     return name.slice(0, idx);
+}
+
+const DOC_TYPE_LABELS = {
+    aadhar: "AADHAR",
+    pan: "PAN",
+    agreement: "AGREEMENT",
+    tenant_image: "TENANT",
+    other: "OTHER",
+};
+
+function normalizeDocType(value) {
+    const raw = normalizeKey(value);
+    if (!raw) return "other";
+    const cleaned = raw.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    if (cleaned === "aadhaar") return "aadhar";
+    if (cleaned === "aadhar") return "aadhar";
+    if (cleaned === "pan") return "pan";
+    if (cleaned === "agreement" || cleaned === "rent_agreement") return "agreement";
+    if (cleaned === "tenantimage" || cleaned === "tenant_image" || cleaned === "tenant_photo") return "tenant_image";
+    if (cleaned === "other") return "other";
+    return "other";
+}
+
+function syncDocTypeFields() {
+    const { typeSelect, otherWrap, otherInput } = getElements();
+    if (!typeSelect || !otherWrap) return;
+    const isOther = normalizeDocType(typeSelect.value) === "other";
+    otherWrap.classList.toggle("hidden", !isOther);
+    if (!isOther && otherInput) otherInput.value = "";
+}
+
+function getIconLabelFontSize(label) {
+    const length = label.length;
+    if (length <= 3) return 4.5;
+    if (length === 4) return 4.0;
+    if (length === 5) return 3.6;
+    if (length === 6) return 3.3;
+    if (length === 7) return 3.1;
+    return 2.8;
+}
+
+const FILE_ICON_BASE_PATH =
+    'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z';
+const FILE_ICON_VARIANTS = {
+    image: {
+        accent:
+            '<path fill="currentColor" class="text-indigo-300" d="M8.5 11.5l-2.5 3h12l-3.5-4.5-2.5 3-1.5-2z M15.5 10a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>',
+        barClass: "fill-indigo-600",
+    },
+    pdf: {
+        accent:
+            '<path fill="currentColor" class="text-red-300" d="M8 9c.5-1.5 2-2.5 3.5-1.5s2.5 2 1.5 3.5S10.5 13.5 9 12.5 6.5 10.5 8 9z" opacity="0.7"/>',
+        barClass: "fill-red-600",
+    },
+    doc: {
+        accent:
+            '<g fill="currentColor" class="text-blue-400"><rect x="7" y="8" width="10" height="1.5" rx="0.5"/><rect x="7" y="11" width="10" height="1.5" rx="0.5"/><rect x="7" y="14" width="7" height="1.5" rx="0.5"/></g>',
+        barClass: "fill-blue-600",
+    },
+    sheet: {
+        accent:
+            '<g fill="currentColor" class="text-green-400" opacity="0.8"><rect x="7" y="7" width="3.5" height="3.5" rx="0.5"/><rect x="11.5" y="7" width="3.5" height="3.5" rx="0.5"/><rect x="7" y="11.5" width="3.5" height="3.5" rx="0.5"/><rect x="11.5" y="11.5" width="3.5" height="3.5" rx="0.5"/></g>',
+        barClass: "fill-green-600",
+    },
+    slide: {
+        accent:
+            '<path fill="currentColor" class="text-orange-300" d="M 8 14 L 8 10 L 10 10 L 10 14 Z M 11 14 L 11 7 L 13 7 L 13 14 Z M 14 14 L 14 11 L 16 11 L 16 14 Z"/>',
+        barClass: "fill-orange-500",
+    },
+    aadhar: {
+        accent:
+            '<rect x="7" y="7.2" width="10" height="2.1" rx="0.6" fill="currentColor" class="text-orange-400"/><rect x="7" y="9.5" width="10" height="2.1" rx="0.6" fill="currentColor" class="text-slate-100"/><rect x="7" y="11.8" width="10" height="2.1" rx="0.6" fill="currentColor" class="text-emerald-500"/><circle cx="12" cy="10.6" r="0.8" fill="currentColor" class="text-blue-600"/>',
+        barClass: "fill-emerald-600",
+    },
+    pan: {
+        accent:
+            '<rect x="7" y="7.5" width="10" height="6.5" rx="1" fill="currentColor" class="text-blue-100"/><rect x="8" y="9" width="5.8" height="1.2" rx="0.5" fill="currentColor" class="text-blue-500"/><rect x="8" y="11" width="7.2" height="1.2" rx="0.5" fill="currentColor" class="text-blue-500"/><circle cx="15.6" cy="10.2" r="1" fill="currentColor" class="text-blue-400"/>',
+        barClass: "fill-blue-700",
+    },
+    agreement: {
+        accent:
+            '<g fill="currentColor" class="text-amber-300"><rect x="7" y="8" width="10" height="1.5" rx="0.5"/><rect x="7" y="11" width="6.5" height="1.5" rx="0.5"/></g><path d="M11.6 13.3l1.4 1.4 2.6-2.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"/>',
+        barClass: "fill-emerald-600",
+    },
+    tenant_image: {
+        accent:
+            '<circle cx="12" cy="9.6" r="2.1" fill="currentColor" class="text-indigo-300"/><path fill="currentColor" class="text-indigo-400" d="M7.2 15.2c0-2.2 2.4-3.6 4.8-3.6s4.8 1.4 4.8 3.6v1.2H7.2z"/>',
+        barClass: "fill-indigo-600",
+    },
+    neutral: {
+        accent:
+            '<g fill="currentColor" class="text-slate-300"><rect x="7" y="8" width="10" height="1.5" rx="0.5"/><rect x="7" y="11" width="7" height="1.5" rx="0.5"/></g>',
+        barClass: "fill-slate-600",
+    },
+};
+
+const FILE_ICON_MAP = {
+    png: { label: "PNG", variant: "image" },
+    jpg: { label: "JPG", variant: "image" },
+    jpeg: { label: "JPG", variant: "image" },
+    webp: { label: "WEBP", variant: "image" },
+    gif: { label: "GIF", variant: "image" },
+    pdf: { label: "PDF", variant: "pdf" },
+    doc: { label: "DOC", variant: "doc" },
+    docx: { label: "DOCX", variant: "doc" },
+    odt: { label: "ODT", variant: "doc" },
+    txt: { label: "TXT", variant: "doc" },
+    rtf: { label: "RTF", variant: "doc" },
+    xls: { label: "XLS", variant: "sheet" },
+    xlsx: { label: "XLSX", variant: "sheet" },
+    csv: { label: "CSV", variant: "sheet" },
+    ods: { label: "ODS", variant: "sheet" },
+    ppt: { label: "PPT", variant: "slide" },
+    pptx: { label: "PPTX", variant: "slide" },
+    odp: { label: "ODP", variant: "slide" },
+};
+
+function buildFileIconSvg({ label, variant }) {
+    const safeLabel = (label || "FILE").toString().replace(/[^A-Za-z0-9]/g, "").toUpperCase() || "FILE";
+    const iconVariant = FILE_ICON_VARIANTS[variant] || FILE_ICON_VARIANTS.neutral;
+    const fontSize = getIconLabelFontSize(safeLabel);
+    return `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-14 h-14 pointer-events-none">
+            <path fill="currentColor" class="text-gray-300" d="${FILE_ICON_BASE_PATH}"></path>
+            ${iconVariant.accent}
+            <rect x="3" y="16" width="18" height="7" rx="1" class="${iconVariant.barClass}"></rect>
+            <text x="12" y="20.5" text-anchor="middle" font-size="${fontSize}" font-weight="bold" fill="white" style="pointer-events: none;">${escapeHtml(
+                safeLabel
+            )}</text>
+        </svg>
+    `;
+}
+
+function getFileIconSvg(fileName) {
+    const ext = getFileExtension(fileName);
+    const cleaned = ext.replace(/[^A-Za-z0-9]/g, "");
+    const lookup = FILE_ICON_MAP[cleaned] || null;
+    if (lookup) return buildFileIconSvg(lookup);
+    const fallbackLabel = cleaned ? cleaned.toUpperCase() : "FILE";
+    return buildFileIconSvg({ label: fallbackLabel, variant: "neutral" });
+}
+
+function getDocIconSvg(doc) {
+    const fields = resolveDocFields(doc);
+    const docType = normalizeDocType(fields.docType);
+    if (docType === "other") return getFileIconSvg(fields.fileName);
+    const label = DOC_TYPE_LABELS[docType] || DOC_TYPE_LABELS.other;
+    return buildFileIconSvg({ label, variant: docType });
 }
 
 function isAllowedFile(file) {
@@ -148,6 +320,8 @@ function resolveDocFields(doc) {
         id: normalizeId(doc?.doc_id || doc?.docId || doc?.id),
         tenantId: normalizeId(doc?.tenant_id || doc?.tenantId || ""),
         tenantName: doc?.tenant_name || doc?.tenantName || "",
+        docType: doc?.doc_type || doc?.docType || doc?.type || doc?.document_type || "",
+        docDetails: normalizeId(doc?.doc_details || doc?.docDetails || doc?.details || ""),
         fileName: doc?.file_name || doc?.fileName || doc?.name || "",
         fileUrl: doc?.file_url || doc?.fileUrl || "",
         fileDriveId: doc?.file_drive_id || doc?.fileDriveId || "",
@@ -185,12 +359,12 @@ async function persistDocsCache() {
 
 async function fileExists(filePath) {
     const fs = window.__TAURI__?.fs;
-    if (!fs || !filePath) return false;
+    if (!fs || !filePath) return null;
     if (typeof fs.exists === "function") {
         try {
             return await fs.exists(filePath);
         } catch (err) {
-            return false;
+            return null;
         }
     }
     if (typeof fs.readFile === "function") {
@@ -198,33 +372,41 @@ async function fileExists(filePath) {
             await fs.readFile(filePath);
             return true;
         } catch (err) {
-            return false;
+            return null;
         }
     }
-    return false;
+    return null;
 }
 
 async function ensureCacheDirectory(tenant) {
-    const fs = window.__TAURI__?.fs;
     const pathApi = window.__TAURI__?.path;
-    if (!fs || !pathApi) return "";
-    const baseDir = typeof pathApi.appDataDir === "function"
-        ? await pathApi.appDataDir()
-        : typeof pathApi.appCacheDir === "function"
-            ? await pathApi.appCacheDir()
-            : typeof pathApi.downloadDir === "function"
-                ? await pathApi.downloadDir()
-                : "";
-    if (!baseDir) return "";
-    const docsDir = await pathApi.join(baseDir, "Tenant_Docs");
-    const tenantSegment = sanitizeFileSegment(getTenantName(tenant));
-    const tenantDir = await pathApi.join(docsDir, tenantSegment || "Tenant");
-    try {
-        await fs.createDir(tenantDir, { recursive: true });
-    } catch (err) {
-        // Ignore if exists.
+    const tauriInvoke = window.__TAURI__?.core?.invoke;
+    if (typeof tauriInvoke === "function") {
+        try {
+            const result = await tauriInvoke("ensure_temp_dir", {
+                tenantName: getTenantName(tenant),
+            });
+            if (typeof result === "string" && result.trim()) return result.trim();
+            if (result?.path) return String(result.path);
+        } catch (err) {
+            // fall back to JS path API
+        }
     }
-    return tenantDir;
+    if (!pathApi) return "";
+    const tenantSegment = sanitizeFileSegment(getTenantName(tenant));
+    const bases = [];
+    if (typeof pathApi.tempDir === "function") bases.push(await pathApi.tempDir());
+    if (typeof pathApi.appCacheDir === "function") bases.push(await pathApi.appCacheDir());
+    if (typeof pathApi.appDataDir === "function") bases.push(await pathApi.appDataDir());
+    if (typeof pathApi.downloadDir === "function") bases.push(await pathApi.downloadDir());
+
+    for (const baseDir of bases) {
+        if (!baseDir) continue;
+        const docsDir = await pathApi.join(baseDir, "Tenant_Docs");
+        const tenantDir = await pathApi.join(docsDir, tenantSegment || "Tenant");
+        return tenantDir;
+    }
+    return "";
 }
 
 function buildDriveDownloadUrl(doc) {
@@ -322,13 +504,25 @@ async function downloadFileToPath(url, filePath, { onProgress, downloadId } = {}
     }
 }
 
+async function copyFileToPath(sourcePath, targetPath) {
+    const fs = window.__TAURI__?.fs;
+    if (!fs) throw new Error("File system is unavailable");
+    if (typeof fs.copyFile === "function") {
+        await fs.copyFile(sourcePath, targetPath);
+        return;
+    }
+    const bytes = await fs.readFile(sourcePath);
+    await fs.writeFile(targetPath, bytes);
+}
+
 async function getCachedDocPath(doc) {
     const id = resolveDocFields(doc).id;
     if (!id) return "";
     await ensureDocsCacheLoaded();
     const entry = docsState.cache.get(id);
     if (!entry?.path) return "";
-    if (await fileExists(entry.path)) return entry.path;
+    const exists = await fileExists(entry.path);
+    if (exists === true || exists === null) return entry.path;
     docsState.cache.delete(id);
     await persistDocsCache();
     return "";
@@ -339,24 +533,38 @@ async function downloadDocToCache(doc, options = {}) {
     const cacheDir = await ensureCacheDirectory(tenant);
     if (!cacheDir) throw new Error("Cache directory is unavailable");
     const { id, fileName } = resolveDocFields(doc);
-    const fs = window.__TAURI__?.fs;
     const pathApi = window.__TAURI__?.path;
-    if (!fs || !pathApi) throw new Error("File system is unavailable");
     const baseName = sanitizeFileSegment(getFileStem(fileName || "document"));
     const ext = getFileExtension(fileName);
     const suffix = id ? `_${id.slice(0, 6)}` : `_${Date.now()}`;
     const safeName = ext ? `${baseName}${suffix}.${ext}` : `${baseName}${suffix}`;
-    const filePath = await pathApi.join(cacheDir, safeName);
+    const separator = cacheDir.includes("\\") ? "\\" : "/";
+    const filePath = pathApi?.join
+        ? await pathApi.join(cacheDir, safeName)
+        : `${cacheDir}${cacheDir.endsWith(separator) ? "" : separator}${safeName}`;
 
     const url = buildDriveDownloadUrl(doc);
     const resolvedOptions = { ...options };
     if (!resolvedOptions.downloadId) {
         resolvedOptions.downloadId = `doc-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     }
-    await downloadFileToPath(url, filePath, resolvedOptions);
+    const externalProgress = typeof resolvedOptions.onProgress === "function" ? resolvedOptions.onProgress : null;
+    resolvedOptions.onProgress = ({ loaded, total, percent }) => {
+        const safePercent = percent ?? (total ? (loaded / total) * 100 : 0);
+        setDocDownloadState(id, { status: "downloading", percent: safePercent });
+        if (externalProgress) externalProgress({ loaded, total, percent: safePercent });
+    };
+    setDocDownloadState(id, { status: "downloading", percent: 0 });
+    try {
+        await downloadFileToPath(url, filePath, resolvedOptions);
+    } catch (err) {
+        setDocDownloadState(id, null);
+        throw err;
+    }
 
     docsState.cache.set(id, { path: filePath, fileName: fileName || safeName, cachedAt: Date.now() });
     await persistDocsCache();
+    setDocDownloadState(id, null);
     renderDocsList();
     return filePath;
 }
@@ -390,7 +598,7 @@ async function pruneMissingCachedDocs(list) {
             const entry = docsState.cache.get(id);
             if (!entry?.path) return null;
             return fileExists(entry.path).then((exists) => {
-                if (!exists) {
+                if (exists === false) {
                     docsState.cache.delete(id);
                     changed = true;
                 }
@@ -416,31 +624,82 @@ function renderDocsList() {
     empty.classList.add("hidden");
     updateDocCount(docsState.docs.length);
 
+    const icons = {
+        download:
+            '<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M5 21h14"></path></svg>',
+        copy:
+            '<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><rect x="2" y="2" width="13" height="13" rx="2"></rect></svg>',
+    };
+    const actionButtonBase =
+        "inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-[10px] font-semibold text-slate-700 hover:bg-slate-100";
+
     docsState.docs.forEach((doc) => {
         const fields = resolveDocFields(doc);
         const downloaded = docsState.cache.has(fields.id);
         const row = document.createElement("div");
-        row.className = "flex items-center justify-between gap-3 px-3 py-2";
+        row.className = "rounded-xl border border-slate-200 bg-white p-3 flex flex-col gap-2 shadow-sm";
         row.dataset.docId = fields.id;
 
-        const nameHtml = escapeHtml(fields.fileName || "Document");
+        const fileTitle = escapeHtml(fields.fileName || "Document");
         const sizeLabel = escapeHtml(formatBytes(fields.fileSize));
-        const dateLabel = escapeHtml(formatDateTime(fields.uploadedAt));
-        const badge = downloaded
-            ? `<span class="ml-2 text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">Downloaded</span>`
-            : "";
+        const detailsLabel = fields.docDetails ? escapeHtml(fields.docDetails) : "";
+        const downloadState = docsState.downloads.get(fields.id);
+        const progressPercent = Math.round(Math.max(0, Math.min(100, Number(downloadState?.percent) || 0)));
+        const statusHtml = downloadState
+            ? `<div class="w-16">
+                    <div class="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                        <div class="h-full bg-emerald-500 transition-all" style="width: ${Math.max(
+                            5,
+                            progressPercent
+                        )}%"></div>
+                    </div>
+                </div>`
+            : downloaded
+                ? `<span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700" title="Downloaded">
+                        <svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M5 10l3 3 7-7"></path>
+                        </svg>
+                    </span>`
+                : "<span class=\"h-5 w-5\"></span>";
+        const iconHtml = getDocIconSvg(doc);
+        const actionGridClass = "grid grid-cols-2 gap-2 w-full place-items-center";
+        row.title = fields.fileName || "Document";
 
         row.innerHTML = `
-            <div class="min-w-0">
-                <div class="text-[11px] font-semibold text-slate-800 truncate">${nameHtml}${badge}</div>
-                <div class="text-[10px] text-slate-500">${sizeLabel} • ${dateLabel}</div>
+            <div class="flex items-start justify-between">
+                <div class="flex flex-col items-start gap-2">
+                    <div class="h-16 w-16 shrink-0 cursor-pointer rounded-xl transition-transform hover:scale-105" data-doc-icon="true" role="button" aria-label="Open document" title="${fileTitle}">
+                        ${iconHtml}
+                    </div>
+                    ${statusHtml}
+                </div>
             </div>
-            <div class="flex items-center gap-2 shrink-0">
-                ${downloaded ? `<button type="button" data-action="open" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Open</button>` : ""}
-                <button type="button" data-action="download" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Download</button>
-                <button type="button" data-action="copy" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Copy</button>
+            <div class="min-w-0">
+                ${detailsLabel ? `<div class="text-[10px] text-slate-500 truncate">Details: ${detailsLabel}</div>` : ""}
+                <div class="text-[10px] text-slate-500">${sizeLabel}</div>
+            </div>
+            <div class="${actionGridClass}">
+                <button type="button" data-action="download" class="${actionButtonBase}" title="Download" aria-label="Download">
+                    ${icons.download}
+                </button>
+                <button type="button" data-action="copy" class="${actionButtonBase}" title="Copy" aria-label="Copy">
+                    ${icons.copy}
+                </button>
             </div>
         `;
+        const iconTrigger = row.querySelector("[data-doc-icon]");
+        if (iconTrigger) {
+            iconTrigger.addEventListener("dblclick", () => {
+                const previousTransform = iconTrigger.style.transform;
+                iconTrigger.style.transform = "scale(1.08)";
+                iconTrigger.classList.add("ring-2", "ring-emerald-200");
+                setTimeout(() => {
+                    iconTrigger.style.transform = previousTransform;
+                    iconTrigger.classList.remove("ring-2", "ring-emerald-200");
+                }, 180);
+                handleDocOpen(doc);
+            });
+        }
         list.appendChild(row);
     });
 }
@@ -478,11 +737,13 @@ async function handleUploadClick() {
         showToast("Select a tenant first.", "warning");
         return;
     }
-    const { fileInput } = getElements();
+    const { fileInput, typeSelect, otherInput } = getElements();
     if (!fileInput || !fileInput.files || !fileInput.files.length) {
         showToast("Choose a document to upload.", "warning");
         return;
     }
+    const docType = normalizeDocType(typeSelect?.value || "other");
+    const docDetails = docType === "other" ? normalizeId(otherInput?.value || "") : "";
     const files = Array.from(fileInput.files);
     docsState.uploadInProgress = true;
 
@@ -511,6 +772,8 @@ async function handleUploadClick() {
             const payload = {
                 tenantId: getTenantId(tenant),
                 tenantName: getTenantName(tenant),
+                docType,
+                docDetails,
                 fileName: file.name,
                 mimeType: file.type || "application/octet-stream",
                 size: file.size,
@@ -533,6 +796,12 @@ async function handleUploadClick() {
             if (!result?.ok || !result?.doc) {
                 showToast(`Upload failed for ${file.name}`, "error");
                 continue;
+            }
+            if (docType && !result.doc.doc_type && !result.doc.docType) {
+                result.doc.doc_type = docType;
+            }
+            if (docDetails && !result.doc.doc_details && !result.doc.docDetails) {
+                result.doc.doc_details = docDetails;
             }
 
             const current = await getLocalList(LOCAL_KEYS.docs, []);
@@ -563,27 +832,16 @@ async function handleDocOpen(doc) {
     try {
         let filePath = await getCachedDocPath(doc);
         if (!filePath) {
-            setProgressState({ show: true, label: `Downloading ${fields.fileName || "document"}...`, percent: 5 });
             filePath = await downloadDocToCache(doc, {
-                onProgress: ({ loaded, total, percent }) => {
-                    const safePercent = percent ?? (total ? (loaded / total) * 100 : 0);
-                    setProgressState({ show: true, label: "Downloading...", percent: safePercent });
-                },
                 downloadId: `doc-open-${Date.now()}-${Math.random().toString(16).slice(2)}`,
             });
         }
-        setProgressState({ show: true, label: "Opening file...", percent: 100 });
         try {
             await openLocalFile(filePath);
         } catch (err) {
             const exists = await fileExists(filePath);
-            if (!exists) {
-                setProgressState({ show: true, label: "File missing, downloading again...", percent: 10 });
+            if (exists !== true) {
                 const refreshedPath = await downloadDocToCache(doc, {
-                    onProgress: ({ loaded, total, percent }) => {
-                        const safePercent = percent ?? (total ? (loaded / total) * 100 : 0);
-                        setProgressState({ show: true, label: "Downloading...", percent: safePercent });
-                    },
                     downloadId: `doc-open-retry-${Date.now()}-${Math.random().toString(16).slice(2)}`,
                 });
                 await openLocalFile(refreshedPath);
@@ -594,8 +852,6 @@ async function handleDocOpen(doc) {
     } catch (err) {
         console.error("Open document failed", err);
         showToast("Could not open document.", "error");
-    } finally {
-        setProgressState({ show: false, label: "", percent: 0 });
     }
 }
 
@@ -616,11 +872,12 @@ async function handleDocDownload(doc) {
     }
 
     const location = await ensureDownloadLocationConfigured({ source: "tenant-docs" });
-    if (!location?.ok) return;
+    if (!location?.ok || !location.path) return;
+    showToast("Downloading document...", "info");
     const baseDir = location.path || "";
     const pathApi = window.__TAURI__?.path;
     const fs = window.__TAURI__?.fs;
-    if (!pathApi || !fs) {
+    if (!fs) {
         showToast("Download is unavailable in this build.", "error");
         return;
     }
@@ -628,83 +885,81 @@ async function handleDocDownload(doc) {
     const safeName = sanitizeFileSegment(getFileStem(fields.fileName || "document"));
     const ext = getFileExtension(fields.fileName);
     let finalName = ext ? `${safeName}.${ext}` : safeName;
-    let targetPath = await pathApi.join(baseDir, finalName);
+    const separator = baseDir.includes("\\") ? "\\" : "/";
+    let targetPath = pathApi?.join
+        ? await pathApi.join(baseDir, finalName)
+        : `${baseDir}${baseDir.endsWith(separator) ? "" : separator}${finalName}`;
     if (await fileExists(targetPath)) {
         const suffix = `_${Date.now()}`;
         finalName = ext ? `${safeName}${suffix}.${ext}` : `${safeName}${suffix}`;
-        targetPath = await pathApi.join(baseDir, finalName);
+        targetPath = pathApi?.join
+            ? await pathApi.join(baseDir, finalName)
+            : `${baseDir}${baseDir.endsWith(separator) ? "" : separator}${finalName}`;
     }
 
     try {
-        setProgressState({ show: true, label: `Downloading ${fields.fileName || "document"}...`, percent: 5 });
-        await downloadFileToPath(buildDriveDownloadUrl(doc), targetPath, {
-            onProgress: ({ loaded, total, percent }) => {
-                const safePercent = percent ?? (total ? (loaded / total) * 100 : 0);
-                setProgressState({ show: true, label: "Downloading...", percent: safePercent });
-            },
-            downloadId: `doc-download-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        });
-        if (fields.id) {
-            docsState.cache.set(fields.id, {
-                path: targetPath,
-                fileName: finalName,
-                cachedAt: Date.now(),
-                source: "download",
-            });
-            await persistDocsCache();
-            renderDocsList();
+        let cachedPath = await getCachedDocPath(doc);
+        if (cachedPath) {
+            const exists = await fileExists(cachedPath);
+            if (exists === false) cachedPath = "";
         }
-        setProgressState({ show: false, label: "", percent: 0 });
+        if (!cachedPath) {
+            cachedPath = await downloadDocToCache(doc, {
+                downloadId: `doc-cache-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            });
+        }
+        try {
+            await copyFileToPath(cachedPath, targetPath);
+        } catch (err) {
+            const refreshedPath = await downloadDocToCache(doc, {
+                downloadId: `doc-cache-retry-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            });
+            await copyFileToPath(refreshedPath, targetPath);
+        }
         showTenantDocDownloadModal(finalName, targetPath);
         showToast("Document downloaded", "success");
     } catch (err) {
         console.error("Download failed", err);
         showToast("Failed to download document.", "error");
-        setProgressState({ show: false, label: "", percent: 0 });
     }
 }
 
 async function handleDocCopy(doc) {
     const fields = resolveDocFields(doc);
     if (!window.__TAURI__) {
-        if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(fields.fileUrl || "");
-            showToast("Link copied to clipboard", "success");
-        }
+        showToast("Copy is available only in the desktop app.", "warning");
         return;
     }
 
     try {
-        setProgressState({ show: true, label: `Preparing ${fields.fileName || "document"}...`, percent: 5 });
-        const filePath = await getOrDownloadCachedDoc(doc);
-        const bytes = await window.__TAURI__.fs.readFile(filePath);
+        let filePath = await getCachedDocPath(doc);
+        if (!filePath) {
+            filePath = await downloadDocToCache(doc, {
+                downloadId: `doc-copy-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            });
+        }
+        let bytes;
+        try {
+            bytes = await window.__TAURI__.fs.readFile(filePath);
+        } catch (readErr) {
+            const refreshedPath = await downloadDocToCache(doc, {
+                downloadId: `doc-copy-retry-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            });
+            bytes = await window.__TAURI__.fs.readFile(refreshedPath);
+            filePath = refreshedPath;
+        }
         const blob = new Blob([bytes], { type: fields.fileMime || "application/octet-stream" });
 
         if (navigator.clipboard && window.ClipboardItem) {
             const item = new ClipboardItem({ [blob.type]: blob });
             await navigator.clipboard.write([item]);
             showToast("Document copied to clipboard", "success");
-        } else if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(filePath);
-            showToast("File path copied to clipboard", "success");
         } else {
-            showToast("Clipboard is unavailable.", "warning");
+            showToast("Clipboard file copy is unavailable.", "warning");
         }
     } catch (err) {
         console.error("Copy failed", err);
-        if (navigator.clipboard?.writeText) {
-            const fallbackText = fields.fileUrl || "";
-            try {
-                await navigator.clipboard.writeText(fallbackText);
-                showToast("Document link copied to clipboard", "success");
-                return;
-            } catch (fallbackErr) {
-                // fall through
-            }
-        }
         showToast("Failed to copy document.", "error");
-    } finally {
-        setProgressState({ show: false, label: "", percent: 0 });
     }
 }
 
@@ -715,7 +970,7 @@ function bindListActions() {
 
     list.addEventListener("click", (event) => {
         const target = event.target;
-        if (!(target instanceof HTMLElement)) return;
+        if (!(target instanceof Element)) return;
         const actionBtn = target.closest("button[data-action]");
         if (!actionBtn) return;
         const action = actionBtn.dataset.action;
@@ -724,14 +979,13 @@ function bindListActions() {
         const docId = row.dataset.docId;
         const doc = docsState.docs.find((item) => resolveDocFields(item).id === docId);
         if (!doc) return;
-        if (action === "open") {
-            handleDocOpen(doc);
-        } else if (action === "download") {
+        if (action === "download") {
             handleDocDownload(doc);
         } else if (action === "copy") {
             handleDocCopy(doc);
         }
     });
+
 }
 
 function showTenantDocDownloadModal(fileName, filePath) {
@@ -799,7 +1053,7 @@ function bytesToBase64(bytes) {
 function bindModalEvents() {
     if (docsState.modalBound) return;
     docsState.modalBound = true;
-    const { modal, closeBtn, uploadBtn } = getElements();
+    const { modal, closeBtn, uploadBtn, typeSelect } = getElements();
 
     if (closeBtn) closeBtn.addEventListener("click", () => modal && hideModal(modal));
     if (modal) {
@@ -808,6 +1062,10 @@ function bindModalEvents() {
         });
     }
     if (uploadBtn) uploadBtn.addEventListener("click", handleUploadClick);
+    if (typeSelect) {
+        typeSelect.addEventListener("change", syncDocTypeFields);
+        syncDocTypeFields();
+    }
     bindListActions();
 }
 
@@ -827,9 +1085,11 @@ export async function openTenantDocumentsModal(tenant) {
     docsState.tenant = tenant;
     setTenantLabel(tenant);
     bindModalEvents();
+    syncDocTypeFields();
     await ensureDocsCacheLoaded();
     await setDocsForTenant(tenant);
     const { modal } = getElements();
     if (modal) showModal(modal);
     refreshDocsFromServer(tenant).catch(() => null);
 }
+

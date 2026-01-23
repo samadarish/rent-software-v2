@@ -2000,11 +2000,25 @@
         <div class="flex-1 overflow-y-auto px-4 py-3 space-y-4">
           <div class="border border-dashed border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2">
             <div class="flex flex-wrap items-center gap-2">
+              <label class="text-[10px] font-semibold text-slate-500" for="tenantDocsTypeSelect">Doc type</label>
+              <select id="tenantDocsTypeSelect"
+                class="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700">
+                <option value="aadhar">Aadhar</option>
+                <option value="pan">PAN</option>
+                <option value="agreement">Agreement</option>
+                <option value="tenant_image">Tenant Image</option>
+                <option value="other" selected>Other</option>
+              </select>
               <input id="tenantDocsFileInput" type="file"
                 accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.ppt,.pptx,.odt,.ods,.odp"
                 class="text-[11px] text-slate-700" />
               <button id="tenantDocsUploadBtn" type="button"
                 class="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500">Upload</button>
+            </div>
+            <div id="tenantDocsOtherWrap" class="hidden flex flex-wrap items-center gap-2">
+              <label class="text-[10px] font-semibold text-slate-500" for="tenantDocsOtherInput">Other label</label>
+              <input id="tenantDocsOtherInput" type="text" placeholder="UPI, cheque, receipt, etc"
+                class="min-w-[220px] rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700" />
             </div>
             <div class="text-[10px] text-slate-500">
               Allowed: images (PNG/JPG/WEBP/GIF), PDF, DOC/DOCX, XLS/XLSX/CSV, PPT/PPTX, ODT/ODS/ODP, TXT, RTF.
@@ -2028,7 +2042,7 @@
               <span id="tenantDocsCount" class="text-[10px] text-slate-500">0 files</span>
             </div>
             <div id="tenantDocsEmpty" class="px-3 py-4 text-[11px] text-slate-500">No documents uploaded yet.</div>
-            <div id="tenantDocsList" class="divide-y divide-slate-100"></div>
+            <div id="tenantDocsList" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
           </div>
         </div>
       </div>
@@ -2188,7 +2202,7 @@
     </div>
 
     <!-- DOWNLOAD LOCATION MODAL -->
-    <div id="downloadLocationModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 fade-overlay">
+    <div id="downloadLocationModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-[9997] fade-overlay">
       <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-4 md:p-5 modal-panel border border-slate-200">
         <div class="flex items-start gap-3">
           <div class="h-10 w-10 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-sm font-semibold">

@@ -193,6 +193,8 @@ const DOC_HEADERS = [
   'file_mime',
   'file_size',
   'uploaded_at',
+  'doc_type',
+  'doc_details',
 ];
 
 const BASE_DRIVE_FOLDER = 'Tenant_App_Data (Do not Delete ❌)';
@@ -608,6 +610,18 @@ function sanitizeFileSegment_(value, fallback) {
   if (!raw) return fallback || '';
   const cleaned = raw.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || (fallback || '');
+}
+
+function normalizeDocType_(value) {
+  const raw = (value || '').toString().trim().toLowerCase();
+  if (!raw) return 'other';
+  const cleaned = raw.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (cleaned === 'aadhaar' || cleaned === 'aadhar') return 'aadhar';
+  if (cleaned === 'pan') return 'pan';
+  if (cleaned === 'agreement' || cleaned === 'rent_agreement') return 'agreement';
+  if (cleaned === 'tenantimage' || cleaned === 'tenant_image' || cleaned === 'tenant_photo') return 'tenant_image';
+  if (cleaned === 'other') return 'other';
+  return 'other';
 }
 
 function getFileExtension_(mimeType, originalName) {
@@ -1842,6 +1856,8 @@ function saveTenantDocument_(payload) {
   if (!base64) return { ok: false, error: 'Missing document data' };
   const tenantId = (payload.tenantId || payload.tenant_id || '').toString().trim();
   const tenantName = (payload.tenantName || payload.tenant_name || '').toString().trim();
+  const docType = normalizeDocType_(payload.docType || payload.doc_type || payload.document_type || 'other');
+  const docDetails = (payload.docDetails || payload.doc_details || payload.details || '').toString().trim();
   const mimeType = (payload.mimeType || payload.mime_type || 'application/octet-stream').toString();
   const originalName = payload.fileName || payload.file_name || payload.name || 'document';
   const compression = (payload.compression || '').toString().trim().toLowerCase();
@@ -1883,6 +1899,8 @@ function saveTenantDocument_(payload) {
     doc_id: Utilities.getUuid(),
     tenant_id: tenantId,
     tenant_name: tenantName,
+    doc_type: docType,
+    doc_details: docDetails,
     file_name: file.getName(),
     file_url: ensured.viewUrl,
     file_drive_id: file.getId(),

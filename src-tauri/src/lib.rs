@@ -188,6 +188,25 @@ impl<R: Read> Read for ProgressReader<R> {
     }
 }
 
+fn sanitize_segment(value: &str, fallback: &str) -> String {
+    let cleaned: String = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim_matches('_');
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 #[tauri::command]
 fn cache_get(state: tauri::State<DbState>, key: String) -> Result<Option<CacheEntry>, String> {
     let conn = state
@@ -225,6 +244,15 @@ fn cache_set(
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+fn ensure_temp_dir(app: tauri::AppHandle, tenant_name: String) -> Result<serde_json::Value, String> {
+    let base = app.path().temp_dir().map_err(|e| e.to_string())?;
+    let tenant = sanitize_segment(&tenant_name, "Tenant");
+    let dir = base.join("Tenant_Docs").join(tenant);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "ok": true, "path": dir.to_string_lossy().to_string() }))
 }
 
 #[tauri::command]
@@ -486,6 +514,10 @@ fn download_file_to_path(
         .unwrap_or(0);
 
     let mut reader = response.into_reader();
+    let path = PathBuf::from(&file_path);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     let mut file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
     let mut buf = [0u8; 64 * 1024];
     let mut loaded = 0u64;
@@ -873,6 +905,7 @@ pub fn run() {
             upload_tenant_document,
             cancel_upload,
             download_file_to_path,
+            ensure_temp_dir,
             open_whatsapp,
             send_whatsapp_message
         ])

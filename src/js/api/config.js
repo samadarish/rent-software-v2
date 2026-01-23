@@ -13,6 +13,7 @@ const FULL_SYNC_STALE_MS = 2 * 60 * 60 * 1000;
 let modalProgressBound = false;
 let downloadLocationModalBound = false;
 let downloadLocationResolver = null;
+let downloadLocationPromise = null;
 
 /**
  * Retrieves the Google Apps Script URL from local storage
@@ -194,6 +195,18 @@ export function getDownloadLocation() {
     return (localStorage.getItem(STORAGE_KEYS.DOWNLOAD_LOCATION) || "").trim();
 }
 
+async function isDownloadLocationValid(path) {
+    const value = (path || "").trim();
+    if (!value) return false;
+    const fs = window.__TAURI__?.fs;
+    if (!fs || typeof fs.exists !== "function") return true;
+    try {
+        return await fs.exists(value);
+    } catch (err) {
+        return false;
+    }
+}
+
 function syncDownloadLocationUi(location) {
     const value = (location || "").trim();
     const label = document.getElementById("downloadLocationValue");
@@ -254,6 +267,7 @@ function resolveDownloadLocationModal(result) {
         downloadLocationResolver(result);
         downloadLocationResolver = null;
     }
+    downloadLocationPromise = null;
 }
 
 function bindDownloadLocationModal() {
@@ -317,25 +331,47 @@ export async function openDownloadLocationModal(options = {}) {
     if (!modal) {
         return { ok: false, reason: "missing-modal" };
     }
+    if (downloadLocationPromise && modal.classList.contains("hidden")) {
+        downloadLocationPromise = null;
+        downloadLocationResolver = null;
+    }
+    const tenantDocsModal = document.getElementById("tenantDocsModal");
+    const tenantDocsWasOpen = !!tenantDocsModal && !tenantDocsModal.classList.contains("hidden");
     syncDownloadLocationUi(getDownloadLocation());
+    modal.style.zIndex = "9997";
     showModal(modal);
-    return new Promise((resolve) => {
-        downloadLocationResolver = resolve;
+    if (downloadLocationPromise) {
+        return downloadLocationPromise;
+    }
+    downloadLocationPromise = new Promise((resolve) => {
+        downloadLocationResolver = (result) => {
+            if (tenantDocsModal && tenantDocsWasOpen) {
+                showModal(tenantDocsModal);
+            }
+            resolve(result);
+        };
     });
+    if (tenantDocsModal && tenantDocsWasOpen) {
+        hideModal(tenantDocsModal);
+    }
+    return downloadLocationPromise;
 }
 
 export async function ensureDownloadLocationConfigured(options = {}) {
     if (!window.__TAURI__) {
         return { ok: true, path: "" };
     }
-    if (!window.__TAURI__?.dialog?.open) {
-        showToast("Folder picker is not enabled in this build yet.", "warning");
-        return { ok: false, reason: "dialog-unavailable" };
-    }
     const current = getDownloadLocation();
     if (current) {
-        syncDownloadLocationUi(current);
-        return { ok: true, path: current };
+        const valid = await isDownloadLocationValid(current);
+        if (valid) {
+            syncDownloadLocationUi(current);
+            return { ok: true, path: current };
+        }
+        localStorage.removeItem(STORAGE_KEYS.DOWNLOAD_LOCATION);
+    }
+    if (!window.__TAURI__?.dialog?.open) {
+        showToast("Folder picker is not enabled in this build yet.", "warning");
     }
     const result = await openDownloadLocationModal(options);
     if (result?.ok) {
