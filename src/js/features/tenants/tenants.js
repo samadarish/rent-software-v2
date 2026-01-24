@@ -44,6 +44,63 @@ const statusClassMap = {
     inactive: "bg-rose-100 text-rose-700 border-rose-200",
 };
 
+function normalizeId(value) {
+    return value === undefined || value === null ? "" : String(value).trim();
+}
+
+function normalizeKey(value) {
+    return normalizeId(value).toLowerCase();
+}
+
+function getTenantIdForDocs(tenant) {
+    return normalizeId(
+        tenant?.tenantId || tenant?.tenant_id || tenant?.templateData?.tenant_id || ""
+    );
+}
+
+function getTenantNameForDocs(tenant) {
+    return normalizeId(
+        tenant?.tenantFullName ||
+            tenant?.tenantName ||
+            tenant?.tenant_name ||
+            tenant?.full_name ||
+            tenant?.templateData?.Tenant_Full_Name ||
+            ""
+    );
+}
+
+function resolveDocId(doc) {
+    return normalizeId(doc?.doc_id || doc?.docId || doc?.id || "");
+}
+
+function docMatchesTenant(doc, tenant) {
+    const tenantId = getTenantIdForDocs(tenant);
+    const docTenantId = normalizeId(doc?.tenant_id || doc?.tenantId || "");
+    if (tenantId && docTenantId) return normalizeKey(tenantId) === normalizeKey(docTenantId);
+    const tenantName = normalizeKey(getTenantNameForDocs(tenant));
+    const docName = normalizeKey(doc?.tenant_name || doc?.tenantName || "");
+    return tenantName && tenantName === docName;
+}
+
+async function updateSidebarDocsCount(tenant) {
+    const badge = document.getElementById("sidebarTenantDocsCount");
+    if (!badge) return;
+    if (!tenant) {
+        badge.textContent = "0";
+        return;
+    }
+    const [docs, pendingDeletes] = await Promise.all([
+        getLocalList(LOCAL_KEYS.docs, []),
+        getLocalList(LOCAL_KEYS.docsDeleted, []),
+    ]);
+    const pendingSet = new Set(pendingDeletes.map((id) => normalizeId(id)));
+    const count = docs.filter((doc) => {
+        if (!docMatchesTenant(doc, tenant)) return false;
+        return !pendingSet.has(resolveDocId(doc));
+    }).length;
+    badge.textContent = String(count);
+}
+
 /**
  * Returns all active tenants for a given wing, ensuring duplicates are filtered out.
  * @param {string} wing - Wing identifier from the dropdown.
@@ -1089,6 +1146,7 @@ function updateSidebarSnapshot() {
     const familyViewBtn = document.getElementById("sidebarFamilyViewBtn");
     const historyList = document.getElementById("sidebarUnitHistory");
     const docsBtn = document.getElementById("sidebarTenantDocsBtn");
+    const createAgreementBtn = document.getElementById("sidebarCreateAgreementBtn");
 
     if (!selectedTenantForSidebar) {
         familySnapshotRequestId += 1;
@@ -1110,6 +1168,11 @@ function updateSidebarSnapshot() {
             docsBtn.disabled = true;
             docsBtn.classList.add("opacity-50", "cursor-not-allowed");
         }
+        if (createAgreementBtn) {
+            createAgreementBtn.disabled = true;
+            createAgreementBtn.classList.add("opacity-50", "cursor-not-allowed");
+        }
+        void updateSidebarDocsCount(null);
         return;
     }
 
@@ -1130,6 +1193,11 @@ function updateSidebarSnapshot() {
         docsBtn.disabled = false;
         docsBtn.classList.remove("opacity-50", "cursor-not-allowed");
     }
+    if (createAgreementBtn) {
+        createAgreementBtn.disabled = false;
+        createAgreementBtn.classList.remove("opacity-50", "cursor-not-allowed");
+    }
+    void updateSidebarDocsCount(t);
 
     if (historyList) {
         const history = Array.isArray(t.tenancyHistory) ? [...t.tenancyHistory] : [];
@@ -1883,6 +1951,30 @@ export function initTenantDirectory() {
         });
     }
 
+    const createAgreementBtn = document.getElementById("sidebarCreateAgreementBtn");
+    if (createAgreementBtn) {
+        createAgreementBtn.addEventListener("click", () => {
+            if (!selectedTenantForSidebar) return;
+            const modal = document.getElementById("createAgreementModal");
+            if (modal) showModal(modal);
+        });
+    }
+
+    const createAgreementModal = document.getElementById("createAgreementModal");
+    if (createAgreementModal) {
+        createAgreementModal.addEventListener("click", (event) => {
+            if (event.target === createAgreementModal) hideModal(createAgreementModal);
+        });
+    }
+
+    const createAgreementClose = document.getElementById("createAgreementClose");
+    if (createAgreementClose) {
+        createAgreementClose.addEventListener("click", () => {
+            const modal = document.getElementById("createAgreementModal");
+            if (modal) hideModal(modal);
+        });
+    }
+
     const familyViewBtn = document.getElementById("sidebarFamilyViewBtn");
     if (familyViewBtn) {
         familyViewBtn.addEventListener("click", () => openFamilyModal(selectedTenantForSidebar));
@@ -1958,6 +2050,11 @@ export function initTenantDirectory() {
         handleTenancyViewClick(event);
         handleRentHistoryClick(event);
         handleVacateClick(event);
+    });
+
+    document.addEventListener("docs:updated", () => {
+        if (!selectedTenantForSidebar) return;
+        void updateSidebarDocsCount(selectedTenantForSidebar);
     });
 
     initTenantDocuments();
