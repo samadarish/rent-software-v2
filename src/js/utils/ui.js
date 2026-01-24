@@ -318,6 +318,189 @@ export function cloneSelectOptions(sourceId, targetId, options = {}) {
     }
 }
 
+const UNIT_DROPDOWN_CLASS = "unit-select-dropdown";
+let unitDropdownDismissBound = false;
+
+function closeUnitDropdowns(except) {
+    document.querySelectorAll(`.${UNIT_DROPDOWN_CLASS}`).forEach((wrapper) => {
+        if (except && wrapper === except) return;
+        const menu = wrapper.querySelector("[data-unit-menu]");
+        if (!menu) return;
+        menu.classList.add("hidden");
+        wrapper.dataset.open = "0";
+    });
+}
+
+function bindUnitDropdownDismiss() {
+    if (unitDropdownDismissBound) return;
+    unitDropdownDismissBound = true;
+    document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const wrapper = target.closest(`.${UNIT_DROPDOWN_CLASS}`);
+        closeUnitDropdowns(wrapper || null);
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeUnitDropdowns(null);
+    });
+}
+
+function getSelectTextSizeClass(select) {
+    const classes = (select.className || "").split(/\s+/);
+    return (
+        classes.find((c) => c.startsWith("text-[") || c === "text-xs" || c === "text-sm" || c === "text-base") ||
+        "text-xs"
+    );
+}
+
+function buildUnitTag(label, className) {
+    const tag = document.createElement("span");
+    tag.textContent = label;
+    tag.className = `inline-flex items-center px-2 py-0.5 rounded-full border font-semibold ${className}`;
+    return tag;
+}
+
+/**
+ * Builds or refreshes a custom unit dropdown UI for a select element.
+ * @param {string|HTMLSelectElement} selectOrId
+ * @param {{ includeCurrentTag?: boolean }} options
+ */
+export function syncUnitSelectDropdown(selectOrId, options = {}) {
+    const { includeCurrentTag = false, currentValue = "" } = options;
+    const select = typeof selectOrId === "string" ? document.getElementById(selectOrId) : selectOrId;
+    if (!select) return;
+
+    bindUnitDropdownDismiss();
+
+    let wrapper = select.parentElement?.querySelector(`.${UNIT_DROPDOWN_CLASS}[data-for="${select.id}"]`);
+    if (!wrapper) {
+        wrapper = document.createElement("div");
+        wrapper.className = `${UNIT_DROPDOWN_CLASS} relative w-full`;
+        wrapper.dataset.for = select.id || "";
+        wrapper.dataset.open = "0";
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.unitToggle = "1";
+        button.className = `${select.className} flex items-center justify-between gap-2 text-left cursor-pointer`;
+
+        const label = document.createElement("span");
+        label.dataset.unitLabel = "1";
+        label.className = "truncate";
+
+        const caret = document.createElement("span");
+        caret.textContent = "v";
+        caret.className = "text-slate-500";
+
+        button.append(label, caret);
+
+        const menu = document.createElement("div");
+        menu.dataset.unitMenu = "1";
+        menu.className =
+            "absolute left-0 right-0 mt-1 max-h-64 overflow-auto bg-white border border-slate-200 rounded shadow-lg z-30 hidden";
+
+        wrapper.append(button, menu);
+        select.insertAdjacentElement("afterend", wrapper);
+        select.classList.add("hidden");
+
+        button.addEventListener("click", (event) => {
+            event.preventDefault();
+            if (button.disabled) return;
+            const isOpen = wrapper.dataset.open === "1";
+            closeUnitDropdowns(wrapper);
+            menu.classList.toggle("hidden", isOpen);
+            wrapper.dataset.open = isOpen ? "0" : "1";
+        });
+    }
+
+    wrapper.dataset.includeCurrent = includeCurrentTag ? "1" : "0";
+    wrapper.dataset.currentValue = currentValue || "";
+
+    if (!select.dataset.unitDropdownBound) {
+        select.dataset.unitDropdownBound = "1";
+        select.addEventListener("change", () => {
+            syncUnitSelectDropdown(select, {
+                includeCurrentTag: wrapper.dataset.includeCurrent === "1",
+                currentValue: wrapper.dataset.currentValue || "",
+            });
+        });
+    }
+
+    const button = wrapper.querySelector("[data-unit-toggle]");
+    const label = wrapper.querySelector("[data-unit-label]");
+    const menu = wrapper.querySelector("[data-unit-menu]");
+    if (!button || !label || !menu) return;
+
+    const selectedOption = select.selectedOptions?.[0] || select.options[0];
+    label.textContent = selectedOption?.textContent || "Select unit";
+
+    button.disabled = select.disabled;
+    button.classList.toggle("bg-slate-50", select.disabled);
+    button.classList.toggle("text-slate-500", select.disabled);
+    button.classList.toggle("cursor-not-allowed", select.disabled);
+    button.classList.toggle("cursor-pointer", !select.disabled);
+
+    if (select.disabled) {
+        menu.classList.add("hidden");
+        wrapper.dataset.open = "0";
+    }
+
+    const sizeClass = getSelectTextSizeClass(select);
+    menu.innerHTML = "";
+
+    Array.from(select.options).forEach((opt) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = `w-full text-left flex items-center justify-between gap-2 px-2 py-1.5 ${sizeClass} ${
+            opt.value === select.value ? "bg-slate-50" : ""
+        }`;
+        item.disabled = opt.disabled;
+        if (opt.value === "") {
+            item.classList.add("text-slate-400");
+        } else {
+            item.classList.add("hover:bg-slate-100");
+        }
+
+        const text = document.createElement("span");
+        text.textContent = opt.textContent || "";
+        text.className = "truncate";
+
+        const tags = document.createElement("span");
+        tags.className = "flex items-center gap-1";
+
+        const occupied = opt.dataset?.occupied;
+        if (occupied === "1" || occupied === "0") {
+            tags.appendChild(
+                buildUnitTag(
+                    occupied === "1" ? "Occupied" : "Vacant",
+                    occupied === "1"
+                        ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                        : "bg-rose-100 text-rose-700 border-rose-200"
+                )
+            );
+        }
+
+        if (includeCurrentTag && opt.value && opt.value === currentValue) {
+            tags.appendChild(
+                buildUnitTag("Current", "bg-slate-100 text-slate-600 border-slate-200")
+            );
+        }
+
+        item.append(text, tags);
+
+        item.addEventListener("click", (event) => {
+            event.preventDefault();
+            if (item.disabled) return;
+            select.value = opt.value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+            menu.classList.add("hidden");
+            wrapper.dataset.open = "0";
+        });
+
+        menu.appendChild(item);
+    });
+}
+
 const DEFAULT_ANIM_MS = 200;
 
 /**

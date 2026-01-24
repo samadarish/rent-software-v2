@@ -9,7 +9,7 @@ import { getLocalList, LOCAL_KEYS } from "../../api/localStore.js";
 import { buildUnitLabel, formatCurrency, normalizeMonthKey } from "../../utils/formatters.js";
 import { escapeHtml } from "../../utils/htmlUtils.js";
 import { generateNoGrnValue } from "../../utils/grn.js";
-import { cloneSelectOptions, hideModal, showModal, showToast } from "../../utils/ui.js";
+import { cloneSelectOptions, hideModal, showModal, showToast, syncUnitSelectDropdown } from "../../utils/ui.js";
 import { createFamilyRow } from "./family.js";
 import { initTenantDocuments, openTenantDocumentsModal } from "./documents.js";
 import {
@@ -38,6 +38,7 @@ let familySnapshotRequestId = 0;
 let familyModalRequestId = 0;
 let activeVacateContext = null;
 let vacateActionPending = false;
+let tenantModalCurrentUnitId = "";
 
 const statusClassMap = {
     active: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -796,7 +797,8 @@ function populateUnitDropdown(selectedUnitId, tenancyId, preserveSelection = tru
     available.forEach((u) => {
         const opt = document.createElement("option");
         opt.value = u.unit_id;
-        opt.textContent = buildUnitLabel(u);
+        opt.textContent = buildUnitLabel(u) || u.unit_id || u.unitId || "";
+        opt.dataset.occupied = u.is_occupied ? "1" : "0";
         opt.dataset.wing = u.wing || "";
         opt.dataset.floor = u.floor || "";
         opt.dataset.direction = u.direction || "";
@@ -809,6 +811,8 @@ function populateUnitDropdown(selectedUnitId, tenancyId, preserveSelection = tru
     } else if (preserveSelection && previous && Array.from(select.options).some((o) => o.value === previous)) {
         select.value = previous;
     }
+
+    syncUnitSelectDropdown(select, { includeCurrentTag: true, currentValue: tenantModalCurrentUnitId });
 }
 
 /**
@@ -1171,6 +1175,8 @@ function setTenantModalEditable(enabled) {
     document.querySelectorAll(".tenant-modal-edit-toggle").forEach((btn) => {
         btn.textContent = enabled ? "Editing enabled" : "Edit details";
     });
+
+    syncUnitSelectDropdown("tenantModalUnit", { includeCurrentTag: true, currentValue: tenantModalCurrentUnitId });
 }
 
 function updateSidebarSnapshot() {
@@ -1599,6 +1605,7 @@ function populateTenantModal(tenant, mode = "tenant") {
 
     syncTenantModalPicklists();
     const selectedUnitId = isNewTenancy ? "" : tenant.unitId || templateData.unit_id || "";
+    tenantModalCurrentUnitId = isNewTenancy ? "" : selectedUnitId;
     populateUnitDropdown(selectedUnitId, tenant.tenancyId || templateData.tenancy_id, !isNewTenancy);
 
     const title = document.getElementById("tenantModalTitle");

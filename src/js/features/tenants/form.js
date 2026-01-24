@@ -13,6 +13,7 @@ import { htmlToMarkedText } from "../../utils/htmlUtils.js";
 import { getSelectedClauses } from "../agreements/clauses.js";
 import { getFamilyMembersFromTable } from "./family.js";
 import { currentFlow } from "../../state.js";
+import { syncUnitSelectDropdown } from "../../utils/ui.js";
 import {
     refreshUnits,
     refreshLandlords,
@@ -97,7 +98,8 @@ function populateUnitSelectForFlow() {
     available.forEach((u) => {
         const opt = document.createElement("option");
         opt.value = u.unit_id;
-        opt.textContent = buildUnitLabel(u);
+        opt.textContent = buildUnitLabel(u) || u.unit_id || u.unitId || "";
+        opt.dataset.occupied = u.is_occupied ? "1" : "0";
         opt.dataset.wing = u.wing || "";
         opt.dataset.floor = u.floor || "";
         opt.dataset.direction = u.direction || "";
@@ -112,6 +114,8 @@ function populateUnitSelectForFlow() {
     } else {
         applyUnitToPremises(null);
     }
+
+    syncUnitSelectDropdown(select);
 }
 
 function getSelectedUnitForForm() {

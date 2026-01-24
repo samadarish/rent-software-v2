@@ -1,6 +1,7 @@
 import { generateNoGrnValue } from "../../utils/grn.js";
 import { pruneDraftValues, resolveDraftHydration } from "./draftHydration.js";
 import { applyLandlordToForm, applyUnitToPremises, getLandlordCache, getUnitCache } from "./form.js";
+import { syncUnitSelectDropdown } from "../../utils/ui.js";
 
 const FORM_FIELDS_SELECTOR = "#formSection input, #formSection textarea, #formSection select";
 const DERIVED_FIELD_IDS = new Set([
@@ -112,6 +113,7 @@ export function hydrateTenantFormFromDraft(rawValues = {}) {
     if (values.grnNoCheckbox) skip.add("grn_number");
 
     applyFormValues(values, { skip });
+    syncUnitSelectDropdown("unit_selector");
 
     const hydration = resolveDraftHydration(values, {
         landlords: getLandlordCache(),
