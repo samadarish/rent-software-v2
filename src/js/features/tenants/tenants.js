@@ -52,6 +52,36 @@ function normalizeKey(value) {
     return normalizeId(value).toLowerCase();
 }
 
+function getTenantRowKey(tenant) {
+    if (!tenant || typeof tenant !== "object") return "";
+    if (tenant.__rowKey) return normalizeId(tenant.__rowKey);
+    const directId =
+        tenant.tenantId ||
+        tenant.tenant_id ||
+        tenant.templateData?.tenant_id ||
+        tenant.grnNumber ||
+        tenant.grn_number ||
+        tenant.templateData?.grn_number ||
+        tenant.tenancyId ||
+        tenant.tenancy_id ||
+        tenant.templateData?.tenancy_id ||
+        tenant.templateData?.tenancyId ||
+        "";
+    const cleanedId = normalizeId(directId);
+    if (cleanedId) return cleanedId;
+    const name = normalizeKey(
+        tenant.tenantFullName ||
+            tenant.tenantName ||
+            tenant.tenant_name ||
+            tenant.full_name ||
+            tenant.templateData?.Tenant_Full_Name ||
+            ""
+    );
+    const mobile = normalizeId(tenant.tenantMobile || tenant.tenant_mobile || "");
+    const unit = normalizeKey(tenant.unitNumber || tenant.unitLabel || tenant.unit_number || "");
+    return [name, mobile, unit].filter(Boolean).join("|");
+}
+
 function getTenantIdForDocs(tenant) {
     return normalizeId(
         tenant?.tenantId || tenant?.tenant_id || tenant?.templateData?.tenant_id || ""
@@ -923,8 +953,11 @@ function renderTenantRows(rows) {
 
     tenantRenderCache.forEach((t, idx) => {
         const tr = document.createElement("tr");
-        tr.className = "border-b last:border-0 hover:bg-slate-50 cursor-pointer";
+        tr.className = "tenant-row border-b last:border-0 hover:bg-slate-50 cursor-pointer";
         tr.dataset.grn = t.grnNumber || "";
+        const rowKey = getTenantRowKey(t) || `row-${idx}`;
+        t.__rowKey = rowKey;
+        tr.dataset.key = rowKey;
         tr.dataset.index = String(idx);
 
         const activeHistory = Array.isArray(t.tenancyHistory)
@@ -1021,7 +1054,7 @@ export async function ensureTenantDirectoryLoaded() {
  * @param {boolean} forceReload - When true, bypasses the cache.
  */
 export async function loadTenantDirectory(forceReload = false) {
-    const previousSelectedGrn = selectedTenantForSidebar?.grnNumber;
+    const previousSelectedGrn = normalizeId(selectedTenantForSidebar?.grnNumber);
     if (hasLoadedTenants && !forceReload) {
         applyTenantFilters();
         return;
@@ -1057,13 +1090,17 @@ export async function loadTenantDirectory(forceReload = false) {
         setTenantListLoading(false);
     }
 
-    if (tenantCache.length) {
-        const match = tenantCache.find((t) => t.grnNumber === previousSelectedGrn);
-        setSidebarSelection(match || tenantCache[0]);
-    } else {
-        selectedTenantForSidebar = null;
-        updateSidebarSnapshot();
+    if (tenantCache.length && previousSelectedGrn) {
+        const match = tenantCache.find((t) => normalizeId(t.grnNumber) === previousSelectedGrn);
+        if (match) {
+            setSidebarSelection(match);
+            return;
+        }
     }
+
+    selectedTenantForSidebar = null;
+    updateSidebarSnapshot();
+    highlightSelectedRow();
 }
 
 const modalFamilyRowOptions = {
@@ -1079,9 +1116,10 @@ function buildModalFamilyRow(member = {}) {
 function highlightSelectedRow() {
     const tbody = document.getElementById("tenantTableBody");
     if (!tbody) return;
-    const selectedGrn = selectedTenantForSidebar?.grnNumber || "";
+    const selectedKey = getTenantRowKey(selectedTenantForSidebar);
     tbody.querySelectorAll("tr").forEach((row) => {
-        row.classList.toggle("bg-indigo-50", selectedGrn && row.dataset.grn === selectedGrn);
+        const isSelected = selectedKey && row.dataset.key === selectedKey;
+        row.classList.toggle("tenant-row-selected", isSelected);
     });
 }
 
@@ -1150,20 +1188,20 @@ function updateSidebarSnapshot() {
 
     if (!selectedTenantForSidebar) {
         familySnapshotRequestId += 1;
-        if (emptyState) emptyState.classList.remove("hidden");
-        if (detailsPanel) detailsPanel.classList.add("hidden");
-        if (nameEl) nameEl.textContent = "Select a tenant";
+        if (emptyState) emptyState.classList.add("hidden");
+        if (detailsPanel) detailsPanel.classList.remove("hidden");
+        if (nameEl) nameEl.textContent = "-";
         if (statusEl) {
-            statusEl.textContent = "Status";
-            statusEl.className = "text-[10px] px-2 py-1 rounded-full border bg-slate-50 text-slate-600";
+            statusEl.textContent = "-";
+            statusEl.className = "text-[10px] px-2 py-1 rounded-full border bg-slate-100 text-slate-500";
         }
         if (mobileEl) mobileEl.textContent = "-";
         if (occupationEl) occupationEl.textContent = "-";
         if (addressEl) addressEl.textContent = "-";
-        if (familyCount) familyCount.textContent = "0 members";
-        if (familyList) familyList.innerHTML = '<li class="text-[10px] text-slate-500">No tenant selected.</li>';
+        if (familyCount) familyCount.textContent = "-";
+        if (familyList) familyList.innerHTML = '<li class="text-[10px] text-slate-400">-</li>';
         setFamilyViewButtonState(familyViewBtn, false);
-        if (historyList) historyList.innerHTML = '<div class="text-[10px] text-slate-500">No tenant selected.</div>';
+        if (historyList) historyList.innerHTML = '<div class="text-[10px] text-slate-400">-</div>';
         if (docsBtn) {
             docsBtn.disabled = true;
             docsBtn.classList.add("opacity-50", "cursor-not-allowed");
@@ -1297,6 +1335,9 @@ function updateSidebarSnapshot() {
 }
 
 function setSidebarSelection(tenant) {
+    if (tenant && !tenant.__rowKey) {
+        tenant.__rowKey = getTenantRowKey(tenant);
+    }
     selectedTenantForSidebar = tenant;
     updateSidebarSnapshot();
 }
@@ -1844,6 +1885,7 @@ function openTenantModal(tenant) {
 
 export function initTenantDirectory() {
     syncTenantModalPicklists();
+    updateSidebarSnapshot();
 
     document.addEventListener("landlords:updated", (e) => {
         if (e?.detail && Array.isArray(e.detail)) {

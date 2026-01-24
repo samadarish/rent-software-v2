@@ -198,6 +198,16 @@ main {
   margin-top: 0.5rem;
 }
 
+/* Tenant directory selected row highlight */
+#tenantTableBody .tenant-row-selected td {
+  background-color: #eef2ff;
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.15);
+}
+
+#tenantTableBody .tenant-row-selected td:first-child {
+  border-left: 3px solid #6366f1;
+}
+
 .fade-section {
   opacity: 0;
   transform: translateY(8px);
