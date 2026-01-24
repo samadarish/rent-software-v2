@@ -784,25 +784,40 @@ function syncTenantModalPicklists() {
  * @param {string} selectedUnitId
  * @param {string} tenancyId
  */
-function populateUnitDropdown(selectedUnitId, tenancyId, preserveSelection = true) {
+function populateUnitDropdown(selectedUnitId, tenancyId, preserveSelection = true, fallbackUnit = null) {
     const select = document.getElementById("tenantModalUnit");
     if (!select) return;
     const previous = preserveSelection ? select.value : "";
     select.innerHTML = '<option value="">Select unit</option>';
 
     const available = unitCache.filter(
-        (u) => !u.is_occupied || (tenancyId && u.current_tenancy_id === tenancyId)
+        (u) =>
+            !u.is_occupied ||
+            (tenancyId && u.current_tenancy_id === tenancyId) ||
+            (selectedUnitId && u.unit_id === selectedUnitId)
     );
+
+    if (
+        selectedUnitId &&
+        !available.some((u) => u.unit_id === selectedUnitId) &&
+        fallbackUnit &&
+        typeof fallbackUnit === "object"
+    ) {
+        available.push({ ...fallbackUnit, unit_id: selectedUnitId });
+    }
 
     available.forEach((u) => {
         const opt = document.createElement("option");
         opt.value = u.unit_id;
         opt.textContent = buildUnitLabel(u) || u.unit_id || u.unitId || "";
-        opt.dataset.occupied = u.is_occupied ? "1" : "0";
+        if (typeof u.is_occupied === "boolean") {
+            opt.dataset.occupied = u.is_occupied ? "1" : "0";
+        }
         opt.dataset.wing = u.wing || "";
         opt.dataset.floor = u.floor || "";
         opt.dataset.direction = u.direction || "";
         opt.dataset.meter = u.meter_number || "";
+        opt.dataset.unitNumber = u.unit_number || u.unitNumber || "";
         select.appendChild(opt);
     });
 
@@ -822,17 +837,30 @@ function populateUnitDropdown(selectedUnitId, tenancyId, preserveSelection = tru
 function applyUnitSelectionToModal(unitId) {
     if (!unitId) return;
     const unit = unitCache.find((u) => u.unit_id === unitId);
-    if (!unit) return;
+    const select = document.getElementById("tenantModalUnit");
+    const opt = select?.selectedOptions?.[0];
+    const fallback =
+        !unit && opt && opt.value === unitId
+            ? {
+                  wing: opt.dataset.wing,
+                  floor: opt.dataset.floor,
+                  direction: opt.dataset.direction,
+                  meter_number: opt.dataset.meter,
+                  unit_number: opt.dataset.unitNumber,
+              }
+            : null;
+    const source = unit || fallback;
+    if (!source) return;
     const wing = document.getElementById("tenantModalWing");
     const unitNumber = document.getElementById("tenantModalUnitNumber");
     const floor = document.getElementById("tenantModalFloor");
     const direction = document.getElementById("tenantModalDirection");
     const meter = document.getElementById("tenantModalMeter");
-    if (wing) wing.value = unit.wing || "";
-    if (unitNumber) unitNumber.value = unit.unit_number || "";
-    if (floor) floor.value = unit.floor || "";
-    if (direction) direction.value = unit.direction || "";
-    if (meter) meter.value = unit.meter_number || "";
+    if (wing) wing.value = source.wing || "";
+    if (unitNumber) unitNumber.value = source.unit_number || "";
+    if (floor) floor.value = source.floor || "";
+    if (direction) direction.value = source.direction || "";
+    if (meter) meter.value = source.meter_number || "";
 }
 
 /**
@@ -1353,15 +1381,49 @@ function setSidebarSelection(tenant) {
 function openTenancyModal(tenancy, tenant) {
     const base = tenant || selectedTenantForSidebar;
     if (!base) return;
+    const tenancyId = tenancy?.tenancyId || tenancy?.tenancy_id || "";
+    const rowMatch = tenancyId
+        ? tenantRowsCache.find((t) => {
+              const target = tenancyId.toString();
+              return (
+                  (t.tenancyId || t.tenancy_id || t.templateData?.tenancy_id || "").toString() === target
+              );
+          })
+        : null;
+    const resolved = rowMatch || base;
     const merged = {
         ...base,
-        tenancyId: tenancy?.tenancyId || base.tenancyId,
-        unitId: tenancy?.unitId || base.unitId,
-        unitNumber: tenancy?.unitLabel || base.unitNumber,
-        tenancyCommencementRaw: tenancy?.startDate || base.tenancyCommencement,
-        tenancyEndDate: tenancy?.endDate || base.tenancyEndDate,
-        rentAmount: tenancy?.currentRent || base.rentAmount,
-        activeTenant: (tenancy?.status || "").toLowerCase() === "active",
+        ...resolved,
+        tenancyId:
+            tenancyId ||
+            resolved.tenancyId ||
+            resolved.tenancy_id ||
+            resolved.templateData?.tenancy_id ||
+            base.tenancyId,
+        unitId: resolved.unitId || resolved.templateData?.unit_id || "",
+        unitNumber:
+            resolved.unitNumber ||
+            resolved.templateData?.unit_number ||
+            resolved.templateData?.unitNumber ||
+            resolved.unitLabel ||
+            base.unitNumber,
+        tenancyCommencementRaw:
+            tenancy?.startDate ||
+            resolved.tenancyCommencement ||
+            resolved.templateData?.tenancy_comm_raw ||
+            base.tenancyCommencement,
+        tenancyEndDate:
+            tenancy?.endDate || resolved.tenancyEndDate || resolved.templateData?.tenancy_end_raw || base.tenancyEndDate,
+        rentAmount:
+            tenancy?.currentRent ||
+            tenancy?.rentAmount ||
+            resolved.currentRent ||
+            resolved.rentAmount ||
+            base.rentAmount,
+        activeTenant:
+            typeof tenancy?.status === "string"
+                ? tenancy.status.toLowerCase() === "active"
+                : resolved.activeTenant ?? base.activeTenant,
     };
     // UX note: tenancy edit is invoked from the unit history action; tenant identity/family stay within tenant mode.
     populateTenantModal(merged, "tenancy");
@@ -1604,9 +1666,37 @@ function populateTenantModal(tenant, mode = "tenant") {
     const templateData = tenant.templateData || {};
 
     syncTenantModalPicklists();
-    const selectedUnitId = isNewTenancy ? "" : tenant.unitId || templateData.unit_id || "";
+    let selectedUnitId = isNewTenancy ? "" : tenant.unitId || templateData.unit_id || "";
+    if (!selectedUnitId && !isNewTenancy) {
+        const wingKey = normalizeKey(tenant.wing || templateData.wing || "");
+        const unitKey = normalizeKey(
+            tenant.unitNumber || templateData.unit_number || templateData.unitNumber || ""
+        );
+        if (wingKey || unitKey) {
+            const match = unitCache.find(
+                (u) =>
+                    normalizeKey(u.wing || "") === wingKey &&
+                    normalizeKey(u.unit_number || u.unitNumber || "") === unitKey
+            );
+            if (match?.unit_id) {
+                selectedUnitId = match.unit_id;
+            }
+        }
+    }
     tenantModalCurrentUnitId = isNewTenancy ? "" : selectedUnitId;
-    populateUnitDropdown(selectedUnitId, tenant.tenancyId || templateData.tenancy_id, !isNewTenancy);
+    const fallbackUnit = selectedUnitId
+        ? {
+              unit_id: selectedUnitId,
+              wing: tenant.wing || templateData.wing || "",
+              unit_number: tenant.unitNumber || templateData.unit_number || templateData.unitNumber || "",
+              floor: tenant.floor || templateData["floor_of_building "] || templateData.floor_of_building || "",
+              direction: tenant.direction || templateData.direction_build || "",
+              meter_number: tenant.meterNumber || templateData.meter_number || "",
+              is_occupied: typeof tenant.activeTenant === "boolean" ? tenant.activeTenant : undefined,
+              current_tenancy_id: tenant.tenancyId || templateData.tenancy_id || "",
+          }
+        : null;
+    populateUnitDropdown(selectedUnitId, tenant.tenancyId || templateData.tenancy_id, !isNewTenancy, fallbackUnit);
 
     const title = document.getElementById("tenantModalTitle");
     if (title) {
