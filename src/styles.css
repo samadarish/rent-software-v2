@@ -173,6 +173,31 @@ main {
   transform: translateY(10px) scale(0.98);
 }
 
+/* Compact tenant detail modal fields */
+#tenantDetailModal .tenant-detail-panel input,
+#tenantDetailModal .tenant-detail-panel select,
+#tenantDetailModal .tenant-detail-panel textarea {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.7rem;
+}
+
+#tenantDetailModal .tenant-detail-panel label {
+  font-size: 0.65rem;
+  margin-bottom: 0.2rem;
+}
+
+#tenantDetailModal .tenant-detail-panel .p-4 {
+  padding: 0.75rem;
+}
+
+#tenantDetailModal .tenant-detail-panel .gap-3 {
+  gap: 0.5rem;
+}
+
+#tenantDetailModal .tenant-detail-panel .space-y-3 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.5rem;
+}
+
 .fade-section {
   opacity: 0;
   transform: translateY(8px);
