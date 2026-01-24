@@ -6,7 +6,7 @@ import {
     vacateTenantTenancy,
 } from "../../api/sheets.js";
 import { getLocalList, LOCAL_KEYS } from "../../api/localStore.js";
-import { buildUnitLabel, formatCurrency, normalizeMonthKey, toOrdinal } from "../../utils/formatters.js";
+import { buildUnitLabel, formatCurrency, normalizeMonthKey } from "../../utils/formatters.js";
 import { escapeHtml } from "../../utils/htmlUtils.js";
 import { generateNoGrnValue } from "../../utils/grn.js";
 import { cloneSelectOptions, hideModal, showModal, showToast } from "../../utils/ui.js";
@@ -773,6 +773,8 @@ function syncTenantModalPicklists() {
     cloneSelectOptions("payable_date", "tenantModalPayable");
     cloneSelectOptions("notice_num_t", "tenantModalTenantNotice");
     cloneSelectOptions("notice_num_l", "tenantModalLandlordNotice");
+    cloneSelectOptions("rent_rev_number", "tenantModalRentRevisionNumber");
+    cloneSelectOptions("rent_rev_unit", "tenantModalRentRevisionUnit");
     cloneSelectOptions("landlord_selector", "tenantModalLandlord");
 }
 
@@ -1633,6 +1635,7 @@ function populateTenantModal(tenant, mode = "tenant") {
             tenant.payableDate || templateData.payable_date_raw || templateData.payable_date || ""
         ),
         tenantModalDeposit: tenant.securityDeposit || templateData.secu_depo || "",
+        tenantModalRentIncrease: tenant.rentIncrease || templateData.rent_inc || "",
         tenantModalTenantNotice: tenant.tenantNoticeMonths || templateData.notice_num_t || "",
         tenantModalLandlordNotice: tenant.landlordNoticeMonths || templateData.notice_num_l || "",
         tenantModalLateRent: tenant.lateRentPerDay || templateData.late_rent || "",
@@ -1665,6 +1668,7 @@ function populateTenantModal(tenant, mode = "tenant") {
             "tenantModalRent",
             "tenantModalDeposit",
             "tenantModalPayable",
+            "tenantModalRentIncrease",
             "tenantModalRentRevisionUnit",
             "tenantModalRentRevisionNumber",
             "tenantModalLateRent",
@@ -1767,11 +1771,9 @@ async function saveTenantModal() {
         direction: document.getElementById("tenantModalDirection")?.value || "",
         meterNumber: document.getElementById("tenantModalMeter")?.value || "",
         rentAmount: document.getElementById("tenantModalRent")?.value || "",
-        payableDate:
-            payableSelect && payableSelect.value
-                ? toOrdinal(parseInt(payableSelect.value, 10))
-                : payableSelect?.value || "",
+        payableDate: payableSelect ? normalizeDayValue(payableSelect.value) : "",
         securityDeposit: document.getElementById("tenantModalDeposit")?.value || "",
+        rentIncreaseAmount: document.getElementById("tenantModalRentIncrease")?.value || "",
         tenantNoticeMonths: document.getElementById("tenantModalTenantNotice")?.value || "",
         landlordNoticeMonths: document.getElementById("tenantModalLandlordNotice")?.value || "",
         lateRentPerDay: document.getElementById("tenantModalLateRent")?.value || "",
