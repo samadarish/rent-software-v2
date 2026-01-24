@@ -8,7 +8,7 @@ import {
     queueList,
 } from "./localDb.js";
 import { callAppScript } from "./appscriptClient.js";
-import { LOCAL_KEYS, setLocalData } from "./localStore.js";
+import { LOCAL_KEYS, getLocalData, setLocalData } from "./localStore.js";
 import { showToast, updateSyncIndicator } from "../utils/ui.js";
 import { STORAGE_KEYS } from "../constants.js";
 
@@ -48,6 +48,42 @@ function clearLocalStorageCaches() {
         LOCAL_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
     } catch (err) {
         console.warn("Local cache clear failed", err);
+    }
+}
+
+async function clearPendingDocDelete(docId) {
+    const raw = docId ? String(docId) : "";
+    if (!raw) return;
+    const pending = await getLocalData(LOCAL_KEYS.docsDeleted, []);
+    const list = Array.isArray(pending) ? pending : [];
+    const next = list.filter((id) => String(id) !== raw);
+    if (next.length !== list.length) {
+        await setLocalData(LOCAL_KEYS.docsDeleted, next);
+    }
+}
+
+function resolveTenantDocId(doc) {
+    if (!doc || typeof doc !== "object") return "";
+    const id = doc.doc_id || doc.docId || doc.id || "";
+    return id ? String(id) : "";
+}
+
+async function removeDeletedDocFromLocal(docId) {
+    const raw = docId ? String(docId) : "";
+    if (!raw) return;
+    const docs = await getLocalData(LOCAL_KEYS.docs, []);
+    if (Array.isArray(docs)) {
+        const next = docs.filter((doc) => resolveTenantDocId(doc) !== raw);
+        if (next.length !== docs.length) {
+            await setLocalData(LOCAL_KEYS.docs, next);
+            dispatchUpdateEvent("docs:updated", next);
+        }
+    }
+    const cached = await getLocalData(LOCAL_KEYS.docsCache, {});
+    if (cached && typeof cached === "object" && cached[raw]) {
+        const nextCache = { ...cached };
+        delete nextCache[raw];
+        await setLocalData(LOCAL_KEYS.docsCache, nextCache);
     }
 }
 
@@ -520,7 +556,7 @@ export async function flushSyncQueue() {
         while (jobs.length) {
             for (const job of jobs) {
                 try {
-                    await callAppScript({
+                    const result = await callAppScript({
                         url,
                         action: job.action,
                         method: job.method || "POST",
@@ -528,7 +564,16 @@ export async function flushSyncQueue() {
                         payload: job.payload || {},
                         cache: { useLocal: false, revalidate: false },
                     });
+                    if (job.action === "deleteTenantDocument" && result?.ok === false) {
+                        throw new Error("Delete document failed");
+                    }
                     await invalidateCachesForWriteAction(url, job.action);
+                    if (job.action === "deleteTenantDocument") {
+                        const resolvedId =
+                            result?.docId || job.payload?.docId || job.payload?.doc_id || "";
+                        await removeDeletedDocFromLocal(resolvedId);
+                        await clearPendingDocDelete(resolvedId);
+                    }
                     await queueDelete(job.id);
                 } catch (err) {
                     console.warn("Sync job failed", job.action, err);

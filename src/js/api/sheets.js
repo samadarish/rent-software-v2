@@ -2465,7 +2465,11 @@ export async function fetchTenantDocuments({ tenantId = "" } = {}) {
             cache: { useLocal: false, revalidate: false },
         });
         if (Array.isArray(data?.docs)) {
-            await setLocalData(LOCAL_KEYS.docs, data.docs);
+            const { docs: filtered } = await applyPendingDocDeletes_(data.docs, {
+                reconcile: !tenantId,
+            });
+            await setLocalData(LOCAL_KEYS.docs, filtered);
+            return { ...data, docs: filtered };
         }
         return data || { ok: false, docs: [] };
     } catch (err) {
@@ -2596,10 +2600,10 @@ export async function deleteTenantDocument(docId) {
         const localUpdate = async () => {
             const docs = await getLocalList(LOCAL_KEYS.docs);
             const next = docs.filter((doc) => {
-                const id = doc?.doc_id || doc?.docId || doc?.id || "";
-                return String(id) !== String(docId);
+                return resolveTenantDocId_(doc) !== String(docId);
             });
             await setLocalData(LOCAL_KEYS.docs, next);
+            await markDocDeletePending_(docId);
 
             const cached = (await getLocalData(LOCAL_KEYS.docsCache, {})) || {};
             if (cached && typeof cached === "object" && cached[docId]) {
@@ -2626,6 +2630,49 @@ export async function deleteTenantDocument(docId) {
         console.error("deleteTenantDocument error", err);
         return { ok: false };
     }
+}
+
+let docsDeletedLock_ = Promise.resolve();
+
+function resolveTenantDocId_(doc) {
+    if (!doc || typeof doc !== "object") return "";
+    const id = doc.doc_id || doc.docId || doc.id || "";
+    return id ? String(id) : "";
+}
+
+async function markDocDeletePending_(docId) {
+    const raw = docId ? String(docId) : "";
+    if (!raw) return;
+    docsDeletedLock_ = docsDeletedLock_.then(async () => {
+        const list = await getLocalList(LOCAL_KEYS.docsDeleted, []);
+        const normalized = new Set(list.map((id) => String(id)));
+        if (!normalized.has(raw)) {
+            normalized.add(raw);
+            await setLocalData(LOCAL_KEYS.docsDeleted, Array.from(normalized));
+        }
+    });
+    await docsDeletedLock_;
+}
+
+async function applyPendingDocDeletes_(docs, { reconcile } = {}) {
+    const pending = await getLocalList(LOCAL_KEYS.docsDeleted, []);
+    if (!pending.length) return { docs, pending };
+    const pendingSet = new Set(pending.map((id) => String(id)));
+    const filtered = (Array.isArray(docs) ? docs : []).filter(
+        (doc) => !pendingSet.has(resolveTenantDocId_(doc))
+    );
+
+    if (reconcile) {
+        const serverIds = new Set(
+            (Array.isArray(docs) ? docs : []).map((doc) => resolveTenantDocId_(doc)).filter(Boolean)
+        );
+        const stillPending = pending.filter((id) => serverIds.has(String(id)));
+        if (stillPending.length !== pending.length) {
+            await setLocalData(LOCAL_KEYS.docsDeleted, stillPending);
+            return { docs: filtered, pending: stillPending };
+        }
+    }
+    return { docs: filtered, pending };
 }
 
 export async function deleteAttachment(attachmentId) {

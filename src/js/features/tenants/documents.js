@@ -737,9 +737,14 @@ function renderDocsList() {
 }
 
 async function setDocsForTenant(tenant) {
-    const allDocs = await getLocalList(LOCAL_KEYS.docs, []);
+    const [allDocs, pendingDeletes] = await Promise.all([
+        getLocalList(LOCAL_KEYS.docs, []),
+        getLocalList(LOCAL_KEYS.docsDeleted, []),
+    ]);
+    const pendingSet = new Set(pendingDeletes.map((id) => normalizeId(id)));
     docsState.docs = allDocs
         .filter((doc) => docMatchesTenant(doc, tenant))
+        .filter((doc) => !pendingSet.has(resolveDocFields(doc).id))
         .sort((a, b) => {
             const aTime = new Date(resolveDocFields(a).uploadedAt || 0).getTime();
             const bTime = new Date(resolveDocFields(b).uploadedAt || 0).getTime();
