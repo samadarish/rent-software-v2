@@ -1,5 +1,5 @@
 import { ensureDownloadLocationConfigured } from "../../api/config.js";
-import { fetchTenantDocuments, uploadTenantDocument } from "../../api/sheets.js";
+import { deleteTenantDocument, fetchTenantDocuments, uploadTenantDocument } from "../../api/sheets.js";
 import { getLocalData, getLocalList, setLocalData, LOCAL_KEYS } from "../../api/localStore.js";
 import { escapeHtml } from "../../utils/htmlUtils.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
@@ -159,10 +159,16 @@ function normalizeDocType(value) {
     return "other";
 }
 
+function resolveDocTypeSelection(value) {
+    const raw = normalizeKey(value);
+    if (!raw || raw === "--" || raw === "default") return "default";
+    return normalizeDocType(raw);
+}
+
 function syncDocTypeFields() {
     const { typeSelect, otherWrap, otherInput } = getElements();
     if (!typeSelect || !otherWrap) return;
-    const isOther = normalizeDocType(typeSelect.value) === "other";
+    const isOther = resolveDocTypeSelection(typeSelect.value) === "other";
     otherWrap.classList.toggle("hidden", !isOther);
     if (!isOther && otherInput) otherInput.value = "";
 }
@@ -354,6 +360,14 @@ async function persistDocsCache() {
         obj[key] = value;
     });
     await setLocalData(LOCAL_KEYS.docsCache, obj);
+}
+
+async function removeCachedDocEntry(docId) {
+    if (!docId) return;
+    await ensureDocsCacheLoaded();
+    if (!docsState.cache.has(docId)) return;
+    docsState.cache.delete(docId);
+    await persistDocsCache();
 }
 
 async function fileExists(filePath) {
@@ -629,9 +643,13 @@ function renderDocsList() {
             '<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M5 21h14"></path></svg>',
         copy:
             '<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><rect x="2" y="2" width="13" height="13" rx="2"></rect></svg>',
+        delete:
+            '<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>',
     };
     const actionButtonBase =
-        "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100";
+        "inline-flex h-6 w-6 items-center justify-center rounded-md border text-[10px] font-semibold";
+    const actionButtonNeutral = `${actionButtonBase} border-slate-200 text-slate-700 hover:bg-slate-100`;
+    const actionButtonDanger = `${actionButtonBase} border-rose-200 text-rose-600 hover:bg-rose-50`;
 
     allDocs.forEach((doc) => {
         const fields = resolveDocFields(doc);
@@ -640,7 +658,7 @@ function renderDocsList() {
         const progressState = uploadState || downloadState;
         const downloaded = !uploadState && docsState.cache.has(fields.id);
         const row = document.createElement("div");
-        row.className = "flex w-28 flex-col items-center gap-1 px-1 py-2 text-center";
+        row.className = "flex w-24 flex-col items-center gap-1 px-1 py-1.5 text-center";
         row.dataset.docId = fields.id;
 
         const rawFileTitle = fields.fileName || "Document";
@@ -670,10 +688,13 @@ function renderDocsList() {
                     </span>`
                 : "<span class=\"h-4 w-4\"></span>";
         const iconHtml = getDocIconSvg(doc);
-        const actionGridClass = "grid grid-cols-2 gap-0 w-full place-items-center";
+        const actionGridClass = "grid grid-cols-3 gap-1 w-full place-items-center";
         const actionButtonClass = uploadState
-            ? `${actionButtonBase} opacity-50 pointer-events-none`
-            : actionButtonBase;
+            ? `${actionButtonNeutral} opacity-50 pointer-events-none`
+            : actionButtonNeutral;
+        const actionDeleteClass = uploadState
+            ? `${actionButtonDanger} opacity-50 pointer-events-none`
+            : actionButtonDanger;
         row.title = hoverLabelText;
 
         row.innerHTML = `
@@ -684,7 +705,7 @@ function renderDocsList() {
                 </div>
             </div>
             <div class="min-w-0">
-                ${detailsLabel ? `<div class="text-[10px] text-slate-500 truncate">Details: ${detailsLabel}</div>` : ""}
+                ${detailsLabel ? `<div class="text-[10px] text-slate-500 truncate">${detailsLabel}</div>` : ""}
             </div>
             <div class="${actionGridClass}">
                 <button type="button" data-action="download" class="${actionButtonClass}" title="Download" aria-label="Download">
@@ -692,6 +713,9 @@ function renderDocsList() {
                 </button>
                 <button type="button" data-action="copy" class="${actionButtonClass}" title="Copy" aria-label="Copy">
                     ${icons.copy}
+                </button>
+                <button type="button" data-action="delete" class="${actionDeleteClass}" title="Delete" aria-label="Delete">
+                    ${icons.delete}
                 </button>
             </div>
         `;
@@ -763,8 +787,11 @@ async function handleUploadClick() {
         showToast("Choose a document to upload.", "warning");
         return;
     }
-    const docType = normalizeDocType(typeSelect?.value || "other");
-    const docDetails = docType === "other" ? normalizeId(otherInput?.value || "") : "";
+    const selection = resolveDocTypeSelection(typeSelect?.value || "");
+    if (selection === "default") {
+        showToast("Select a document type.", "warning");
+        return;
+    }
     const files = Array.from(fileInput.files);
     docsState.uploadInProgress = true;
 
@@ -778,11 +805,9 @@ async function handleUploadClick() {
                 showToast(`File exceeds 10MB: ${file.name}`, "warning");
                 continue;
             }
-            if (!window.PizZip) {
-                showToast("Compression is unavailable in this build.", "error");
-                continue;
-            }
 
+            const docType = selection;
+            const docDetails = docType === "other" ? normalizeId(otherInput?.value || "") : "";
             const uploadId = `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
             const placeholder = createUploadPlaceholder({ file, tenant, docType, docDetails, uploadId });
             docsState.uploadPlaceholders.set(uploadId, placeholder);
@@ -790,11 +815,7 @@ async function handleUploadClick() {
             renderDocsList();
 
             try {
-                const buffer = await file.arrayBuffer();
-                const zip = new window.PizZip();
-                zip.file(file.name, buffer);
-                const zipped = zip.generate({ type: "uint8array", compression: "DEFLATE" });
-                const base64 = bytesToBase64(zipped);
+                const base64 = await readFileAsBase64(file);
 
                 const payload = {
                     tenantId: getTenantId(tenant),
@@ -804,7 +825,7 @@ async function handleUploadClick() {
                     fileName: file.name,
                     mimeType: file.type || "application/octet-stream",
                     size: file.size,
-                    compression: "zip",
+                    compression: "none",
                     dataBase64: base64,
                 };
 
@@ -992,6 +1013,30 @@ async function handleDocCopy(doc) {
     }
 }
 
+async function handleDocDelete(doc) {
+    if (!doc) return;
+    const fields = resolveDocFields(doc);
+    if (!fields.id) {
+        showToast("Document ID missing.", "error");
+        return;
+    }
+    try {
+        docsState.downloads.delete(fields.id);
+        docsState.uploads.delete(fields.id);
+        docsState.uploadPlaceholders.delete(fields.id);
+        const result = await deleteTenantDocument(fields.id);
+        await removeCachedDocEntry(fields.id);
+        if (result?.ok === false) {
+            showToast("Failed to delete document.", "error");
+            return;
+        }
+        showToast("Document deleted", "success");
+    } catch (err) {
+        console.error("Delete document failed", err);
+        showToast("Failed to delete document.", "error");
+    }
+}
+
 function bindListActions() {
     const { list } = getElements();
     if (!list || list.dataset.bound === "true") return;
@@ -1012,6 +1057,8 @@ function bindListActions() {
             handleDocDownload(doc);
         } else if (action === "copy") {
             handleDocCopy(doc);
+        } else if (action === "delete") {
+            handleDocDelete(doc);
         }
     });
 
@@ -1070,13 +1117,19 @@ function showTenantDocDownloadModal(fileName, filePath) {
     showModal(modal);
 }
 
-function bytesToBase64(bytes) {
-    const chunkSize = 0x8000;
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
-    }
-    return btoa(binary);
+function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = typeof reader.result === "string" ? reader.result : "";
+            const comma = result.indexOf(",");
+            resolve(comma >= 0 ? result.slice(comma + 1) : "");
+        };
+        reader.onerror = () => {
+            reject(reader.error || new Error("Failed to read file"));
+        };
+        reader.readAsDataURL(file);
+    });
 }
 
 function bindModalEvents() {

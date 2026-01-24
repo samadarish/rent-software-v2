@@ -30,6 +30,7 @@ const WRITE_INVALIDATIONS = {
     saveClauses: ["clauses"],
     savePayment: ["payments", "billsminimal", "generatedbills"],
     deleteAttachment: ["payments"],
+    deleteTenantDocument: ["docs"],
     saveBillingRecord: ["generatedbills", "billsminimal"],
     saveRentRevision: ["tenants"],
     saveNotes: ["notes"],

@@ -1850,6 +1850,31 @@ function deleteAttachmentById_(attachmentId) {
   return true;
 }
 
+function deleteTenantDocumentById_(docId) {
+  if (!docId) return false;
+  const rows = readTable_(DOCS_SHEET, DOC_HEADERS);
+  const remaining = rows.filter((r) => r.doc_id !== docId);
+  const target = rows.find((r) => r.doc_id === docId);
+
+  if (target && target.file_drive_id) {
+    try {
+      const file = DriveApp.getFileById(target.file_drive_id);
+      file.setTrashed(true);
+    } catch (err) {
+      // Ignore drive deletion errors
+    }
+  }
+
+  const sheet = getSheetWithHeaders_(DOCS_SHEET, DOC_HEADERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, DOC_HEADERS.length).clearContent();
+  if (remaining.length) {
+    const rowsOut = remaining.map((r) => DOC_HEADERS.map((key) => r[key] ?? ''));
+    sheet.getRange(2, 1, rowsOut.length, DOC_HEADERS.length).setValues(rowsOut);
+  }
+  return true;
+}
+
 function saveTenantDocument_(payload) {
   if (!payload) return { ok: false, error: 'Missing payload' };
   const base64 = (payload.dataBase64 || payload.data_base64 || '').toString().trim();
@@ -2426,6 +2451,11 @@ function doPost(e) {
       } catch (err) {
         return jsonResponse({ ok: false, error: String(err) });
       }
+    }
+    if (action === 'deleteTenantDocument') {
+      const docId = body.payload && (body.payload.docId || body.payload.doc_id);
+      const ok = deleteTenantDocumentById_(docId);
+      return jsonResponse({ ok, docId });
     }
     if (action === 'deleteAttachment') {
       const attachmentId = body.payload && body.payload.attachmentId;

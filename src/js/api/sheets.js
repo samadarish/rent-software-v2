@@ -2587,6 +2587,47 @@ export async function uploadTenantDocument(payload, options = {}) {
     }
 }
 
+export async function deleteTenantDocument(docId) {
+    const url = ensureAppScriptUrl({
+        promptForConfig: false,
+    });
+    if (!docId) return { ok: false };
+    try {
+        const localUpdate = async () => {
+            const docs = await getLocalList(LOCAL_KEYS.docs);
+            const next = docs.filter((doc) => {
+                const id = doc?.doc_id || doc?.docId || doc?.id || "";
+                return String(id) !== String(docId);
+            });
+            await setLocalData(LOCAL_KEYS.docs, next);
+
+            const cached = (await getLocalData(LOCAL_KEYS.docsCache, {})) || {};
+            if (cached && typeof cached === "object" && cached[docId]) {
+                const nextCache = { ...cached };
+                delete nextCache[docId];
+                await setLocalData(LOCAL_KEYS.docsCache, nextCache);
+            }
+
+            if (typeof document !== "undefined") {
+                document.dispatchEvent(new CustomEvent("docs:updated", { detail: next }));
+            }
+            return { ok: true, docId };
+        };
+        const data = await runWriteAction({
+            url,
+            action: "deleteTenantDocument",
+            payload: { docId },
+            queuedMessage: "Document delete queued. Sync pending.",
+            fallback: { ok: true, queued: true, docId },
+            localUpdate,
+        });
+        return data || { ok: false };
+    } catch (err) {
+        console.error("deleteTenantDocument error", err);
+        return { ok: false };
+    }
+}
+
 export async function deleteAttachment(attachmentId) {
     const url = ensureAppScriptUrl({
         promptForConfig: false,

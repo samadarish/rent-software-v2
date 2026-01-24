@@ -247,7 +247,10 @@ fn cache_set(
 }
 
 #[tauri::command]
-fn ensure_temp_dir(app: tauri::AppHandle, tenant_name: String) -> Result<serde_json::Value, String> {
+fn ensure_temp_dir(
+    app: tauri::AppHandle,
+    tenant_name: String,
+) -> Result<serde_json::Value, String> {
     let base = app.path().temp_dir().map_err(|e| e.to_string())?;
     let tenant = sanitize_segment(&tenant_name, "Tenant");
     let dir = base.join("Tenant_Docs").join(tenant);
@@ -505,9 +508,7 @@ fn download_file_to_path(
         return Err("Missing file path".to_string());
     }
 
-    let response = ureq::get(&url)
-        .call()
-        .map_err(|e| e.to_string())?;
+    let response = ureq::get(&url).call().map_err(|e| e.to_string())?;
     let total = response
         .header("Content-Length")
         .and_then(|val| val.parse::<u64>().ok())
@@ -566,7 +567,7 @@ fn copy_file_to_clipboard(file_path: String) -> Result<serde_json::Value, String
     {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
-        use windows::Win32::Foundation::{BOOL, GlobalFree, HANDLE};
+        use windows::Win32::Foundation::{GlobalFree, BOOL, HANDLE};
         use windows::Win32::System::DataExchange::{
             CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
         };
