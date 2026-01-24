@@ -2026,23 +2026,13 @@
             <div class="text-[10px] text-slate-500">Max size: 10MB. Videos are not supported.</div>
           </div>
 
-          <div id="tenantDocsProgressWrap" class="hidden">
-            <div class="flex items-center justify-between text-[10px] text-slate-500">
-              <span id="tenantDocsProgressLabel">Preparing upload...</span>
-              <span id="tenantDocsProgressPercent">0%</span>
-            </div>
-            <div class="mt-1 h-2 rounded-full bg-slate-100 overflow-hidden">
-              <div id="tenantDocsProgressBar" class="h-full bg-emerald-500 transition-all" style="width: 0%;"></div>
-            </div>
-          </div>
-
-          <div class="border border-slate-200 rounded-lg overflow-hidden">
-            <div class="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+          <div class="rounded-lg bg-slate-50/70">
+            <div class="flex items-center justify-between px-3 pt-3 pb-1">
               <p class="text-[11px] font-semibold text-slate-700">Uploaded documents</p>
               <span id="tenantDocsCount" class="text-[10px] text-slate-500">0 files</span>
             </div>
-            <div id="tenantDocsEmpty" class="px-3 py-4 text-[11px] text-slate-500">No documents uploaded yet.</div>
-            <div id="tenantDocsList" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+            <div id="tenantDocsEmpty" class="px-4 py-5 text-[11px] text-slate-500">No documents uploaded yet.</div>
+            <div id="tenantDocsList" class="flex flex-wrap gap-4 px-4 py-4"></div>
           </div>
         </div>
       </div>

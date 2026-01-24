@@ -36,6 +36,8 @@ const docsState = {
     uploadInProgress: false,
     downloadInProgress: false,
     downloads: new Map(),
+    uploads: new Map(),
+    uploadPlaceholders: new Map(),
     renderPending: false,
 };
 
@@ -54,6 +56,16 @@ function setDocDownloadState(docId, state) {
         docsState.downloads.delete(docId);
     } else {
         docsState.downloads.set(docId, state);
+    }
+    scheduleDocsRender();
+}
+
+function setDocUploadState(docId, state) {
+    if (!docId) return;
+    if (!state) {
+        docsState.uploads.delete(docId);
+    } else {
+        docsState.uploads.set(docId, state);
     }
     scheduleDocsRender();
 }
@@ -91,10 +103,6 @@ function getElements() {
         otherWrap: document.getElementById("tenantDocsOtherWrap"),
         otherInput: document.getElementById("tenantDocsOtherInput"),
         uploadBtn: document.getElementById("tenantDocsUploadBtn"),
-        progressWrap: document.getElementById("tenantDocsProgressWrap"),
-        progressLabel: document.getElementById("tenantDocsProgressLabel"),
-        progressPercent: document.getElementById("tenantDocsProgressPercent"),
-        progressBar: document.getElementById("tenantDocsProgressBar"),
         list: document.getElementById("tenantDocsList"),
         empty: document.getElementById("tenantDocsEmpty"),
         count: document.getElementById("tenantDocsCount"),
@@ -301,20 +309,6 @@ function formatDateTime(value) {
     return date.toLocaleString();
 }
 
-function setProgressState({ show, label, percent }) {
-    const { progressWrap, progressLabel, progressPercent, progressBar } = getElements();
-    if (progressWrap) progressWrap.classList.toggle("hidden", !show);
-    if (progressLabel) progressLabel.textContent = label || "";
-    if (progressPercent) {
-        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
-        progressPercent.textContent = `${Math.round(safePercent)}%`;
-    }
-    if (progressBar) {
-        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
-        progressBar.style.width = `${safePercent}%`;
-    }
-}
-
 function resolveDocFields(doc) {
     return {
         id: normalizeId(doc?.doc_id || doc?.docId || doc?.id),
@@ -337,6 +331,11 @@ function docMatchesTenant(doc, tenant) {
     if (tenantId && docFields.tenantId) return normalizeKey(tenantId) === normalizeKey(docFields.tenantId);
     const tenantName = normalizeKey(getTenantName(tenant));
     return tenantName && tenantName === normalizeKey(docFields.tenantName);
+}
+
+function getRenderableDocs() {
+    if (!docsState.uploadPlaceholders.size) return docsState.docs.slice();
+    return [...docsState.uploadPlaceholders.values(), ...docsState.docs];
 }
 
 async function ensureDocsCacheLoaded() {
@@ -615,14 +614,15 @@ function renderDocsList() {
     if (!list || !empty) return;
     list.innerHTML = "";
 
-    if (!docsState.docs.length) {
+    const allDocs = getRenderableDocs();
+    if (!allDocs.length) {
         empty.classList.remove("hidden");
         updateDocCount(0);
         return;
     }
 
     empty.classList.add("hidden");
-    updateDocCount(docsState.docs.length);
+    updateDocCount(allDocs.length);
 
     const icons = {
         download:
@@ -631,21 +631,29 @@ function renderDocsList() {
             '<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><rect x="2" y="2" width="13" height="13" rx="2"></rect></svg>',
     };
     const actionButtonBase =
-        "inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-[10px] font-semibold text-slate-700 hover:bg-slate-100";
+        "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100";
 
-    docsState.docs.forEach((doc) => {
+    allDocs.forEach((doc) => {
         const fields = resolveDocFields(doc);
-        const downloaded = docsState.cache.has(fields.id);
+        const uploadState = docsState.uploads.get(fields.id);
+        const downloadState = docsState.downloads.get(fields.id);
+        const progressState = uploadState || downloadState;
+        const downloaded = !uploadState && docsState.cache.has(fields.id);
         const row = document.createElement("div");
-        row.className = "rounded-xl border border-slate-200 bg-white p-3 flex flex-col gap-2 shadow-sm";
+        row.className = "flex w-28 flex-col items-center gap-1 px-1 py-2 text-center";
         row.dataset.docId = fields.id;
 
-        const fileTitle = escapeHtml(fields.fileName || "Document");
-        const sizeLabel = escapeHtml(formatBytes(fields.fileSize));
+        const rawFileTitle = fields.fileName || "Document";
+        const rawSizeLabel = formatBytes(fields.fileSize);
+        const fileTitle = escapeHtml(rawFileTitle);
+        const sizeLabel = escapeHtml(rawSizeLabel);
+        const hoverLabelText =
+            rawSizeLabel && rawSizeLabel !== "-" ? `${rawFileTitle} (${rawSizeLabel})` : rawFileTitle;
+        const hoverLabelAttr =
+            sizeLabel && sizeLabel !== "-" ? `${fileTitle} (${sizeLabel})` : fileTitle;
         const detailsLabel = fields.docDetails ? escapeHtml(fields.docDetails) : "";
-        const downloadState = docsState.downloads.get(fields.id);
-        const progressPercent = Math.round(Math.max(0, Math.min(100, Number(downloadState?.percent) || 0)));
-        const statusHtml = downloadState
+        const progressPercent = Math.round(Math.max(0, Math.min(100, Number(progressState?.percent) || 0)));
+        const statusHtml = progressState
             ? `<div class="w-16">
                     <div class="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
                         <div class="h-full bg-emerald-500 transition-all" style="width: ${Math.max(
@@ -655,34 +663,34 @@ function renderDocsList() {
                     </div>
                 </div>`
             : downloaded
-                ? `<span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700" title="Downloaded">
-                        <svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                ? `<span class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-200 bg-emerald-100 text-emerald-700" title="Downloaded">
+                        <svg class="h-2.5 w-2.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M5 10l3 3 7-7"></path>
                         </svg>
                     </span>`
-                : "<span class=\"h-5 w-5\"></span>";
+                : "<span class=\"h-4 w-4\"></span>";
         const iconHtml = getDocIconSvg(doc);
-        const actionGridClass = "grid grid-cols-2 gap-2 w-full place-items-center";
-        row.title = fields.fileName || "Document";
+        const actionGridClass = "grid grid-cols-2 gap-0 w-full place-items-center";
+        const actionButtonClass = uploadState
+            ? `${actionButtonBase} opacity-50 pointer-events-none`
+            : actionButtonBase;
+        row.title = hoverLabelText;
 
         row.innerHTML = `
-            <div class="flex items-start justify-between">
-                <div class="flex flex-col items-start gap-2">
-                    <div class="h-16 w-16 shrink-0 cursor-pointer rounded-xl transition-transform hover:scale-105" data-doc-icon="true" role="button" aria-label="Open document" title="${fileTitle}">
-                        ${iconHtml}
-                    </div>
-                    ${statusHtml}
+            <div class="flex flex-col items-center gap-1">
+                ${statusHtml}
+                <div class="h-14 w-14 shrink-0 cursor-pointer rounded-xl transition-transform hover:scale-105" data-doc-icon="true" role="button" aria-label="Open document" title="${hoverLabelAttr}">
+                    ${iconHtml}
                 </div>
             </div>
             <div class="min-w-0">
                 ${detailsLabel ? `<div class="text-[10px] text-slate-500 truncate">Details: ${detailsLabel}</div>` : ""}
-                <div class="text-[10px] text-slate-500">${sizeLabel}</div>
             </div>
             <div class="${actionGridClass}">
-                <button type="button" data-action="download" class="${actionButtonBase}" title="Download" aria-label="Download">
+                <button type="button" data-action="download" class="${actionButtonClass}" title="Download" aria-label="Download">
                     ${icons.download}
                 </button>
-                <button type="button" data-action="copy" class="${actionButtonBase}" title="Copy" aria-label="Copy">
+                <button type="button" data-action="copy" class="${actionButtonClass}" title="Copy" aria-label="Copy">
                     ${icons.copy}
                 </button>
             </div>
@@ -730,6 +738,19 @@ function setTenantLabel(tenant) {
     if (tenantName) tenantName.textContent = getTenantName(tenant);
 }
 
+function createUploadPlaceholder({ file, tenant, docType, docDetails, uploadId }) {
+    return {
+        doc_id: uploadId,
+        tenant_id: getTenantId(tenant),
+        tenant_name: getTenantName(tenant),
+        doc_type: docType,
+        doc_details: docDetails,
+        file_name: file?.name || "document",
+        file_size: Number(file?.size) || 0,
+        uploaded_at: new Date().toISOString(),
+    };
+}
+
 async function handleUploadClick() {
     if (docsState.uploadInProgress) return;
     const tenant = docsState.tenant;
@@ -762,62 +783,72 @@ async function handleUploadClick() {
                 continue;
             }
 
-            setProgressState({ show: true, label: `Compressing ${file.name}...`, percent: 5 });
-            const buffer = await file.arrayBuffer();
-            const zip = new window.PizZip();
-            zip.file(file.name, buffer);
-            const zipped = zip.generate({ type: "uint8array", compression: "DEFLATE" });
-            const base64 = bytesToBase64(zipped);
+            const uploadId = `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            const placeholder = createUploadPlaceholder({ file, tenant, docType, docDetails, uploadId });
+            docsState.uploadPlaceholders.set(uploadId, placeholder);
+            setDocUploadState(uploadId, { percent: 5 });
+            renderDocsList();
 
-            const payload = {
-                tenantId: getTenantId(tenant),
-                tenantName: getTenantName(tenant),
-                docType,
-                docDetails,
-                fileName: file.name,
-                mimeType: file.type || "application/octet-stream",
-                size: file.size,
-                compression: "zip",
-                dataBase64: base64,
-            };
+            try {
+                const buffer = await file.arrayBuffer();
+                const zip = new window.PizZip();
+                zip.file(file.name, buffer);
+                const zipped = zip.generate({ type: "uint8array", compression: "DEFLATE" });
+                const base64 = bytesToBase64(zipped);
 
-            setProgressState({ show: true, label: `Uploading ${file.name}...`, percent: 10 });
-            const result = await uploadTenantDocument(payload, {
-                onProgress: ({ loaded, total, percent }) => {
-                    const safePercent = percent ?? (total ? (loaded / total) * 100 : 0);
-                    setProgressState({
-                        show: true,
-                        label: `Uploading ${file.name}...`,
-                        percent: Math.min(100, Math.max(10, safePercent)),
-                    });
-                },
-            });
+                const payload = {
+                    tenantId: getTenantId(tenant),
+                    tenantName: getTenantName(tenant),
+                    docType,
+                    docDetails,
+                    fileName: file.name,
+                    mimeType: file.type || "application/octet-stream",
+                    size: file.size,
+                    compression: "zip",
+                    dataBase64: base64,
+                };
 
-            if (!result?.ok || !result?.doc) {
-                showToast(`Upload failed for ${file.name}`, "error");
-                continue;
+                setDocUploadState(uploadId, { percent: 12 });
+                const result = await uploadTenantDocument(payload, {
+                    onProgress: ({ loaded, total, percent }) => {
+                        const safePercent = percent ?? (total ? (loaded / total) * 100 : 0);
+                        setDocUploadState(uploadId, {
+                            percent: Math.min(100, Math.max(12, safePercent)),
+                        });
+                    },
+                });
+
+                if (!result?.ok || !result?.doc) {
+                    docsState.uploadPlaceholders.delete(uploadId);
+                    setDocUploadState(uploadId, null);
+                    showToast(`Upload failed for ${file.name}`, "error");
+                    continue;
+                }
+                if (docType && !result.doc.doc_type && !result.doc.docType) {
+                    result.doc.doc_type = docType;
+                }
+                if (docDetails && !result.doc.doc_details && !result.doc.docDetails) {
+                    result.doc.doc_details = docDetails;
+                }
+
+                const current = await getLocalList(LOCAL_KEYS.docs, []);
+                const next = current.filter((doc) => resolveDocFields(doc).id !== resolveDocFields(result.doc).id);
+                next.unshift(result.doc);
+                await setLocalData(LOCAL_KEYS.docs, next);
+                docsState.uploadPlaceholders.delete(uploadId);
+                setDocUploadState(uploadId, null);
+                await setDocsForTenant(tenant);
+                document.dispatchEvent(new CustomEvent("docs:updated", { detail: next }));
+                showToast(`${file.name} uploaded`, "success");
+            } catch (err) {
+                docsState.uploadPlaceholders.delete(uploadId);
+                setDocUploadState(uploadId, null);
+                console.error("Document upload failed", err);
+                showToast(`Document upload failed for ${file.name}.`, "error");
             }
-            if (docType && !result.doc.doc_type && !result.doc.docType) {
-                result.doc.doc_type = docType;
-            }
-            if (docDetails && !result.doc.doc_details && !result.doc.docDetails) {
-                result.doc.doc_details = docDetails;
-            }
-
-            const current = await getLocalList(LOCAL_KEYS.docs, []);
-            const next = current.filter((doc) => resolveDocFields(doc).id !== resolveDocFields(result.doc).id);
-            next.unshift(result.doc);
-            await setLocalData(LOCAL_KEYS.docs, next);
-            await setDocsForTenant(tenant);
-            document.dispatchEvent(new CustomEvent("docs:updated", { detail: next }));
-            showToast(`${file.name} uploaded`, "success");
         }
-    } catch (err) {
-        console.error("Document upload failed", err);
-        showToast("Document upload failed.", "error");
     } finally {
         docsState.uploadInProgress = false;
-        setProgressState({ show: false, label: "", percent: 0 });
         if (fileInput) fileInput.value = "";
     }
 }
@@ -948,14 +979,12 @@ async function handleDocCopy(doc) {
             bytes = await window.__TAURI__.fs.readFile(refreshedPath);
             filePath = refreshedPath;
         }
-        const blob = new Blob([bytes], { type: fields.fileMime || "application/octet-stream" });
-
-        if (navigator.clipboard && window.ClipboardItem) {
-            const item = new ClipboardItem({ [blob.type]: blob });
-            await navigator.clipboard.write([item]);
-            showToast("Document copied to clipboard", "success");
+        const tauriInvoke = window.__TAURI__?.core?.invoke;
+        if (typeof tauriInvoke === "function") {
+            await tauriInvoke("copy_file_to_clipboard", { filePath });
+            showToast("File copied. Paste it in any folder.", "success");
         } else {
-            showToast("Clipboard file copy is unavailable.", "warning");
+            showToast("File copy is unavailable. Use Download.", "warning");
         }
     } catch (err) {
         console.error("Copy failed", err);

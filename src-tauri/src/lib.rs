@@ -553,6 +553,75 @@ fn download_file_to_path(
 }
 
 #[tauri::command]
+fn copy_file_to_clipboard(file_path: String) -> Result<serde_json::Value, String> {
+    if file_path.trim().is_empty() {
+        return Err("Missing file path".to_string());
+    }
+    let path = PathBuf::from(&file_path);
+    if !path.exists() {
+        return Err("File not found".to_string());
+    }
+
+    #[cfg(windows)]
+    {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::Foundation::{BOOL, GlobalFree, HANDLE};
+        use windows::Win32::System::DataExchange::{
+            CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+        };
+        use windows::Win32::System::Memory::{
+            GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE, GMEM_ZEROINIT,
+        };
+        use windows::Win32::System::Ole::CF_HDROP;
+        use windows::Win32::UI::Shell::DROPFILES;
+
+        let mut wide: Vec<u16> = OsStr::new(&file_path).encode_wide().collect();
+        wide.push(0);
+        wide.push(0);
+        let total_bytes = std::mem::size_of::<DROPFILES>() + wide.len() * 2;
+
+        unsafe {
+            let hmem = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, total_bytes)
+                .map_err(|_| "Failed to allocate clipboard data".to_string())?;
+            let locked = GlobalLock(hmem);
+            if locked.is_null() {
+                let _ = GlobalFree(hmem);
+                return Err("Failed to lock clipboard data".to_string());
+            }
+            let dropfiles = locked as *mut DROPFILES;
+            (*dropfiles).pFiles = std::mem::size_of::<DROPFILES>() as u32;
+            (*dropfiles).fWide = BOOL(1);
+
+            let list_ptr = (locked as *mut u8).add(std::mem::size_of::<DROPFILES>()) as *mut u16;
+            std::ptr::copy_nonoverlapping(wide.as_ptr(), list_ptr, wide.len());
+
+            let _ = GlobalUnlock(hmem);
+
+            if OpenClipboard(None).is_err() {
+                let _ = GlobalFree(hmem);
+                return Err("Failed to open clipboard".to_string());
+            }
+            EmptyClipboard();
+            if SetClipboardData(CF_HDROP.0 as u32, HANDLE(hmem.0 as isize)).is_err() {
+                CloseClipboard();
+                let _ = GlobalFree(hmem);
+                return Err("Failed to set clipboard data".to_string());
+            }
+            CloseClipboard();
+        }
+
+        return Ok(serde_json::json!({ "ok": true }));
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Err("File copy is only supported on Windows.".to_string())
+    }
+}
+
+#[tauri::command]
 async fn open_whatsapp(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::{WebviewUrl, WebviewWindowBuilder};
 
@@ -905,6 +974,7 @@ pub fn run() {
             upload_tenant_document,
             cancel_upload,
             download_file_to_path,
+            copy_file_to_clipboard,
             ensure_temp_dir,
             open_whatsapp,
             send_whatsapp_message
