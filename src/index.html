@@ -937,9 +937,9 @@
         </section>
 
         <!-- RIGHT COLUMN: FORM SIDEBAR (clauses + actions) -->
-        <section id="formRightSection" class="space-y-3 min-w-0 fade-section is-visible">
+        <section id="formRightSection" class="flex flex-col gap-3 min-w-0 fade-section is-visible">
           <!-- CLAUSES CARD -->
-          <div id="clausesCard">
+          <div id="clausesCard" class="contents">
 
             <!-- AGREEMENT MODE CONTENT -->
             <div id="clausesAgreementContent" class="hidden fade-section bg-white rounded-xl shadow-sm border border-slate-200 p-3 md:p-4">
@@ -1043,7 +1043,7 @@
             </div>
 
             <!-- DIRECTORY MODE SIDEBAR (Tenant details + history) -->
-            <div id="directorySidebarContent" class="hidden space-y-3 fade-section">
+            <div id="directorySidebarContent" class="hidden flex flex-col gap-3 fade-section">
               <div id="sidebarSnapshotEmpty" class="text-[11px] text-slate-500 border rounded-lg p-4 bg-slate-50">Pick any
                 tenant row to see details.</div>
 
@@ -1056,9 +1056,6 @@
                     <span id="sidebarTenantDocsCount"
                       class="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white text-[9px] font-semibold text-blue-700">0</span>
                   </button>
-                  <button id="sidebarCreateAgreementBtn"
-                    class="px-3 py-1.5 rounded bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500"
-                    type="button">Create agreement</button>
                 </div>
                 <div class="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
                     <div class="flex items-center justify-between">
@@ -1195,22 +1192,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Create agreement placeholder -->
-    <div id="createAgreementModal"
-      class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 fade-overlay">
-      <div class="bg-white rounded-xl shadow-lg w-full max-w-sm p-4 md:p-5 space-y-3 modal-panel">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <p class="text-sm font-semibold text-slate-800">Create agreement</p>
-            <p class="text-[11px] text-slate-500">Coming soon.</p>
-          </div>
-          <button id="createAgreementClose"
-            class="px-2.5 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">Close</button>
-        </div>
-      </div>
-    </div>
-
 
     <!-- TENANT DETAIL MODAL -->
     <div id="tenantDetailModal"

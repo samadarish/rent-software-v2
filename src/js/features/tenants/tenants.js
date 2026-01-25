@@ -1220,7 +1220,6 @@ function updateSidebarSnapshot() {
     const familyViewBtn = document.getElementById("sidebarFamilyViewBtn");
     const historyList = document.getElementById("sidebarUnitHistory");
     const docsBtn = document.getElementById("sidebarTenantDocsBtn");
-    const createAgreementBtn = document.getElementById("sidebarCreateAgreementBtn");
 
     if (!selectedTenantForSidebar) {
         familySnapshotRequestId += 1;
@@ -1242,10 +1241,6 @@ function updateSidebarSnapshot() {
             docsBtn.disabled = true;
             docsBtn.classList.add("opacity-50", "cursor-not-allowed");
         }
-        if (createAgreementBtn) {
-            createAgreementBtn.disabled = true;
-            createAgreementBtn.classList.add("opacity-50", "cursor-not-allowed");
-        }
         void updateSidebarDocsCount(null);
         return;
     }
@@ -1266,10 +1261,6 @@ function updateSidebarSnapshot() {
     if (docsBtn) {
         docsBtn.disabled = false;
         docsBtn.classList.remove("opacity-50", "cursor-not-allowed");
-    }
-    if (createAgreementBtn) {
-        createAgreementBtn.disabled = false;
-        createAgreementBtn.classList.remove("opacity-50", "cursor-not-allowed");
     }
     void updateSidebarDocsCount(t);
 
@@ -2089,30 +2080,6 @@ export function initTenantDirectory() {
         docsBtn.addEventListener("click", () => {
             if (!selectedTenantForSidebar) return;
             openTenantDocumentsModal(selectedTenantForSidebar);
-        });
-    }
-
-    const createAgreementBtn = document.getElementById("sidebarCreateAgreementBtn");
-    if (createAgreementBtn) {
-        createAgreementBtn.addEventListener("click", () => {
-            if (!selectedTenantForSidebar) return;
-            const modal = document.getElementById("createAgreementModal");
-            if (modal) showModal(modal);
-        });
-    }
-
-    const createAgreementModal = document.getElementById("createAgreementModal");
-    if (createAgreementModal) {
-        createAgreementModal.addEventListener("click", (event) => {
-            if (event.target === createAgreementModal) hideModal(createAgreementModal);
-        });
-    }
-
-    const createAgreementClose = document.getElementById("createAgreementClose");
-    if (createAgreementClose) {
-        createAgreementClose.addEventListener("click", () => {
-            const modal = document.getElementById("createAgreementModal");
-            if (modal) hideModal(modal);
         });
     }
 
