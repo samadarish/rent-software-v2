@@ -277,6 +277,14 @@ label {
 /* ========== LAYOUT TWEAKS ========== */
 
 @media (min-width: 1024px) {
+  #appShell {
+    height: 100vh;
+  }
+
+  #appShell > main {
+    min-height: 0;
+  }
+
   /* Keep the three-column frame steady and ease width changes per mode */
   #appLayout {
     grid-template-columns: 220px minmax(0, 1.35fr) minmax(280px, 0.65fr);
@@ -302,6 +310,8 @@ label {
 
   #appLayout.layout-no-sidebar {
     grid-template-columns: 220px minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
   }
 
   /* Navigation column buttons a bit more compact on desktop */
@@ -309,39 +319,39 @@ label {
     padding-top: 0.3rem;
     padding-bottom: 0.3rem;
   }
+
+  #appLayout.layout-no-sidebar #dashboardSection {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  #appLayout.layout-no-sidebar #dashboardGrid {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+  }
+
+  #appLayout.layout-no-sidebar #dashboardGrid .dashboard-slot,
+  #appLayout.layout-no-sidebar #dashboardGrid .dashboard-slot-content {
+    height: 100%;
+    min-height: 0;
+  }
+
+  #appLayout.layout-no-sidebar #dashboardGrid .dashboard-slot-content > [data-dashboard-module] {
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+  }
 }
 
 /* ========== DASHBOARD WIDGET COMPACT ========== */
 
-#dashboardSection {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-#dashboardGrid {
-  flex: 1;
-  min-height: 0;
-}
-
-#dashboardGrid .dashboard-slot {
-  height: 100%;
-}
-
-#dashboardGrid .dashboard-slot-content {
-  height: 100%;
-  min-height: 0;
-}
-
-#dashboardGrid .dashboard-slot-content > [data-dashboard-module] {
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
-  box-sizing: border-box;
-}
-
 #dashboardGrid .dashboard-slot-content > [data-dashboard-module] {
   padding: 0.5rem;
+  box-sizing: border-box;
 }
 
 #dashboardGrid .dashboard-slot-content .text-\[12px\] {
@@ -364,14 +374,9 @@ label {
   font-size: 7px;
 }
 
-@media (min-width: 1024px) {
-  #dashboardGrid {
-    grid-template-rows: repeat(3, minmax(0, 1fr));
-  }
-
-  #dashboardGrid .dashboard-slot {
-    min-height: 0;
-  }
+#dashboardGrid #unitStatusList {
+  max-height: none;
+  overflow: visible;
 }
 
 /* ========== CUSTOM TOOLTIPS ========== */
