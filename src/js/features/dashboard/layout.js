@@ -1,5 +1,5 @@
 const STORAGE_KEY = "dashboard.layout.v1";
-const SLOT_COUNT = 12;
+const SLOT_COUNT = 9;
 const NONE_VALUE = "__none__";
 
 function loadLayout() {
