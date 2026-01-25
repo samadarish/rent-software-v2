@@ -311,6 +311,69 @@ label {
   }
 }
 
+/* ========== DASHBOARD WIDGET COMPACT ========== */
+
+#dashboardSection {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#dashboardGrid {
+  flex: 1;
+  min-height: 0;
+}
+
+#dashboardGrid .dashboard-slot {
+  height: 100%;
+}
+
+#dashboardGrid .dashboard-slot-content {
+  height: 100%;
+  min-height: 0;
+}
+
+#dashboardGrid .dashboard-slot-content > [data-dashboard-module] {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+#dashboardGrid .dashboard-slot-content > [data-dashboard-module] {
+  padding: 0.5rem;
+}
+
+#dashboardGrid .dashboard-slot-content .text-\[12px\] {
+  font-size: 11px;
+}
+
+#dashboardGrid .dashboard-slot-content .text-\[11px\] {
+  font-size: 10px;
+}
+
+#dashboardGrid .dashboard-slot-content .text-\[10px\] {
+  font-size: 9px;
+}
+
+#dashboardGrid .dashboard-slot-content .text-\[9px\] {
+  font-size: 8px;
+}
+
+#dashboardGrid .dashboard-slot-content .text-\[8px\] {
+  font-size: 7px;
+}
+
+@media (min-width: 1024px) {
+  #dashboardGrid {
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+  }
+
+  #dashboardGrid .dashboard-slot {
+    min-height: 0;
+  }
+}
+
 /* ========== CUSTOM TOOLTIPS ========== */
 
 /* JS-based tooltip appended to body - not affected by parent overflow */

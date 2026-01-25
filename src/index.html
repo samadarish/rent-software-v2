@@ -227,8 +227,183 @@
         <section id="dashboardSection"
           class="space-y-3 fade-section is-visible">
 
-          <div class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5 space-y-1.5" data-notes-widget="dashboard">
+          <div id="dashboardGrid" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="0">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="1">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="2">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="3">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="4">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="5">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="6">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="7">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="8">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="9">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="10">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+            <div class="dashboard-slot relative min-h-[170px]" data-dashboard-slot="11">
+              <div
+                class="dashboard-slot-picker absolute inset-0 z-10 rounded-xl border-2 border-dashed border-slate-200 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-3 text-slate-500"
+                data-dashboard-picker>
+                <div class="text-4xl font-semibold text-slate-300">+</div>
+                <select
+                  data-dashboard-select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  aria-label="Select dashboard module">
+                  <option value="" disabled selected>Select module</option>
+                </select>
+              </div>
+              <div class="dashboard-slot-content" data-dashboard-content></div>
+            </div>
+          </div>
+
+          <div id="dashboardModulePool" class="hidden">
+            <div
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5 space-y-1.5"
+              data-notes-widget="dashboard"
+              data-dashboard-module="notes"
+              data-dashboard-label="Notes">
               <div class="flex items-center justify-center gap-2 text-[9px]">
                 <span data-note-position
                   class="font-semibold px-2.5 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-800">Note
@@ -262,7 +437,10 @@
                   class="px-3 py-1.5 rounded border border-rose-200 bg-rose-50 text-[9px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed">Delete</button>
               </div>
             </div>
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5 space-y-1.5 relative">
+            <div
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5 space-y-1.5"
+              data-dashboard-module="bill-search"
+              data-dashboard-label="Bill ID search">
               <div class="flex items-center justify-between">
                 <p class="text-[11px] font-semibold text-slate-700">Bill ID search</p>
                 <span id="billIdSearchStatus" class="text-[9px] text-slate-500">Local lookup</span>
@@ -277,13 +455,15 @@
                   <div id="billIdSearchList" class="divide-y divide-slate-100"></div>
                 </div>
               </div>
-              <!-- Recent Searches -->
               <div class="pt-1.5 border-t border-slate-100">
                 <p class="text-[9px] font-semibold text-slate-500 uppercase mb-1.5">Recent</p>
                 <div id="billIdRecentSearches" class="space-y-0.5"></div>
               </div>
             </div>
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5 space-y-1.5">
+            <div
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5 space-y-1.5"
+              data-dashboard-module="recent-payments"
+              data-dashboard-label="Recent payments">
               <div class="flex items-center justify-between">
                 <p class="text-[11px] font-semibold text-slate-700">Recent payments</p>
                 <span class="text-[9px] text-slate-500">Last 5</span>
@@ -291,20 +471,33 @@
               <div id="dashboardRecentPaymentsEmpty" class="text-[10px] text-slate-500">Loading recent payments...</div>
               <div id="dashboardRecentPaymentsList" class="space-y-1.5"></div>
             </div>
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5">
+            <div
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5"
+              data-dashboard-module="quick-view"
+              data-dashboard-label="Quick view">
               <p class="text-[11px] font-semibold text-slate-700">Quick view</p>
               <p class="text-[11px] text-slate-500">Insights and charts will appear here.</p>
             </div>
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5">
+            <div
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5"
+              data-dashboard-module="shortcuts"
+              data-dashboard-label="Shortcuts">
               <p class="text-[11px] font-semibold text-slate-700">Shortcuts</p>
               <p class="text-[11px] text-slate-500">Use the left navigation to jump into billing, payments, or
                 agreements.</p>
             </div>
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5">
+            <div
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5"
+              data-dashboard-module="reminders"
+              data-dashboard-label="Reminders">
               <p class="text-[11px] font-semibold text-slate-700">Reminders</p>
               <p class="text-[11px] text-slate-500">Track upcoming renewals and payment follow-ups.</p>
             </div>
-            <div id="unitStatusContainer" class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5 space-y-1.5 overflow-visible">
+            <div
+              id="unitStatusContainer"
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5 space-y-1.5 overflow-visible"
+              data-dashboard-module="unit-status"
+              data-dashboard-label="Unit Status">
               <div class="flex items-center justify-between">
                 <p class="text-[11px] font-semibold text-slate-700">Unit Status</p>
                 <div class="flex items-center gap-2 text-[9px]">
@@ -323,15 +516,24 @@
               <div id="unitStatusEmpty" class="text-[10px] text-slate-500">Loading units...</div>
               <div id="unitStatusList" class="max-h-[160px] overflow-y-auto overflow-x-hidden"></div>
             </div>
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5">
+            <div
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5"
+              data-dashboard-module="billing-status"
+              data-dashboard-label="Billing status">
               <p class="text-[11px] font-semibold text-slate-700">Billing status</p>
               <p class="text-[11px] text-slate-500">Generated bills and pending items summary.</p>
             </div>
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5">
+            <div
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5"
+              data-dashboard-module="payments"
+              data-dashboard-label="Payments">
               <p class="text-[11px] font-semibold text-slate-700">Payments</p>
               <p class="text-[11px] text-slate-500">Recent receipts and totals by month.</p>
             </div>
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5">
+            <div
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5"
+              data-dashboard-module="system-health"
+              data-dashboard-label="System health">
               <p class="text-[11px] font-semibold text-slate-700">System health</p>
               <p class="text-[11px] text-slate-500">Connection status and sync checks.</p>
             </div>
