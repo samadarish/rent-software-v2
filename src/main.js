@@ -31,6 +31,7 @@ import { initBillIdSearch, initSidebarBillIdSearch } from "./js/features/dashboa
 import { initRecentPayments } from "./js/features/dashboard/recentPayments.js";
 import { initUnitStatus } from "./js/features/dashboard/unitStatus.js";
 import { initDashboardLayout } from "./js/features/dashboard/layout.js";
+import { initRevisionNotifications } from "./js/features/dashboard/revisionNotifications.js";
 import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
 import { currentFlow } from "./js/state.js";
@@ -57,6 +58,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initSidebarBillIdSearch();
   initRecentPayments();
   initUnitStatus();
+  initRevisionNotifications();
 
   const offlineOverlay = document.getElementById("offlineOverlay");
   const appShell = document.getElementById("appShell");
