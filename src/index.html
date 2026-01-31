@@ -475,7 +475,7 @@
                 </div>
               </div>
               <div id="revisionNotificationEmpty" class="text-[10px] text-rose-600">Loading revisions...</div>
-              <div id="revisionNotificationList" class="space-y-1.5"></div>
+              <div id="revisionNotificationList" class="space-y-1.5 max-h-[180px] overflow-y-auto pr-1"></div>
             </div>
             <div
               id="unitStatusContainer"
@@ -2573,7 +2573,7 @@
   <!-- REVISION NOTIFICATION MODAL -->
   <div id="revisionNotificationModal"
     class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 fade-overlay">
-    <div class="bg-white rounded-xl shadow-lg w-full max-w-3xl p-4 md:p-5 space-y-3 border border-rose-200 modal-panel">
+    <div class="bg-white rounded-xl shadow-lg w-[96vw] max-w-[1400px] p-4 md:p-5 space-y-3 border border-rose-200 modal-panel">
       <div class="flex items-start justify-between gap-3">
         <div>
           <p class="text-[10px] uppercase text-rose-500 font-semibold">Dashboard</p>
@@ -2591,9 +2591,75 @@
         <span class="text-[10px] text-slate-500">Visible from notice period + 2 months before the revision.</span>
       </div>
 
-      <div id="revisionNotificationModalEmpty" class="text-[11px] text-slate-500">No upcoming revisions.</div>
-      <div class="max-h-[60vh] overflow-y-auto">
-        <div id="revisionNotificationModalList" class="divide-y divide-slate-100"></div>
+      <div class="border rounded-lg overflow-x-auto">
+        <table class="w-full text-left text-[11px] min-w-[1320px]">
+          <thead class="bg-slate-50 text-[10px] uppercase text-slate-600">
+            <tr>
+              <th class="px-3 py-2 w-8 text-center">
+                <input type="checkbox" id="revisionNotificationSendToggleAll"
+                  class="h-3 w-3 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+              </th>
+              <th class="px-3 py-2">Tenant</th>
+              <th class="px-3 py-2">Unit</th>
+              <th class="px-3 py-2">Commencement</th>
+              <th class="px-3 py-2">Revision month</th>
+              <th class="px-3 py-2">Revised rent</th>
+              <th class="px-3 py-2">Note</th>
+              <th class="px-3 py-2">Visible from</th>
+              <th class="px-3 py-2">Send window</th>
+              <th class="px-3 py-2 text-center w-16">Hindi</th>
+              <th class="px-3 py-2 text-center w-16">Eng</th>
+              <th class="px-3 py-2 text-right">WhatsApp</th>
+            </tr>
+          </thead>
+          <tbody id="revisionNotificationModalList"></tbody>
+        </table>
+        <div id="revisionNotificationModalEmpty" class="p-3 text-center text-[11px] text-slate-500 hidden">No upcoming revisions.</div>
+
+        <div class="mt-3 flex flex-col items-center justify-center border-t border-slate-100 pt-3 gap-2">
+          <div class="text-[10px] text-slate-500">
+            Select tenants and click <strong>Send with WhatsApp</strong>.
+          </div>
+          <button id="revisionNotificationAutoSendBtn"
+            class="px-6 py-2.5 rounded bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 shadow-sm flex items-center gap-2 transform active:scale-95 transition-all">
+            <span>Send with WhatsApp</span>
+            <span id="revisionNotificationAutoSendCount" class="bg-white/20 px-1.5 rounded text-[10px] hidden">0</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REVISION DECISION MODAL -->
+  <div id="revisionDecisionModal"
+    class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 fade-overlay">
+    <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-4 md:p-5 space-y-4 modal-panel border border-slate-200">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[10px] uppercase text-slate-500 font-semibold">Revision decision</p>
+          <h3 id="revisionDecisionTitle" class="text-base font-semibold text-slate-800">Review rent revision</h3>
+          <p class="text-[11px] text-slate-500">Enter the rent amount for this cycle.</p>
+        </div>
+        <button id="revisionDecisionClose" class="text-slate-500 hover:text-slate-800" aria-label="Close">
+          &times;
+        </button>
+      </div>
+
+      <div class="space-y-1">
+        <label class="text-[11px] font-semibold text-slate-700">Revised rent amount (₹)</label>
+        <input id="revisionDecisionAmount" type="number"
+          class="w-full border rounded-lg px-3 py-2 text-[12px]" placeholder="Enter amount" />
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2">
+        <button id="revisionDecisionCancel"
+          class="px-3 py-2 rounded border border-slate-300 text-[11px] font-semibold text-slate-600 hover:bg-slate-100">
+          Cancel
+        </button>
+        <button id="revisionDecisionConfirm"
+          class="px-3 py-2 rounded bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">
+          Confirm
+        </button>
       </div>
     </div>
   </div>

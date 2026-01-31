@@ -3383,6 +3383,85 @@ export async function saveRentRevision(payload) {
     }
 }
 
+export async function saveRentRevisionReminder(payload = {}) {
+    const url = ensureAppScriptUrl({
+        autoSync: false,
+        onMissing: () => showToast("Configure Apps Script URL to save reminders", "warning"),
+    });
+
+    const nextPayload = payload && typeof payload === "object" ? { ...payload } : {};
+    const tenancyId = (nextPayload.tenancyId || nextPayload.tenancy_id || "").toString().trim();
+    const revisionMonth = normalizeMonthKey(
+        nextPayload.revisionMonth || nextPayload.revision_month || ""
+    );
+    if (!tenancyId || !revisionMonth) {
+        showToast("Missing tenancy ID or revision month", "warning");
+        return { ok: false };
+    }
+
+    nextPayload.tenancyId = tenancyId;
+    nextPayload.revisionMonth = revisionMonth;
+
+    try {
+        const localUpdate = async () => {
+            const reminders = await getLocalList(LOCAL_KEYS.rentRevisionReminders);
+            const record = {
+                reminder_id: nextPayload.reminder_id || nextPayload.reminderId || createLocalId("reminder"),
+                tenancy_id: tenancyId,
+                revision_month: revisionMonth,
+                last_reminder_month: normalizeMonthKey(
+                    nextPayload.last_reminder_month || nextPayload.lastReminderMonth || ""
+                ),
+                send_count: Number(nextPayload.send_count ?? nextPayload.sendCount ?? 0) || 0,
+                last_message_type: nextPayload.last_message_type || nextPayload.lastMessageType || "",
+                last_message_lang: nextPayload.last_message_lang || nextPayload.lastMessageLang || "",
+                last_message_text: nextPayload.last_message_text || nextPayload.lastMessageText || "",
+                last_sent_at: nextPayload.last_sent_at || nextPayload.lastSentAt || "",
+                last_sent_via: nextPayload.last_sent_via || nextPayload.lastSentVia || "",
+                status: (nextPayload.status || "pending").toString().toLowerCase(),
+                decision_date: nextPayload.decision_date || nextPayload.decisionDate || "",
+                decision_amount: nextPayload.decision_amount ?? nextPayload.decisionAmount ?? "",
+                audit_log: nextPayload.audit_log || nextPayload.auditLog || "",
+                created_at: nextPayload.created_at || nextPayload.createdAt || new Date().toISOString(),
+                updated_at: nextPayload.updated_at || nextPayload.updatedAt || new Date().toISOString(),
+            };
+
+            const next = Array.isArray(reminders)
+                ? reminders.filter(
+                      (r) =>
+                          (r?.tenancy_id || r?.tenancyId || "") !== tenancyId ||
+                          normalizeMonthKey(r?.revision_month || r?.revisionMonth || "") !== revisionMonth
+                  )
+                : [];
+            next.push(record);
+            await setLocalData(LOCAL_KEYS.rentRevisionReminders, next);
+
+            if (typeof document !== "undefined") {
+                document.dispatchEvent(
+                    new CustomEvent("rentRevisionReminders:updated", {
+                        detail: next,
+                    })
+                );
+            }
+            return { ok: true, reminder: record, reminders: next };
+        };
+
+        const data = await runWriteAction({
+            url,
+            action: "saveRentRevisionReminder",
+            payload: nextPayload,
+            queuedMessage: "Reminder saved locally. Sync pending.",
+            fallback: { ok: true, queued: true },
+            localUpdate,
+        });
+        return data;
+    } catch (e) {
+        console.error("saveRentRevisionReminder error", e);
+        showToast("Failed to save reminder", "error");
+        return { ok: false };
+    }
+}
+
 /**
  * Saves tenant data to Google Sheets database
  */

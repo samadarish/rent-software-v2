@@ -829,10 +829,7 @@ async fn send_whatsapp_message(
                  // Attempt Send
                  const btn = findSendButton();
                  if (btn) {{
-                    const event = new MouseEvent('click', {{ view: window, bubbles: true, cancelable: true }});
-                    btn.dispatchEvent(event);
                     btn.click();
-                    
                     sent = true;
                     setTimeout(() => {{
                         document.title = "WA_MSG_SENT_SUCCESS";

@@ -19,6 +19,7 @@ export const LOCAL_KEYS = {
     generatedBills: "data:generatedbills",
     rentRevisionsAll: "data:rentRevisions:all",
     rentRevisions: (tenancyId) => `data:rentRevisions:${tenancyId || "unknown"}`,
+    rentRevisionReminders: "data:rentRevisionReminders",
     allSheets: "data:allSheets",
     notes: "data:notes",
 };

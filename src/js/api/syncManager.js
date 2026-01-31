@@ -33,6 +33,7 @@ const WRITE_INVALIDATIONS = {
     deleteTenantDocument: ["docs"],
     saveBillingRecord: ["generatedbills", "billsminimal"],
     saveRentRevision: ["tenants"],
+    saveRentRevisionReminder: ["rentrevisionreminders"],
     saveNotes: ["notes"],
 };
 
@@ -193,6 +194,13 @@ async function storeRentRevisions(revisions = []) {
     return next;
 }
 
+async function storeRentRevisionReminders(reminders = []) {
+    const next = Array.isArray(reminders) ? reminders : [];
+    await setLocalData(LOCAL_KEYS.rentRevisionReminders, next);
+    dispatchUpdateEvent("rentRevisionReminders:updated", next);
+    return next;
+}
+
 async function storeNotesList(notes = []) {
     const next = Array.isArray(notes) ? notes : [];
     await setLocalData(LOCAL_KEYS.notes, next);
@@ -242,6 +250,9 @@ async function applyExportAll(data) {
     }
     if (Array.isArray(data.rentRevisions)) {
         await storeRentRevisions(data.rentRevisions);
+    }
+    if (Array.isArray(data.rentRevisionReminders)) {
+        await storeRentRevisionReminders(data.rentRevisionReminders);
     }
     if (data.generatedBills && Array.isArray(data.generatedBills.bills)) {
         await setLocalData(LOCAL_KEYS.generatedBills, data.generatedBills);
@@ -404,6 +415,20 @@ function buildSyncTasks(url) {
                 );
                 if (Array.isArray(data?.revisions)) {
                     await storeRentRevisions(data.revisions);
+                }
+                return data;
+            }),
+        },
+        {
+            label: "Syncing rent revision reminders",
+            run: skipIfExported(async () => {
+                const data = await runWithTimeout(
+                    callAppScript({ url, action: "rentrevisionreminders", cache: { useLocal: false } }),
+                    SYNC_TIMEOUT_MS,
+                    "Rent revision reminders"
+                );
+                if (Array.isArray(data?.reminders)) {
+                    await storeRentRevisionReminders(data.reminders);
                 }
                 return data;
             }),

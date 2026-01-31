@@ -28,6 +28,7 @@ const ATTACHMENTS_SHEET = 'Attachments';
 const DOCS_SHEET = 'Docs';
 const INDEX_SHEET = 'Index';
 const TENANCY_RENT_REVISIONS_SHEET = 'TenancyRentRevisions';
+const RENT_REVISION_REMINDERS_SHEET = 'RentRevisionReminders';
 
 /********* HEADERS *********/
 const TENANTS_HEADERS = [
@@ -135,6 +136,25 @@ const TENANCY_RENT_REVISION_HEADERS = [
   'rent_amount',
   'note',
   'created_at',
+];
+
+const RENT_REVISION_REMINDER_HEADERS = [
+  'reminder_id',
+  'tenancy_id',
+  'revision_month',
+  'last_reminder_month',
+  'send_count',
+  'last_message_type',
+  'last_message_lang',
+  'last_message_text',
+  'last_sent_at',
+  'last_sent_via',
+  'status',
+  'decision_date',
+  'decision_amount',
+  'audit_log',
+  'created_at',
+  'updated_at',
 ];
 
 const BILL_LINE_HEADERS = [
@@ -1173,6 +1193,46 @@ function upsertTenancyRentRevision_(payload = {}) {
   };
 
   upsertUnique_(TENANCY_RENT_REVISIONS_SHEET, TENANCY_RENT_REVISION_HEADERS, ['tenancy_id', 'effective_month'], record);
+  return record;
+}
+
+/*** RENT REVISION REMINDERS ***/
+function normalizeReminderMonth_(value) {
+  return normalizeMonthKey_(value || '');
+}
+
+function upsertRentRevisionReminder_(payload = {}) {
+  const tenancyId = payload.tenancyId || payload.tenancy_id;
+  const revisionMonth = normalizeReminderMonth_(payload.revisionMonth || payload.revision_month);
+  if (!tenancyId) throw new Error('tenancyId required');
+  if (!revisionMonth || !/^\d{4}-\d{2}$/.test(revisionMonth)) throw new Error('Invalid revision month');
+
+  const now = new Date();
+  const record = {
+    reminder_id: payload.reminder_id || payload.reminderId || Utilities.getUuid(),
+    tenancy_id: tenancyId,
+    revision_month: revisionMonth,
+    last_reminder_month: normalizeReminderMonth_(payload.last_reminder_month || payload.lastReminderMonth || ''),
+    send_count: Number(payload.send_count ?? payload.sendCount ?? 0) || 0,
+    last_message_type: payload.last_message_type || payload.lastMessageType || '',
+    last_message_lang: payload.last_message_lang || payload.lastMessageLang || '',
+    last_message_text: payload.last_message_text || payload.lastMessageText || '',
+    last_sent_at: payload.last_sent_at || payload.lastSentAt || '',
+    last_sent_via: payload.last_sent_via || payload.lastSentVia || '',
+    status: (payload.status || 'pending').toString().toLowerCase(),
+    decision_date: payload.decision_date || payload.decisionDate || '',
+    decision_amount: payload.decision_amount ?? payload.decisionAmount ?? '',
+    audit_log: payload.audit_log || payload.auditLog || '',
+    created_at: payload.created_at || payload.createdAt || formatDateTime_(now),
+    updated_at: payload.updated_at || payload.updatedAt || formatDateTime_(now),
+  };
+
+  upsertUnique_(
+    RENT_REVISION_REMINDERS_SHEET,
+    RENT_REVISION_REMINDER_HEADERS,
+    ['tenancy_id', 'revision_month'],
+    record
+  );
   return record;
 }
 
@@ -2263,6 +2323,13 @@ function handleExportAll_() {
     attachments: readTable_(ATTACHMENTS_SHEET, ATTACHMENT_HEADERS),
     docs: readTable_(DOCS_SHEET, DOC_HEADERS),
     rentRevisions,
+    rentRevisionReminders: readTable_(RENT_REVISION_REMINDERS_SHEET, RENT_REVISION_REMINDER_HEADERS).map((r) => ({
+      ...r,
+      revision_month: normalizeMonthKey_(r.revision_month),
+      last_reminder_month: normalizeMonthKey_(r.last_reminder_month),
+      send_count: Number(r.send_count) || 0,
+      decision_amount: r.decision_amount === '' || r.decision_amount === null ? '' : Number(r.decision_amount) || 0,
+    })),
     generatedBills: handleFetchGeneratedBills_(),
   };
 }
@@ -2360,6 +2427,17 @@ function doGet(e) {
           return bTime - aTime;
         });
       return jsonResponse({ ok: true, revisions });
+    }
+
+    if (action === 'rentrevisionreminders') {
+      const reminders = readTable_(RENT_REVISION_REMINDERS_SHEET, RENT_REVISION_REMINDER_HEADERS).map((r) => ({
+        ...r,
+        revision_month: normalizeMonthKey_(r.revision_month),
+        last_reminder_month: normalizeMonthKey_(r.last_reminder_month),
+        send_count: Number(r.send_count) || 0,
+        decision_amount: r.decision_amount === '' || r.decision_amount === null ? '' : Number(r.decision_amount) || 0,
+      }));
+      return jsonResponse({ ok: true, reminders });
     }
 
     if (action === 'exportall') {
@@ -2476,6 +2554,14 @@ function doPost(e) {
         const record = upsertTenancyRentRevision_(body.payload || {});
         const revisions = listTenancyRentRevisions_(record.tenancy_id);
         return jsonResponse({ ok: true, revision: record, revisions });
+      } catch (err) {
+        return jsonResponse({ ok: false, error: String(err) });
+      }
+    }
+    if (action === 'saveRentRevisionReminder') {
+      try {
+        const record = upsertRentRevisionReminder_(body.payload || {});
+        return jsonResponse({ ok: true, reminder: record });
       } catch (err) {
         return jsonResponse({ ok: false, error: String(err) });
       }
