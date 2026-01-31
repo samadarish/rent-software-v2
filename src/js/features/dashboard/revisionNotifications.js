@@ -190,7 +190,7 @@ function getNextRevisionDate(commencementDate, intervalMonths, today) {
     const currentMonthKey = monthKeyFromDate(today);
     while (
         currentMonthKey &&
-        monthKeyFromDate(next) < currentMonthKey &&
+        monthKeyFromDate(addMonths(next, 1)) < currentMonthKey &&
         guard < 600
     ) {
         next = addMonths(next, intervalMonths);
@@ -456,7 +456,22 @@ function getNotificationToday() {
 }
 
 function getCurrentMonthKey() {
-    return monthKeyFromDate(new Date());
+    return monthKeyFromDate(getNotificationToday());
+}
+
+function applyReminderSentState(item, { lang } = {}) {
+    const sentMonth = getCurrentMonthKey();
+    revisionNotificationState.items = revisionNotificationState.items.map((entry) => {
+        if (entry.id !== item.id) return entry;
+        return {
+            ...entry,
+            lastReminderMonth: sentMonth,
+            alreadySentThisMonth: true,
+            canSend: false,
+            lastMessageType: entry.messageType,
+            lastMessageLang: lang || entry.lastMessageLang || "en",
+        };
+    });
 }
 
 function resolveTenantMobile(tenant) {
@@ -518,9 +533,8 @@ function buildItems(tenancies, tenants, units, revisions, reminders) {
         const visibleFromMonth = monthKeyFromDate(visibleFromDate);
         const sendFromDate = addMonths(nextRevisionDate, -(noticeMonths + 1));
         const sendFromMonth = monthKeyFromDate(sendFromDate);
-        const sendUntilDate = addMonths(nextRevisionDate, -1);
+        const sendUntilDate = nextRevisionDate;
         const sendUntilMonth = monthKeyFromDate(sendUntilDate);
-        const lastMonthBeforeRevision = sendUntilMonth;
 
         if (!currentMonthKey || !visibleFromMonth) return;
         if (currentMonthKey < visibleFromMonth) return;
@@ -530,15 +544,20 @@ function buildItems(tenancies, tenants, units, revisions, reminders) {
         const reminderStatus = (reminder?.status || "pending").toString().toLowerCase();
         if (reminderStatus === "approved" || reminderStatus === "rejected") return;
 
-        const isApprovalMonth = currentMonthKey === nextRevisionMonth;
+        const approvalMonth = monthKeyFromDate(addMonths(nextRevisionDate, 1));
+        const isApprovalMonth = currentMonthKey === approvalMonth;
+        const isRevisionMonth = currentMonthKey === nextRevisionMonth;
+        const lastReminderMonth = normalizeMonthKey(
+            reminder?.last_reminder_month || reminder?.lastReminderMonth || ""
+        );
+        const alreadySentThisMonth =
+            !!lastReminderMonth && !!currentMonthKey && lastReminderMonth === currentMonthKey;
         const canSend =
             !isApprovalMonth &&
+            !alreadySentThisMonth &&
             currentMonthKey >= sendFromMonth &&
             currentMonthKey <= sendUntilMonth;
-        const messageType =
-            currentMonthKey && lastMonthBeforeRevision && currentMonthKey === lastMonthBeforeRevision
-                ? "next-month"
-                : "regular";
+        const messageType = isRevisionMonth ? "effective-month" : "regular";
 
         const latestRevisionEntry = getLatestRevisionEntry(revisionsForTenancy, currentMonthKey);
         const currentRent =
@@ -584,10 +603,12 @@ function buildItems(tenancies, tenants, units, revisions, reminders) {
             sendUntilMonth,
             canSend,
             isApprovalMonth,
+            isRevisionMonth,
             messageType,
             reminder,
             reminderStatus,
-            lastReminderMonth: reminder?.last_reminder_month || "",
+            lastReminderMonth,
+            alreadySentThisMonth,
             sendCount: reminder?.send_count || 0,
             lastMessageType: reminder?.last_message_type || "",
             currentRent,
@@ -661,16 +682,16 @@ function getStatusMeta(item) {
             className: "border-amber-200 bg-amber-50 text-amber-700",
         };
     }
+    if (item.alreadySentThisMonth || item.lastReminderMonth) {
+        return {
+            label: "Reminder sent",
+            className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+        };
+    }
     if (!item.canSend) {
         return {
             label: "Not sendable yet",
             className: "border-slate-200 bg-slate-50 text-slate-600",
-        };
-    }
-    if (item.lastReminderMonth) {
-        return {
-            label: "Reminder sent",
-            className: "border-emerald-200 bg-emerald-50 text-emerald-700",
         };
     }
     return {
@@ -710,7 +731,11 @@ function renderModal(items) {
         const revisedRent = escapeHtml(formatMoney(item.revisedRent));
         const noteLabel = escapeHtml(item.revisionNote || "-");
         const statusMeta = getStatusMeta(item);
-        const manualLabel = item.lastReminderMonth ? "Resend" : "Send Manual";
+        const manualLabel = item.alreadySentThisMonth
+            ? "Sent"
+            : item.lastReminderMonth
+                ? "Resend"
+                : "Send Manual";
 
         const isLoggedIn = localStorage.getItem("wa_logged_in") === "true";
         const canSend = item.canSend;
@@ -726,7 +751,7 @@ function renderModal(items) {
         const lang = persisted.lang || "en";
 
         const row = document.createElement("tr");
-        const shouldDimRow = !canSend && !isApprovalMonth;
+        const shouldDimRow = item.alreadySentThisMonth || (!canSend && !isApprovalMonth);
         row.className = `border-b last:border-0 transition-colors ${
             shouldDimRow ? "bg-slate-50 opacity-70" : "hover:bg-slate-50"
         }`;
@@ -851,6 +876,13 @@ function bindLangEvents() {
 
 function formatWhatsappMessage(item, lang = "en") {
     const monthLabel = formatMonthLabel(item.nextRevisionMonth);
+    let billMonthLabel = "-";
+    if (/^\d{4}-\d{2}$/.test(item.nextRevisionMonth || "")) {
+        const [year, month] = item.nextRevisionMonth.split("-").map((part) => parseInt(part, 10));
+        const date = new Date(year, month - 1, 1);
+        const nextDate = addMonths(date, 1);
+        billMonthLabel = formatMonthLabel(monthKeyFromDate(nextDate));
+    }
     const currentRentValue = item.currentRent;
     const revisedRentValue = item.revisedRent;
     const currentRent = formatMoney(currentRentValue);
@@ -860,30 +892,30 @@ function formatWhatsappMessage(item, lang = "en") {
     const unit = item.unitLabel || "Unit";
     const grn = item.grnNumber || "";
     const commencementLabel = formatDateLabel(item.commencementDate) || formatMonthLabel(item.commencementMonth);
-    const isNextMonth = item.messageType === "next-month";
-
     if (lang === "hi") {
         const grnText = grn ? `समझौता संख्या ${grn}` : "समझौते के अनुसार";
         const commencementText = commencementLabel ? ` और आरंभ तिथि ${commencementLabel}` : "";
         const lines = [`नमस्ते ${name},`];
         if (hasAmounts) {
-            if (isNextMonth) {
+            if (item.messageType === "effective-month") {
                 lines.push(
-                    `${grnText}${commencementText} के अनुसार, ${unit} के लिए आपका किराया अगले महीने ${currentRent} से ${revisedRent} हो जाएगा।`
+                    `${grnText}${commencementText} के अनुसार, ${unit} के लिए आपका किराया इस महीने ${currentRent} से ${revisedRent} हो जाएगा। यह अगले महीने (${billMonthLabel}) के बिल में दिखेगा।`
                 );
             } else {
                 lines.push(
                     `${grnText}${commencementText} के अनुसार, ${unit} के लिए आपका किराया ${currentRent} से ${revisedRent} होकर ${monthLabel} महीने से लागू होगा।`
                 );
             }
-        } else if (isNextMonth) {
-            lines.push(
-                `${grnText}${commencementText} के अनुसार, ${unit} के लिए आपका किराया अगले महीने से संशोधित होगा।`
-            );
         } else {
-            lines.push(
-                `${grnText}${commencementText} के अनुसार, ${unit} के लिए आपका किराया ${monthLabel} महीने से संशोधित होगा।`
-            );
+            if (item.messageType === "effective-month") {
+                lines.push(
+                    `${grnText}${commencementText} के अनुसार, ${unit} के लिए आपका किराया इस महीने से संशोधित होगा। यह अगले महीने (${billMonthLabel}) के बिल में दिखेगा।`
+                );
+            } else {
+                lines.push(
+                    `${grnText}${commencementText} के अनुसार, ${unit} के लिए आपका किराया ${monthLabel} महीने से संशोधित होगा।`
+                );
+            }
         }
         if (item.revisionNote) lines.push(`नोट: ${item.revisionNote}`);
         lines.push("किसी भी प्रश्न के लिए संपर्क करें।");
@@ -894,17 +926,19 @@ function formatWhatsappMessage(item, lang = "en") {
     const commencementText = commencementLabel ? ` and commencement date ${commencementLabel}` : "";
     const lines = [`Hi ${name},`];
     if (hasAmounts) {
-        if (isNextMonth) {
+        if (item.messageType === "effective-month") {
             lines.push(
-                `As per ${grnText}${commencementText}, your rent for ${unit} will be increased next month from ${currentRent} to ${revisedRent}.`
+                `As per ${grnText}${commencementText}, your rent for ${unit} will be increased this month from ${currentRent} to ${revisedRent}. This will be reflected in next month's bill (${billMonthLabel}).`
             );
         } else {
             lines.push(
                 `As per ${grnText}${commencementText}, your rent will be increased from ${currentRent} to ${revisedRent} for ${unit} in the month of ${monthLabel}.`
             );
         }
-    } else if (isNextMonth) {
-        lines.push(`As per ${grnText}${commencementText}, your rent for ${unit} will be revised from next month.`);
+    } else if (item.messageType === "effective-month") {
+        lines.push(
+            `As per ${grnText}${commencementText}, your rent for ${unit} will be revised from this month. This will be reflected in next month's bill (${billMonthLabel}).`
+        );
     } else {
         lines.push(`As per ${grnText}${commencementText}, your rent for ${unit} will be revised in ${monthLabel}.`);
     }
@@ -985,7 +1019,11 @@ function bindSendListEvents() {
             const item = findItemById(id);
             if (!item) return;
             if (!item.canSend) {
-                showToast("Sending is available closer to the revision month.", "warning");
+                if (item.alreadySentThisMonth) {
+                    showToast("Reminder already sent for this month.", "warning");
+                } else {
+                    showToast("Sending is available closer to the revision month.", "warning");
+                }
                 return;
             }
             const row = copyBtn.closest("tr");
@@ -1008,7 +1046,11 @@ function bindSendListEvents() {
         const item = findItemById(id);
         if (!item) return;
         if (!item.canSend) {
-            showToast("Sending is available closer to the revision month.", "warning");
+            if (item.alreadySentThisMonth) {
+                showToast("Reminder already sent for this month.", "warning");
+            } else {
+                showToast("Sending is available closer to the revision month.", "warning");
+            }
             return;
         }
         const number = getPrimaryMobile(item.mobile).replace(/\D/g, "");
@@ -1030,6 +1072,12 @@ function bindSendListEvents() {
                     sentVia: "whatsapp",
                     sentBy: "manual",
                 });
+                const current = revisionNotificationState.selections.get(id) || { selected: false, lang };
+                current.selected = false;
+                current.lang = lang || current.lang || "en";
+                revisionNotificationState.selections.set(id, current);
+                applyReminderSentState(item, { lang });
+                renderModal(revisionNotificationState.items);
             } catch (err) {
                 console.error("Failed to save reminder send", err);
                 showToast("Failed to save reminder status", "warning");
@@ -1095,17 +1143,6 @@ function updateAutoSendButton(forceState = null) {
     });
 
     let selectedCount = sendable.filter((cb) => cb.checked).length;
-    if (selectedCount === 0 && sendable.length > 0) {
-        sendable.forEach((cb) => {
-            cb.checked = true;
-            const id = cb.dataset.id || "";
-            if (!id) return;
-            const current = revisionNotificationState.selections.get(id) || { selected: false };
-            current.selected = true;
-            revisionNotificationState.selections.set(id, current);
-        });
-        selectedCount = sendable.length;
-    }
 
     if (toggleAll) {
         toggleAll.disabled = false;
@@ -1189,6 +1226,7 @@ async function handleAutoSend() {
                         sentVia: "whatsapp",
                         sentBy: "auto",
                     });
+                    applyReminderSentState(item, { lang });
                 } catch (err) {
                     console.error("Failed to save reminder send", err);
                     showToast("Failed to save reminder status", "warning");
@@ -1242,7 +1280,10 @@ function handleReminderRefresh() {
 }
 
 async function loadRevisionNotifications() {
-    if (revisionNotificationState.loading) return;
+    if (revisionNotificationState.loading) {
+        revisionNotificationState.pendingReload = true;
+        return;
+    }
     revisionNotificationState.loading = true;
     const { widgetEmpty } = getElements();
     if (widgetEmpty) {
@@ -1273,6 +1314,10 @@ async function loadRevisionNotifications() {
     renderWidget(revisionNotificationState.items);
     renderModal(revisionNotificationState.items);
     revisionNotificationState.loading = false;
+    if (revisionNotificationState.pendingReload && !revisionNotificationState.suspendReload) {
+        revisionNotificationState.pendingReload = false;
+        loadRevisionNotifications();
+    }
 }
 
 function openDecisionModal(action, item) {

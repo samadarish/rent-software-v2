@@ -766,6 +766,9 @@ async fn send_whatsapp_message(
     (() => {{
         "use strict";
         let sent = false;
+        let sendTriggered = false;
+        let sendStartedAt = 0;
+        let composerText = "";
         
         function ensureOverlay() {{
             let el = document.getElementById("wa-send-overlay");
@@ -790,6 +793,20 @@ async fn send_whatsapp_message(
         function findSendButton() {{
              return document.querySelector('span[data-icon="send"]') || 
                     document.querySelector('button[aria-label="Send"]');
+        }}
+
+        function getComposer() {{
+            return (
+                document.querySelector('[data-testid="conversation-compose-box-input"]') ||
+                document.querySelector('div[contenteditable="true"][data-tab="10"]') ||
+                document.querySelector('div[contenteditable="true"][data-tab]')
+            );
+        }}
+
+        function getComposerText() {{
+            const el = getComposer();
+            if (!el) return "";
+            return (el.innerText || el.textContent || "").trim();
         }}
 
         function getRawState() {{
@@ -827,14 +844,27 @@ async fn send_whatsapp_message(
                  el.style.background = "linear-gradient(135deg, #0f2027, #2c5364)";
 
                  // Attempt Send
-                 const btn = findSendButton();
-                 if (btn) {{
-                    btn.click();
-                    sent = true;
-                    setTimeout(() => {{
-                        document.title = "WA_MSG_SENT_SUCCESS";
-                        window.location.hash = "wa_msg_sent_success";
-                    }}, 3000); 
+                 if (!sendTriggered) {{
+                     const btn = findSendButton();
+                     if (btn) {{
+                        composerText = getComposerText();
+                        sendTriggered = true;
+                        sendStartedAt = Date.now();
+                        btn.click();
+                     }}
+                 }} else if (!sent) {{
+                     const currentText = getComposerText();
+                     const elapsed = Date.now() - sendStartedAt;
+                     const cleared = composerText
+                        ? currentText === ""
+                        : elapsed > 3000 && currentText === "";
+                     if (cleared || elapsed > 20000) {{
+                        sent = true;
+                        setTimeout(() => {{
+                            document.title = "WA_MSG_SENT_SUCCESS";
+                            window.location.hash = "wa_msg_sent_success";
+                        }}, 1500);
+                     }}
                  }}
             }}
         }}, 1000);

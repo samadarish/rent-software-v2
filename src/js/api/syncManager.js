@@ -9,6 +9,7 @@ import {
 } from "./localDb.js";
 import { callAppScript } from "./appscriptClient.js";
 import { LOCAL_KEYS, getLocalData, setLocalData } from "./localStore.js";
+import { normalizeMonthKey } from "../utils/formatters.js";
 import { showToast, updateSyncIndicator } from "../utils/ui.js";
 import { STORAGE_KEYS } from "../constants.js";
 
@@ -195,10 +196,65 @@ async function storeRentRevisions(revisions = []) {
 }
 
 async function storeRentRevisionReminders(reminders = []) {
-    const next = Array.isArray(reminders) ? reminders : [];
-    await setLocalData(LOCAL_KEYS.rentRevisionReminders, next);
-    dispatchUpdateEvent("rentRevisionReminders:updated", next);
-    return next;
+    const incoming = Array.isArray(reminders) ? reminders : [];
+    const existingRaw = await getLocalData(LOCAL_KEYS.rentRevisionReminders, []);
+    const existing = Array.isArray(existingRaw) ? existingRaw : [];
+
+    if (!incoming.length && existing.length) {
+        dispatchUpdateEvent("rentRevisionReminders:updated", existing);
+        return existing;
+    }
+
+    if (!existing.length) {
+        await setLocalData(LOCAL_KEYS.rentRevisionReminders, incoming);
+        dispatchUpdateEvent("rentRevisionReminders:updated", incoming);
+        return incoming;
+    }
+
+    const getReminderKey = (raw) => {
+        const tenancyId = (raw?.tenancy_id || raw?.tenancyId || "").toString().trim();
+        const revisionMonth = normalizeMonthKey(
+            raw?.revision_month || raw?.revisionMonth || ""
+        );
+        if (!tenancyId || !revisionMonth) return "";
+        return `${tenancyId}__${revisionMonth}`;
+    };
+
+    const getReminderUpdatedAt = (raw) => {
+        const stamp =
+            raw?.updated_at ||
+            raw?.updatedAt ||
+            raw?.last_sent_at ||
+            raw?.lastSentAt ||
+            "";
+        const parsed = Date.parse(stamp);
+        return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    const mergedMap = new Map();
+    const merge = (raw) => {
+        if (!raw || typeof raw !== "object") return;
+        const key = getReminderKey(raw);
+        if (!key) return;
+        const existingItem = mergedMap.get(key);
+        if (!existingItem) {
+            mergedMap.set(key, raw);
+            return;
+        }
+        const existingTime = getReminderUpdatedAt(existingItem);
+        const nextTime = getReminderUpdatedAt(raw);
+        if (nextTime >= existingTime) {
+            mergedMap.set(key, raw);
+        }
+    };
+
+    existing.forEach(merge);
+    incoming.forEach(merge);
+
+    const merged = Array.from(mergedMap.values());
+    await setLocalData(LOCAL_KEYS.rentRevisionReminders, merged);
+    dispatchUpdateEvent("rentRevisionReminders:updated", merged);
+    return merged;
 }
 
 async function storeNotesList(notes = []) {
