@@ -511,6 +511,34 @@
               <div id="dashboardRecentPaymentsList" class="space-y-1.5"></div>
             </div>
             <div
+              id="recentFilesWidget"
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5 h-full flex flex-col gap-2"
+              data-dashboard-module="recent-files"
+              data-dashboard-label="Recent files">
+              <div class="flex items-center justify-between">
+                <p class="text-[11px] font-semibold text-slate-700">Recent files</p>
+                <span class="text-[9px] text-slate-500">Attachments & docs</span>
+              </div>
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-2 flex-1 min-h-0">
+                <div class="rounded-lg border border-indigo-200 bg-indigo-50/40 p-2 min-h-0 flex flex-col">
+                  <div class="flex items-center justify-between mb-1">
+                    <p class="text-[10px] font-semibold text-indigo-700">Payment attachments</p>
+                    <span id="recentFilesAttachmentCount" class="text-[9px] text-indigo-600">0</span>
+                  </div>
+                  <div id="recentFilesAttachmentsEmpty" class="text-[10px] text-slate-500">Loading attachments...</div>
+                  <div id="recentFilesAttachmentsList" class="space-y-1 max-h-[150px] overflow-y-auto pr-1"></div>
+                </div>
+                <div class="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2 min-h-0 flex flex-col">
+                  <div class="flex items-center justify-between mb-1">
+                    <p class="text-[10px] font-semibold text-emerald-700">Tenant docs</p>
+                    <span id="recentFilesDocCount" class="text-[9px] text-emerald-600">0</span>
+                  </div>
+                  <div id="recentFilesDocsEmpty" class="text-[10px] text-slate-500">Loading documents...</div>
+                  <div id="recentFilesDocsList" class="space-y-1 max-h-[150px] overflow-y-auto pr-1"></div>
+                </div>
+              </div>
+            </div>
+            <div
               id="quickViewWidget"
               class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-3 h-full flex flex-col gap-2.5"
               data-dashboard-module="quick-view"
@@ -563,21 +591,6 @@
                 </div>
               </div>
               <div id="quickViewStatus" class="mt-auto rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-[8px] text-slate-600">Refreshing from local SQLite...</div>
-            </div>
-            <div
-              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5"
-              data-dashboard-module="shortcuts"
-              data-dashboard-label="Shortcuts">
-              <p class="text-[11px] font-semibold text-slate-700">Shortcuts</p>
-              <p class="text-[11px] text-slate-500">Use the left navigation to jump into billing, payments, or
-                agreements.</p>
-            </div>
-            <div
-              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5"
-              data-dashboard-module="reminders"
-              data-dashboard-label="Reminders">
-              <p class="text-[11px] font-semibold text-slate-700">Reminders</p>
-              <p class="text-[11px] text-slate-500">Track upcoming renewals and payment follow-ups.</p>
             </div>
             <div
               class="bg-rose-50/80 backdrop-blur-sm rounded-xl shadow-sm border border-rose-200 p-2.5 space-y-2"
@@ -650,13 +663,6 @@
                 </div>
               </div>
               <p id="billingStatusMeta" class="mt-auto rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[8px] text-slate-600 truncate">Refreshing billing status...</p>
-            </div>
-            <div
-              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5"
-              data-dashboard-module="payments"
-              data-dashboard-label="Payments">
-              <p class="text-[11px] font-semibold text-slate-700">Payments</p>
-              <p class="text-[11px] text-slate-500">Recent receipts and totals by month.</p>
             </div>
             <div
               id="syncDebugWidget"

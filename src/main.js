@@ -37,6 +37,7 @@ import { initQuickView } from "./js/features/dashboard/quickView.js";
 import { initDashboardLayout } from "./js/features/dashboard/layout.js";
 import { initRevisionNotifications } from "./js/features/dashboard/revisionNotifications.js";
 import { initSyncDebug } from "./js/features/dashboard/syncDebug.js";
+import { initRecentFiles } from "./js/features/dashboard/recentFiles.js";
 import { initTenantFormValidation } from "./js/features/tenants/validation.js";
 import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
@@ -69,6 +70,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initSidebarBillIdSearch();
   initBillingStatus();
   initRecentPayments();
+  initRecentFiles();
   initUnitStatus();
   initQuickView();
   initRevisionNotifications();
