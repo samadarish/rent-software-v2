@@ -516,11 +516,35 @@
               <p class="text-[11px] text-slate-500">Recent receipts and totals by month.</p>
             </div>
             <div
-              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5"
-              data-dashboard-module="system-health"
-              data-dashboard-label="System health">
-              <p class="text-[11px] font-semibold text-slate-700">System health</p>
-              <p class="text-[11px] text-slate-500">Connection status and sync checks.</p>
+              id="syncDebugWidget"
+              class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-2.5 space-y-2"
+              data-dashboard-module="sync-debug"
+              data-dashboard-label="Sync debug">
+              <div class="flex items-center justify-between gap-2">
+                <div>
+                  <p class="text-[11px] font-semibold text-slate-700">Sync debug</p>
+                  <p class="text-[9px] text-slate-500">Row-by-row sync status</p>
+                </div>
+                <button id="syncDebugExpand" type="button"
+                  class="w-7 h-7 rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                  aria-label="Expand sync debug logs" title="Expand">
+                  <svg viewBox="0 0 24 24" class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" stroke-linecap="round"
+                      stroke-linejoin="round"></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+                  <p class="text-[9px] text-emerald-700">Success</p>
+                  <p id="syncDebugSuccessCount" class="text-sm font-semibold text-emerald-800">0</p>
+                </div>
+                <div class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5">
+                  <p class="text-[9px] text-amber-700">Issue / paused</p>
+                  <p id="syncDebugIssueCount" class="text-sm font-semibold text-amber-800">0</p>
+                </div>
+              </div>
+              <p id="syncDebugLastStatus" class="text-[10px] text-slate-500">No sync logs yet.</p>
             </div>
           </div>
         </section>
@@ -2675,6 +2699,50 @@
           class="px-3 py-2 rounded bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">
           Confirm
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SYNC DEBUG MODAL -->
+  <div id="syncDebugModal"
+    class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 fade-overlay">
+    <div class="bg-white rounded-xl shadow-lg w-[96vw] max-w-[1280px] p-4 md:p-5 space-y-3 border border-slate-200 modal-panel">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[10px] uppercase text-slate-500 font-semibold">Dashboard</p>
+          <h3 class="text-base font-semibold text-slate-800">Sync debug logs</h3>
+          <p class="text-[11px] text-slate-500">Click any row to inspect payload and response sent to Google Sheets.</p>
+        </div>
+        <button id="syncDebugModalClose" class="text-slate-500 hover:text-slate-800" aria-label="Close">
+          &times;
+        </button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2 text-[11px]">
+        <span id="syncDebugModalSuccessCount"
+          class="px-2 py-0.5 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold">0 success</span>
+        <span id="syncDebugModalIssueCount"
+          class="px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700 font-semibold">0 issue / paused</span>
+        <span id="syncDebugModalTotalCount"
+          class="px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-700 font-semibold">0 total</span>
+        <button id="syncDebugClearAll" type="button"
+          class="ml-auto px-2.5 py-1 rounded border border-rose-200 bg-rose-50 text-rose-700 font-semibold hover:bg-rose-100">
+          Clear all
+        </button>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-3">
+        <div class="border rounded-lg p-2 bg-slate-50/40">
+          <div id="syncDebugModalEmpty" class="text-[11px] text-slate-500 px-1 py-2">No sync logs yet.</div>
+          <div id="syncDebugModalList" class="space-y-1.5 max-h-[440px] overflow-y-auto pr-1"></div>
+        </div>
+
+        <div class="border rounded-lg p-3 bg-white">
+          <p class="text-[10px] uppercase text-slate-500 font-semibold">Synced data</p>
+          <p id="syncDebugModalDetailMeta" class="text-[11px] text-slate-500 mt-1">Select a row to inspect synced payload.</p>
+          <pre id="syncDebugModalDetailBody"
+            class="mt-2 max-h-[420px] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 text-[10px] text-slate-700 whitespace-pre-wrap break-words"></pre>
+        </div>
       </div>
     </div>
   </div>

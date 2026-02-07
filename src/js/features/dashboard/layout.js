@@ -27,7 +27,11 @@ function normalizeLayout(layout, moduleKeySet, slotCount) {
     if (!Array.isArray(layout)) return normalized;
 
     layout.slice(0, slotCount).forEach((key, index) => {
-        const value = typeof key === "string" ? key.trim() : "";
+        let value = typeof key === "string" ? key.trim() : "";
+        // Backward compatibility: migrate old system-health widget key.
+        if (value === "system-health" && moduleKeySet.has("sync-debug")) {
+            value = "sync-debug";
+        }
         if (!value || !moduleKeySet.has(value) || used.has(value)) return;
         normalized[index] = value;
         used.add(value);

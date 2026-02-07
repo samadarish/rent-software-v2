@@ -33,6 +33,7 @@ import { initRecentPayments } from "./js/features/dashboard/recentPayments.js";
 import { initUnitStatus } from "./js/features/dashboard/unitStatus.js";
 import { initDashboardLayout } from "./js/features/dashboard/layout.js";
 import { initRevisionNotifications } from "./js/features/dashboard/revisionNotifications.js";
+import { initSyncDebug } from "./js/features/dashboard/syncDebug.js";
 import { initTenantFormValidation } from "./js/features/tenants/validation.js";
 import { flushSyncQueue, initSyncManager } from "./js/api/syncManager.js";
 import { initCloseGuard } from "./js/utils/closeGuard.js";
@@ -63,6 +64,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initRecentPayments();
   initUnitStatus();
   initRevisionNotifications();
+  initSyncDebug();
 
   const offlineOverlay = document.getElementById("offlineOverlay");
   const appShell = document.getElementById("appShell");

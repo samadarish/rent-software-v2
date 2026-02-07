@@ -17,6 +17,11 @@ let initialSyncRunning = false;
 let queueFlushRunning = false;
 let queueFlushRequested = false;
 const SYNC_TIMEOUT_MS = 30000;
+const SYNC_DEBUG_EVENT = "sync:debug-log";
+const SYNC_DEBUG_MAX_DEPTH = 4;
+const SYNC_DEBUG_MAX_KEYS = 30;
+const SYNC_DEBUG_MAX_ARRAY_ITEMS = 20;
+const SYNC_DEBUG_MAX_STRING = 1500;
 
 const WRITE_INVALIDATIONS = {
     addWing: ["wings"],
@@ -105,6 +110,87 @@ function runWithTimeout(promise, timeoutMs, label) {
 function dispatchUpdateEvent(name, detail) {
     if (typeof document === "undefined") return;
     document.dispatchEvent(new CustomEvent(name, { detail }));
+}
+
+function trimDebugString(value, maxLength = SYNC_DEBUG_MAX_STRING) {
+    const text = value === null || value === undefined ? "" : String(value);
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, maxLength)}...`;
+}
+
+function normalizeSyncDebugStatus(status) {
+    const raw = (status || "").toString().trim().toLowerCase();
+    if (raw === "success" || raw === "ok" || raw === "synced") return "success";
+    if (raw === "warning" || raw === "warn" || raw === "paused" || raw === "issue") return "warning";
+    if (raw === "error" || raw === "failed" || raw === "fail") return "error";
+    return "info";
+}
+
+function sanitizeForSyncDebug(value, depth = 0, seen = new WeakSet()) {
+    if (value === null || value === undefined) return null;
+    if (typeof value === "string") return trimDebugString(value);
+    if (typeof value === "number" || typeof value === "boolean") return value;
+    if (typeof value === "bigint") return Number(value);
+    if (typeof value === "function") {
+        return `[Function ${value.name || "anonymous"}]`;
+    }
+    if (value instanceof Date) return value.toISOString();
+
+    if (depth >= SYNC_DEBUG_MAX_DEPTH) {
+        if (Array.isArray(value)) return `[Array(${value.length})]`;
+        return "[Object]";
+    }
+
+    if (Array.isArray(value)) {
+        const list = value
+            .slice(0, SYNC_DEBUG_MAX_ARRAY_ITEMS)
+            .map((item) => sanitizeForSyncDebug(item, depth + 1, seen));
+        if (value.length > SYNC_DEBUG_MAX_ARRAY_ITEMS) {
+            list.push(`... ${value.length - SYNC_DEBUG_MAX_ARRAY_ITEMS} more item(s)`);
+        }
+        return list;
+    }
+
+    if (typeof value === "object") {
+        if (seen.has(value)) return "[Circular]";
+        seen.add(value);
+        const entries = Object.entries(value);
+        const out = {};
+        entries.slice(0, SYNC_DEBUG_MAX_KEYS).forEach(([key, next]) => {
+            out[key] = sanitizeForSyncDebug(next, depth + 1, seen);
+        });
+        if (entries.length > SYNC_DEBUG_MAX_KEYS) {
+            out.__truncatedKeys = entries.length - SYNC_DEBUG_MAX_KEYS;
+        }
+        seen.delete(value);
+        return out;
+    }
+
+    return trimDebugString(value);
+}
+
+function toSyncDebugError(err) {
+    if (!err) return "";
+    if (err instanceof Error) return trimDebugString(err.message || String(err));
+    if (typeof err === "object") return trimDebugString(JSON.stringify(sanitizeForSyncDebug(err)));
+    return trimDebugString(err);
+}
+
+function emitSyncDebugLog(entry = {}) {
+    const payload = {
+        id: entry.id || `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+        timestamp: entry.timestamp || new Date().toISOString(),
+        stage: (entry.stage || "").toString().trim() || "sync",
+        action: (entry.action || "").toString().trim(),
+        label: (entry.label || "").toString().trim(),
+        status: normalizeSyncDebugStatus(entry.status),
+        message: trimDebugString(entry.message || ""),
+        request: sanitizeForSyncDebug(entry.request ?? null),
+        response: sanitizeForSyncDebug(entry.response ?? null),
+        error: toSyncDebugError(entry.error),
+        meta: sanitizeForSyncDebug(entry.meta ?? null),
+    };
+    dispatchUpdateEvent(SYNC_DEBUG_EVENT, payload);
 }
 
 function emitSyncBusy() {
@@ -523,6 +609,13 @@ function buildSyncTasks(url) {
 export async function initSyncManager() {
     const pending = await queueCount();
     await updateSyncIndicatorWithCount(pending > 0 ? "pending" : "synced", { count: pending });
+    emitSyncDebugLog({
+        stage: "queue-sync",
+        action: "queue-status",
+        status: pending > 0 ? "warning" : "success",
+        message: pending > 0 ? `Sync queue has ${pending} pending row(s).` : "Sync queue is empty.",
+        meta: { pending },
+    });
     emitSyncBusy();
 }
 
@@ -543,6 +636,13 @@ export async function startInitialSync() {
             );
             if (!confirmed) {
                 updateSyncIndicator("pending", "Sync paused");
+                emitSyncDebugLog({
+                    stage: "initial-sync",
+                    action: "full-sync",
+                    status: "warning",
+                    message: `Initial sync paused by user. ${pending} pending row(s) were kept.`,
+                    meta: { pending },
+                });
                 setProgressVisible(false);
                 return { ok: false, reason: "cancelled" };
             }
@@ -558,16 +658,39 @@ export async function startInitialSync() {
         const tasks = buildSyncTasks(url);
         const total = tasks.length;
         const errors = [];
+        emitSyncDebugLog({
+            stage: "initial-sync",
+            action: "full-sync",
+            status: "info",
+            message: `Initial sync started with ${total} task(s).`,
+            meta: { totalTasks: total },
+        });
 
         for (let i = 0; i < tasks.length; i += 1) {
             const task = tasks[i];
             const percent = ((i) / total) * 100;
             updateSyncProgress(percent, task.label);
             try {
-                await task.run();
+                const result = await task.run();
+                emitSyncDebugLog({
+                    stage: "initial-sync",
+                    action: "read",
+                    label: task.label,
+                    status: "success",
+                    message: `${task.label} succeeded.`,
+                    response: result,
+                });
             } catch (err) {
                 console.warn("Initial sync task failed", task.label, err);
                 errors.push({ label: task.label, error: String(err) });
+                emitSyncDebugLog({
+                    stage: "initial-sync",
+                    action: "read",
+                    label: task.label,
+                    status: "error",
+                    message: `${task.label} failed.`,
+                    error: err,
+                });
             }
         }
 
@@ -578,6 +701,19 @@ export async function startInitialSync() {
         } else {
             updateSyncIndicator("synced");
         }
+        emitSyncDebugLog({
+            stage: "initial-sync",
+            action: "full-sync",
+            status: errors.length ? "warning" : "success",
+            message: errors.length
+                ? `Initial sync finished with ${errors.length} issue(s).`
+                : "Initial sync completed successfully.",
+            meta: {
+                totalTasks: total,
+                failedTasks: errors.length,
+                errors,
+            },
+        });
 
         await flushSyncQueue();
         const ok = errors.length === 0;
@@ -599,6 +735,22 @@ export async function startInitialSync() {
 export async function enqueueSyncJob({ action, payload, method = "POST", params = {} } = {}) {
     if (!action) return null;
     const id = await queueAdd({ action, payload, method, params });
+    if (id !== null && id !== undefined) {
+        emitSyncDebugLog({
+            stage: "queue-sync",
+            action,
+            label: `Queued row #${id}`,
+            status: "info",
+            message: `Queued ${action} for sync.`,
+            request: {
+                id,
+                action,
+                method: method || "POST",
+                params: params || {},
+                payload: payload || {},
+            },
+        });
+    }
     const pending = await queueCount();
     void updateSyncIndicatorWithCount(queueFlushRunning ? "syncing" : "pending", { count: pending });
     if (navigator.onLine) {
@@ -618,6 +770,12 @@ export async function flushSyncQueue() {
     }
     const url = ensureAppScriptUrl();
     if (!url) {
+        emitSyncDebugLog({
+            stage: "queue-sync",
+            action: "flush",
+            status: "warning",
+            message: "Sync paused. Apps Script URL is missing.",
+        });
         await updateSyncIndicatorWithCount("pending", { message: "Sync pending" });
         return;
     }
@@ -628,6 +786,13 @@ export async function flushSyncQueue() {
     try {
         let pendingCount = await queueCount();
         if (!pendingCount) {
+            emitSyncDebugLog({
+                stage: "queue-sync",
+                action: "flush",
+                status: "success",
+                message: "No pending rows in sync queue.",
+                meta: { pending: 0 },
+            });
             await updateSyncIndicatorWithCount("synced", { count: 0 });
             return;
         }
@@ -636,6 +801,14 @@ export async function flushSyncQueue() {
         let jobs = await queueList();
         while (jobs.length) {
             for (const job of jobs) {
+                const requestPayload = {
+                    id: job.id,
+                    action: job.action || "",
+                    method: job.method || "POST",
+                    params: job.params || {},
+                    payload: job.payload || {},
+                    createdAt: job.created_at || null,
+                };
                 try {
                     const result = await callAppScript({
                         url,
@@ -656,8 +829,26 @@ export async function flushSyncQueue() {
                         await clearPendingDocDelete(resolvedId);
                     }
                     await queueDelete(job.id);
+                    emitSyncDebugLog({
+                        stage: "queue-sync",
+                        action: job.action,
+                        label: `Row #${job.id}`,
+                        status: "success",
+                        message: `Synced ${job.action} successfully.`,
+                        request: requestPayload,
+                        response: result,
+                    });
                 } catch (err) {
                     console.warn("Sync job failed", job.action, err);
+                    emitSyncDebugLog({
+                        stage: "queue-sync",
+                        action: job.action,
+                        label: `Row #${job.id}`,
+                        status: "error",
+                        message: `Sync paused on ${job.action}.`,
+                        request: requestPayload,
+                        error: err,
+                    });
                     updateSyncIndicator("pending", "Sync paused");
                     return;
                 }
@@ -672,6 +863,13 @@ export async function flushSyncQueue() {
         }
 
         await updateSyncIndicatorWithCount("synced", { count: 0 });
+        emitSyncDebugLog({
+            stage: "queue-sync",
+            action: "flush",
+            status: "success",
+            message: "Sync queue flushed successfully.",
+            meta: { pending: 0 },
+        });
         await refreshAllSheetsSnapshot(url);
     } finally {
         queueFlushRunning = false;
