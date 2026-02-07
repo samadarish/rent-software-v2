@@ -60,7 +60,7 @@ function ensureEditButton(slot, moduleEl, state) {
         button.type = "button";
         button.dataset.dashboardEdit = "1";
         button.className =
-            "absolute -top-2 right-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-white hover:text-slate-700";
+            "absolute -top-2 left-1/2 -translate-x-1/2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-white hover:text-slate-700";
         button.setAttribute("aria-label", "Edit widget");
         button.title = "Edit widget";
         button.innerHTML = `

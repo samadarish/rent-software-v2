@@ -29,8 +29,10 @@ import { initNotesFeature } from "./js/features/shared/notes.js";
 import { initValidationMasterToggle } from "./js/features/shared/validationMode.js";
 import { initWindowControls } from "./js/utils/windowControls.js";
 import { initBillIdSearch, initSidebarBillIdSearch } from "./js/features/dashboard/billSearch.js";
+import { initBillingStatus } from "./js/features/dashboard/billingStatus.js";
 import { initRecentPayments } from "./js/features/dashboard/recentPayments.js";
 import { initUnitStatus } from "./js/features/dashboard/unitStatus.js";
+import { initQuickView } from "./js/features/dashboard/quickView.js";
 import { initDashboardLayout } from "./js/features/dashboard/layout.js";
 import { initRevisionNotifications } from "./js/features/dashboard/revisionNotifications.js";
 import { initSyncDebug } from "./js/features/dashboard/syncDebug.js";
@@ -61,8 +63,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   initWindowControls();
   initBillIdSearch();
   initSidebarBillIdSearch();
+  initBillingStatus();
   initRecentPayments();
   initUnitStatus();
+  initQuickView();
   initRevisionNotifications();
   initSyncDebug();
 
