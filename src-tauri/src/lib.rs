@@ -769,6 +769,7 @@ async fn send_whatsapp_message(
         let sendTriggered = false;
         let sendStartedAt = 0;
         let composerText = "";
+        let messageQueued = false;
         
         function ensureOverlay() {{
             let el = document.getElementById("wa-send-overlay");
@@ -807,6 +808,33 @@ async fn send_whatsapp_message(
             const el = getComposer();
             if (!el) return "";
             return (el.innerText || el.textContent || "").trim();
+        }}
+
+        function getLastOutgoingDeliveryState() {{
+            const main = document.getElementById("main");
+            if (!main) return "UNKNOWN";
+
+            const outgoingMessages = main.querySelectorAll(
+                'div[data-testid="msg-out"], div.message-out'
+            );
+            if (!outgoingMessages || outgoingMessages.length === 0) return "UNKNOWN";
+
+            const lastOutgoing = outgoingMessages[outgoingMessages.length - 1];
+            if (!lastOutgoing) return "UNKNOWN";
+
+            if (lastOutgoing.querySelector('[data-icon="msg-time"], [data-icon*="msg-time"], [data-icon*="time"]')) {{
+                return "CLOCK";
+            }}
+
+            if (lastOutgoing.querySelector('[data-icon="msg-dblcheck"], [data-icon*="dblcheck"]')) {{
+                return "DOUBLE_TICK";
+            }}
+
+            if (lastOutgoing.querySelector('[data-icon="msg-check"], [data-icon*="msg-check"], [data-icon*="check"]')) {{
+                return "SINGLE_TICK";
+            }}
+
+            return "UNKNOWN";
         }}
 
         function getRawState() {{
@@ -853,19 +881,46 @@ async fn send_whatsapp_message(
                         btn.click();
                      }}
                  }} else if (!sent) {{
-                     const currentText = getComposerText();
-                     const elapsed = Date.now() - sendStartedAt;
-                     const cleared = composerText
-                        ? currentText === ""
-                        : elapsed > 3000 && currentText === "";
-                     if (cleared || elapsed > 20000) {{
-                        sent = true;
-                        setTimeout(() => {{
-                            document.title = "WA_MSG_SENT_SUCCESS";
-                            window.location.hash = "wa_msg_sent_success";
-                        }}, 1500);
+                      const currentText = getComposerText();
+                      const elapsed = Date.now() - sendStartedAt;
+                      const composerCleared = composerText
+                         ? currentText === ""
+                         : elapsed > 3000 && currentText === "";
+
+                     if (composerCleared) {{
+                        messageQueued = true;
                      }}
-                 }}
+
+                     if (messageQueued) {{
+                        const deliveryState = getLastOutgoingDeliveryState();
+                        const textSpan = el.querySelector('.wa-text');
+
+                        if (deliveryState === "CLOCK") {{
+                            if (textSpan) textSpan.innerText = "Sending message...";
+                        }} else if (deliveryState === "SINGLE_TICK") {{
+                            if (textSpan) textSpan.innerText = "Sent. Waiting for double tick...";
+                        }} else if (deliveryState === "DOUBLE_TICK") {{
+                            if (textSpan) textSpan.innerText = "Delivered. Closing...";
+                            sent = true;
+                            setTimeout(() => {{
+                                document.title = "WA_MSG_SENT_SUCCESS";
+                                window.location.hash = "wa_msg_sent_success";
+                            }}, 800);
+                        }} else {{
+                            if (textSpan) textSpan.innerText = "Waiting for delivery status...";
+                        }}
+
+                        // Fallback: network or recipient conditions can delay double tick indefinitely.
+                        if (!sent && elapsed > 120000 && deliveryState === "SINGLE_TICK") {{
+                            if (textSpan) textSpan.innerText = "Sent. Closing...";
+                            sent = true;
+                            setTimeout(() => {{
+                                document.title = "WA_MSG_SENT_SUCCESS";
+                                window.location.hash = "wa_msg_sent_success";
+                            }}, 800);
+                        }}
+                     }}
+                  }}
             }}
         }}, 1000);
 
