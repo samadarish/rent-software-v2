@@ -901,11 +901,11 @@ function formatWhatsappMessage(item, lang = "en") {
     if (lang === "hi") {
         const grnText = grn ? `समझौता संख्या ${grn}` : "समझौते के अनुसार";
         const commencementText = commencementLabel ? ` और आरंभ तिथि ${commencementLabel}` : "";
-        const lines = [`नमस्ते ${name},`];
+        const lines = [`${name},`];
         if (hasAmounts) {
             if (item.messageType === "effective-month") {
                 lines.push(
-                    `${grnText}${commencementText} के अनुसार, ${unit} के लिए आपका किराया इस महीने ${currentRent} से ${revisedRent} हो जाएगा। यह अगले महीने (${billMonthLabel}) के बिल में दिखेगा।`
+                    `${grnText}${commencementText} के अनुसार, ${unit} के लिए आपका किराया इस महीने ${currentRent} से ${revisedRent} हो जाएगा। यह आगामी महीने (${billMonthLabel}) में दिखेगा।`
                 );
             } else {
                 lines.push(
@@ -915,7 +915,7 @@ function formatWhatsappMessage(item, lang = "en") {
         } else {
             if (item.messageType === "effective-month") {
                 lines.push(
-                    `${grnText}${commencementText} के अनुसार, ${unit} के लिए आपका किराया इस महीने से संशोधित होगा। यह अगले महीने (${billMonthLabel}) के बिल में दिखेगा।`
+                    `${grnText}${commencementText} के अनुसार, ${unit} के लिए आपका किराया इस महीने से संशोधित होगा। यह आगामी महीने (${billMonthLabel}) में दिखेगा।`
                 );
             } else {
                 lines.push(
@@ -923,7 +923,6 @@ function formatWhatsappMessage(item, lang = "en") {
                 );
             }
         }
-        if (item.revisionNote) lines.push(`नोट: ${item.revisionNote}`);
         lines.push("किसी भी प्रश्न के लिए संपर्क करें।");
         return lines.join("\n");
     }
@@ -934,7 +933,7 @@ function formatWhatsappMessage(item, lang = "en") {
     if (hasAmounts) {
         if (item.messageType === "effective-month") {
             lines.push(
-                `As per ${grnText}${commencementText}, your rent for ${unit} will be increased this month from ${currentRent} to ${revisedRent}. This will be reflected in next month's bill (${billMonthLabel}).`
+                `As per ${grnText}${commencementText}, your rent for ${unit} will be increased this month from ${currentRent} to ${revisedRent}. This will be reflected in upcoming month (${billMonthLabel}).`
             );
         } else {
             lines.push(
@@ -943,12 +942,11 @@ function formatWhatsappMessage(item, lang = "en") {
         }
     } else if (item.messageType === "effective-month") {
         lines.push(
-            `As per ${grnText}${commencementText}, your rent for ${unit} will be revised from this month. This will be reflected in next month's bill (${billMonthLabel}).`
+            `As per ${grnText}${commencementText}, your rent for ${unit} will be revised from this month. This will be reflected in upcoming month (${billMonthLabel}).`
         );
     } else {
         lines.push(`As per ${grnText}${commencementText}, your rent for ${unit} will be revised in ${monthLabel}.`);
     }
-    if (item.revisionNote) lines.push(`Note: ${item.revisionNote}`);
     lines.push("Please contact us for any questions.");
     return lines.join("\n");
 }
