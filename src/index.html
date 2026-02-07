@@ -2638,15 +2638,26 @@
         <div>
           <p class="text-[10px] uppercase text-slate-500 font-semibold">Revision decision</p>
           <h3 id="revisionDecisionTitle" class="text-base font-semibold text-slate-800">Review rent revision</h3>
-          <p class="text-[11px] text-slate-500">Enter the rent amount for this cycle.</p>
+          <p id="revisionDecisionSubtitle" class="text-[11px] text-slate-500">Enter the rent amount for this cycle.</p>
         </div>
         <button id="revisionDecisionClose" class="text-slate-500 hover:text-slate-800" aria-label="Close">
           &times;
         </button>
       </div>
 
+      <div id="revisionDecisionFormula" class="hidden rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+        <div class="text-[10px] text-slate-500">Current rent + revised increase = new revised rent</div>
+        <div class="mt-1 text-[11px] text-slate-700 font-semibold">
+          <span id="revisionDecisionCurrentRent">-</span>
+          <span class="mx-1 text-slate-400">+</span>
+          <span id="revisionDecisionPreviousIncrease">-</span>
+          <span class="mx-1 text-slate-400">=</span>
+          <span id="revisionDecisionComputedRent">-</span>
+        </div>
+      </div>
+
       <div class="space-y-1">
-        <label class="text-[11px] font-semibold text-slate-700">Revised rent amount (₹)</label>
+        <label id="revisionDecisionAmountLabel" class="text-[11px] font-semibold text-slate-700">Revised rent amount (₹)</label>
         <input id="revisionDecisionAmount" type="number"
           class="w-full border rounded-lg px-3 py-2 text-[12px]" placeholder="Enter amount" />
       </div>

@@ -33,6 +33,12 @@ function getElements() {
         autoSendCount: document.getElementById("revisionNotificationAutoSendCount"),
         decisionModal: document.getElementById("revisionDecisionModal"),
         decisionTitle: document.getElementById("revisionDecisionTitle"),
+        decisionSubtitle: document.getElementById("revisionDecisionSubtitle"),
+        decisionAmountLabel: document.getElementById("revisionDecisionAmountLabel"),
+        decisionFormula: document.getElementById("revisionDecisionFormula"),
+        decisionCurrentRent: document.getElementById("revisionDecisionCurrentRent"),
+        decisionPreviousIncrease: document.getElementById("revisionDecisionPreviousIncrease"),
+        decisionComputedRent: document.getElementById("revisionDecisionComputedRent"),
         decisionAmount: document.getElementById("revisionDecisionAmount"),
         decisionClose: document.getElementById("revisionDecisionClose"),
         decisionCancel: document.getElementById("revisionDecisionCancel"),
@@ -986,6 +992,37 @@ function findItemById(id) {
     return revisionNotificationState.items.find((item) => item.id === id);
 }
 
+function setDecisionFormulaState(context, typedIncreaseRaw = "") {
+    const {
+        decisionFormula,
+        decisionCurrentRent,
+        decisionPreviousIncrease,
+        decisionComputedRent,
+    } = getElements();
+    if (!decisionFormula || !decisionCurrentRent || !decisionPreviousIncrease || !decisionComputedRent) return;
+
+    const isReject = context?.action === "reject";
+    decisionFormula.classList.toggle("hidden", !isReject);
+    if (!isReject) return;
+
+    const currentRent = parseNumber(context?.currentRent, null);
+    const previousIncrease = parseNumber(context?.previousIncrease, null);
+    const typedIncrease =
+        typeof typedIncreaseRaw === "string" && typedIncreaseRaw.trim() === ""
+            ? null
+            : parseNumber(typedIncreaseRaw, null);
+    const displayIncrease =
+        typedIncrease !== null && typedIncrease >= 0 ? typedIncrease : previousIncrease;
+    const computedRent =
+        currentRent !== null && displayIncrease !== null && displayIncrease >= 0
+            ? currentRent + displayIncrease
+            : null;
+
+    decisionCurrentRent.textContent = formatMoney(currentRent);
+    decisionPreviousIncrease.textContent = formatMoney(displayIncrease);
+    decisionComputedRent.textContent = formatMoney(computedRent);
+}
+
 function bindSendListEvents() {
     const { modalList } = getElements();
     if (!modalList || modalList.dataset.bound === "true") return;
@@ -1321,23 +1358,64 @@ async function loadRevisionNotifications() {
 }
 
 function openDecisionModal(action, item) {
-    const { decisionModal, decisionTitle, decisionAmount, decisionConfirm } = getElements();
+    const {
+        decisionModal,
+        decisionTitle,
+        decisionSubtitle,
+        decisionAmountLabel,
+        decisionAmount,
+        decisionConfirm,
+    } = getElements();
     if (!decisionModal || !decisionTitle || !decisionAmount || !decisionConfirm) return;
-    const amount = parseNumber(item?.revisedRent ?? item?.currentRent ?? null, null);
-    decisionTitle.textContent =
-        action === "approve" ? "Approve rent revision" : "Reject rent revision";
-    decisionConfirm.textContent = action === "approve" ? "Approve" : "Reject";
-    decisionAmount.value = amount !== null ? String(amount) : "";
+    const currentRent = parseNumber(item?.currentRent ?? null, null);
+    const revisedRent = parseNumber(item?.revisedRent ?? item?.currentRent ?? null, null);
+    const configuredIncrease = parseNumber(item?.increaseAmount ?? null, null);
+    const derivedIncrease =
+        configuredIncrease !== null
+            ? configuredIncrease
+            : currentRent !== null && revisedRent !== null
+                ? revisedRent - currentRent
+                : null;
+    const isReject = action === "reject";
+
+    decisionTitle.textContent = isReject ? "Reject and revise rent" : "Approve rent revision";
+    if (decisionSubtitle) {
+        decisionSubtitle.textContent = isReject
+            ? "Rejecting this suggestion still updates rent. Enter the revised increase amount."
+            : "Enter the rent amount for this cycle.";
+    }
+    if (decisionAmountLabel) {
+        decisionAmountLabel.textContent = isReject
+            ? "Revised increase amount (₹)"
+            : "Revised rent amount (₹)";
+    }
+    decisionConfirm.textContent = isReject ? "Save revised rent" : "Approve";
+    decisionAmount.value = isReject
+        ? derivedIncrease !== null
+            ? String(derivedIncrease)
+            : ""
+        : revisedRent !== null
+            ? String(revisedRent)
+            : "";
     decisionModal.dataset.action = action || "";
     decisionModal.dataset.itemId = item?.id || "";
-    revisionNotificationState.decisionContext = { action, itemId: item?.id || "" };
+    revisionNotificationState.decisionContext = {
+        action,
+        itemId: item?.id || "",
+        currentRent,
+        previousIncrease: derivedIncrease,
+    };
+    setDecisionFormulaState(revisionNotificationState.decisionContext, decisionAmount.value);
     showModal(decisionModal);
     decisionAmount.focus();
 }
 
 function closeDecisionModal() {
-    const { decisionModal, decisionAmount } = getElements();
+    const { decisionModal, decisionAmount, decisionSubtitle, decisionAmountLabel } = getElements();
     if (decisionAmount) decisionAmount.value = "";
+    if (decisionSubtitle) decisionSubtitle.textContent = "Enter the rent amount for this cycle.";
+    if (decisionAmountLabel) decisionAmountLabel.textContent = "Revised rent amount (₹)";
+    setDecisionFormulaState(null);
     if (decisionModal) {
         decisionModal.dataset.action = "";
         decisionModal.dataset.itemId = "";
@@ -1351,7 +1429,7 @@ async function finalizeApproval(item, amount) {
     const effectiveMonth = item.nextRevisionMonth;
     if (!effectiveMonth) {
         showToast("Missing revision month", "error");
-        return;
+        return false;
     }
     const note = item.revisionNote || "Approved via revision notification";
     const result = await saveRentRevision({
@@ -1362,7 +1440,7 @@ async function finalizeApproval(item, amount) {
     });
     if (result?.ok === false) {
         showToast("Failed to approve revision", "error");
-        return;
+        return false;
     }
     const nowIso = new Date().toISOString();
     await saveRentRevisionReminder(
@@ -1374,10 +1452,31 @@ async function finalizeApproval(item, amount) {
         })
     );
     showToast("Revision approved", "success");
+    return true;
 }
 
-async function finalizeRejection(item, amount) {
-    if (!item) return;
+async function finalizeRejection(item, amount, revisedIncrease) {
+    if (!item) return false;
+    const effectiveMonth = item.nextRevisionMonth;
+    if (!effectiveMonth) {
+        showToast("Missing revision month", "error");
+        return false;
+    }
+    const notePrefix = item.revisionNote ? `${item.revisionNote} | ` : "";
+    const note = `${notePrefix}Rejected suggested revision and applied revised increase ${Number(
+        revisedIncrease
+    )}.`;
+    const result = await saveRentRevision({
+        tenancyId: item.tenancyId,
+        effectiveMonth,
+        rentAmount: amount,
+        note,
+    });
+    if (result?.ok === false) {
+        showToast("Failed to save revised rent", "error");
+        return false;
+    }
+
     const nowIso = new Date().toISOString();
     await saveRentRevisionReminder(
         buildReminderPayload(item, {
@@ -1387,7 +1486,8 @@ async function finalizeRejection(item, amount) {
             updatedAt: nowIso,
         })
     );
-    showToast("Revision rejected", "success");
+    showToast("Revision rejected and revised rent saved", "success");
+    return true;
 }
 
 function handleApproveAction(item) {
@@ -1413,17 +1513,31 @@ async function handleDecisionConfirm() {
         closeDecisionModal();
         return;
     }
-    const amount = parseNumber(decisionAmount.value, null);
-    if (amount === null || amount <= 0) {
-        showToast("Enter a valid rent amount", "warning");
-        return;
-    }
     if (context.action === "approve") {
-        await finalizeApproval(item, amount);
+        const amountRaw = (decisionAmount.value || "").toString().trim();
+        const amount = amountRaw === "" ? null : parseNumber(amountRaw, null);
+        if (amount === null || amount <= 0) {
+            showToast("Enter a valid rent amount", "warning");
+            return;
+        }
+        const ok = await finalizeApproval(item, amount);
+        if (ok) closeDecisionModal();
     } else {
-        await finalizeRejection(item, amount);
+        const increaseRaw = (decisionAmount.value || "").toString().trim();
+        const revisedIncrease = increaseRaw === "" ? null : parseNumber(increaseRaw, null);
+        if (revisedIncrease === null || revisedIncrease < 0) {
+            showToast("Enter a valid revised increase amount", "warning");
+            return;
+        }
+        const currentRent = parseNumber(item.currentRent, null);
+        if (currentRent === null || currentRent < 0) {
+            showToast("Current rent is missing for this tenancy", "error");
+            return;
+        }
+        const revisedRentAmount = currentRent + revisedIncrease;
+        const ok = await finalizeRejection(item, revisedRentAmount, revisedIncrease);
+        if (ok) closeDecisionModal();
     }
-    closeDecisionModal();
 }
 
 function bindModalEvents() {
@@ -1436,6 +1550,7 @@ function bindModalEvents() {
         decisionModal,
         decisionClose,
         decisionCancel,
+        decisionAmount,
         decisionConfirm,
     } = getElements();
     if (expandBtn && !expandBtn.dataset.bound) {
@@ -1479,6 +1594,13 @@ function bindModalEvents() {
     if (decisionConfirm && !decisionConfirm.dataset.bound) {
         decisionConfirm.dataset.bound = "1";
         decisionConfirm.addEventListener("click", handleDecisionConfirm);
+    }
+
+    if (decisionAmount && !decisionAmount.dataset.bound) {
+        decisionAmount.dataset.bound = "1";
+        decisionAmount.addEventListener("input", () => {
+            setDecisionFormulaState(revisionNotificationState.decisionContext, decisionAmount.value);
+        });
     }
 
     if (toggleAll && !toggleAll.dataset.bound) {
