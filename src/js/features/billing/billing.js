@@ -17,6 +17,7 @@ import { escapeHtml } from "../../utils/htmlUtils.js";
 import { cloneSelectOptions, hideModal, showModal, showToast, smoothToggle } from "../../utils/ui.js";
 import { ensureTenantDirectoryLoaded, getActiveTenantsForWing } from "../tenants/tenants.js";
 import { fetchBillingRecord, fetchGeneratedBills, saveBillingRecord } from "../../api/sheets.js";
+import { getRevisionDecisionLockInfo } from "../dashboard/revisionNotifications.js";
 
 const CALENDAR_PAGE_SIZE = 12;
 
@@ -35,6 +36,11 @@ const billingState = {
     coverageLoaded: false,
     calendarPage: 0,
     calendarRangeKey: "",
+    revisionDecisionLock: {
+        active: false,
+        count: 0,
+        items: [],
+    },
     motorSnapshot: null,
     savedSnapshot: null,
     meta: {
@@ -212,6 +218,15 @@ function hasBillingChanges() {
 function updateGenerateButtonState() {
     const btn = document.getElementById("billingGenerateBtn");
     if (!btn) return;
+    if (billingState.revisionDecisionLock.active) {
+        btn.textContent = "Billing locked";
+        btn.disabled = true;
+        btn.classList.remove("bg-emerald-600", "hover:bg-emerald-500", "bg-amber-500", "hover:bg-amber-400");
+        btn.classList.add("bg-rose-600", "hover:bg-rose-500", "opacity-70", "cursor-not-allowed");
+        return;
+    }
+    btn.disabled = false;
+    btn.classList.remove("bg-rose-600", "hover:bg-rose-500", "opacity-70", "cursor-not-allowed");
     const shouldUpdate = hasBillingChanges();
     if (shouldUpdate) {
         btn.textContent = "Update bills";
@@ -411,6 +426,11 @@ function resetBillingForm() {
 }
 
 function openBillingModal(month) {
+    if (billingState.revisionDecisionLock.active) {
+        showToast(getRevisionDecisionLockMessage(), "warning");
+        renderRevisionDecisionLockNotice();
+        return;
+    }
     const modal = document.getElementById("billingWingModal");
     const monthText = document.getElementById("billingModalMonthLabel");
     const wingSelect = document.getElementById("billingWingSelect");
@@ -465,6 +485,45 @@ function getMonthGenerationStatus(monthKey) {
         label: `${coveredWings}/${totalWings} wings billed`,
         textClass: "text-amber-700",
     };
+}
+
+function getRevisionDecisionLockMessage() {
+    const count = Number(billingState.revisionDecisionLock.count) || 0;
+    if (count <= 0) {
+        return "Billing is locked until rent revision decisions are completed.";
+    }
+    const label = count === 1 ? "rent revision entry" : "rent revision entries";
+    const verb = count === 1 ? "needs" : "need";
+    return `Billing is locked. ${count} ${label} ${verb} Approve/Reject decision in Revision notification.`;
+}
+
+function renderRevisionDecisionLockNotice() {
+    const notice = document.getElementById("billingCalendarLockNotice");
+    if (!notice) return;
+    if (!billingState.revisionDecisionLock.active) {
+        notice.classList.add("hidden");
+        notice.textContent = "";
+        return;
+    }
+    notice.textContent = getRevisionDecisionLockMessage();
+    notice.classList.remove("hidden");
+}
+
+async function refreshRevisionDecisionLockState(options = {}) {
+    const { notifyOnNewLock = false } = options;
+    const wasLocked = billingState.revisionDecisionLock.active;
+    const info = await getRevisionDecisionLockInfo();
+    billingState.revisionDecisionLock = {
+        active: !!info?.locked,
+        count: Number(info?.count) || 0,
+        items: Array.isArray(info?.items) ? info.items : [],
+    };
+    renderRevisionDecisionLockNotice();
+    renderBillingCalendar();
+    updateGenerateButtonState();
+    if (notifyOnNewLock && !wasLocked && billingState.revisionDecisionLock.active) {
+        showToast(getRevisionDecisionLockMessage(), "warning");
+    }
 }
 
 function getBillingCalendarControlNodes() {
@@ -540,6 +599,7 @@ function markCoverageForSelection() {
 function renderBillingCalendar() {
     const grid = document.getElementById("billingMonthsGrid");
     if (!grid) return;
+    renderRevisionDecisionLockNotice();
 
     if (!billingState.availableWings.length) {
         billingState.availableWings = getAvailableWings();
@@ -550,31 +610,43 @@ function renderBillingCalendar() {
     billingState.calendarRangeKey = getCalendarRangeKey(pageInfo);
     updateBillingCalendarControls(pageInfo);
     const months = pageInfo.months;
+    const lockActive = billingState.revisionDecisionLock.active;
 
     months.forEach((month) => {
         const card = document.createElement("button");
         card.type = "button";
         const status = getMonthGenerationStatus(month.key);
 
-        const baseClasses =
-            "w-full aspect-[4/3] max-h-28 rounded-xl border bg-gradient-to-br shadow-sm hover:shadow-lg transition transform hover:-translate-y-1 flex items-center justify-center text-center p-1.5";
+        const baseClasses = lockActive
+            ? "w-full aspect-[4/3] max-h-28 rounded-xl border bg-gradient-to-br shadow-sm transition flex items-center justify-center text-center p-1.5 opacity-70 cursor-not-allowed"
+            : "w-full aspect-[4/3] max-h-28 rounded-xl border bg-gradient-to-br shadow-sm hover:shadow-lg transition transform hover:-translate-y-1 flex items-center justify-center text-center p-1.5";
         const statusClasses = {
             full: "border-emerald-200 from-emerald-50 to-white",
             partial: "border-amber-200 from-amber-50 to-white",
             none: "border-rose-200 from-rose-50 to-white",
             unknown: "border-slate-200 from-slate-50 to-white",
+            locked: "border-rose-300 from-rose-100 to-rose-50",
         };
+        const statusKey = lockActive ? "locked" : status.key;
+        const statusLabel = lockActive ? "Locked by revision decision" : status.label;
+        const statusTextClass = lockActive ? "text-rose-700" : status.textClass;
 
-        card.className = `${baseClasses} ${statusClasses[status.key] || statusClasses.unknown}`;
+        card.className = `${baseClasses} ${statusClasses[statusKey] || statusClasses.unknown}`;
+        card.disabled = lockActive;
+        if (lockActive) {
+            card.title = getRevisionDecisionLockMessage();
+        }
 
         card.innerHTML = `
             <div class="space-y-1">
                 <p class="text-sm md:text-base font-semibold text-slate-800">${month.label}</p>
-                <p class="text-[11px] font-semibold ${status.textClass}">${status.label}</p>
+                <p class="text-[11px] font-semibold ${statusTextClass}">${statusLabel}</p>
             </div>
         `;
 
-        card.addEventListener("click", () => openBillingModal(month));
+        if (!lockActive) {
+            card.addEventListener("click", () => openBillingModal(month));
+        }
         grid.appendChild(card);
     });
 }
@@ -1021,6 +1093,10 @@ async function handleGenerateAndPrompt() {
 }
 
 async function handleSaveBills() {
+    if (billingState.revisionDecisionLock.active) {
+        showToast(getRevisionDecisionLockMessage(), "warning");
+        return false;
+    }
     if (!billingState.selectedMonthKey || !billingState.selectedWing) {
         showToast("Pick a month and wing first", "error");
         return false;
@@ -1895,6 +1971,7 @@ export function initBillingFeature() {
     cloneSelectOptions("wing", "billingWingSelect");
     setupModalEvents();
     refreshBillingCalendarCoverage();
+    refreshRevisionDecisionLockState();
 
     const { prevButtons, nextButtons } = getBillingCalendarControlNodes();
     prevButtons.forEach((prevBtn) => {
@@ -1915,11 +1992,24 @@ export function initBillingFeature() {
     });
 
     document.addEventListener("rentRevisions:updated", () => {
+        refreshRevisionDecisionLockState({ notifyOnNewLock: true });
         billingRecordCache.clear();
         const modal = document.getElementById("billingWingModal");
         const isOpen = modal && !modal.classList.contains("hidden");
         if (!isOpen) return;
         if (!billingState.selectedMonthKey || !getSelectedWingNormalized()) return;
         refreshBillingData(true);
+    });
+    document.addEventListener("rentRevisionReminders:updated", () => {
+        refreshRevisionDecisionLockState({ notifyOnNewLock: true });
+    });
+    document.addEventListener("tenancies:updated", () => {
+        refreshRevisionDecisionLockState();
+    });
+    document.addEventListener("tenants:updated", () => {
+        refreshRevisionDecisionLockState();
+    });
+    document.addEventListener("sync:completed", () => {
+        refreshRevisionDecisionLockState();
     });
 }

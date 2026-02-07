@@ -1357,6 +1357,38 @@ async function loadRevisionNotifications() {
     }
 }
 
+export async function getRevisionDecisionLockInfo() {
+    try {
+        const [tenancies, tenants, units, revisions, reminders] = await Promise.all([
+            getLocalList(LOCAL_KEYS.tenancies, []),
+            getLocalList(LOCAL_KEYS.tenants, []),
+            getLocalList(LOCAL_KEYS.units, []),
+            getLocalList(LOCAL_KEYS.rentRevisionsAll, []),
+            getLocalList(LOCAL_KEYS.rentRevisionReminders, []),
+        ]);
+        const items = buildItems(
+            Array.isArray(tenancies) ? tenancies : [],
+            Array.isArray(tenants) ? tenants : [],
+            Array.isArray(units) ? units : [],
+            Array.isArray(revisions) ? revisions : [],
+            Array.isArray(reminders) ? reminders : []
+        );
+        const pendingApprovalRows = items.filter((item) => item?.isApprovalMonth);
+        return {
+            locked: pendingApprovalRows.length > 0,
+            count: pendingApprovalRows.length,
+            items: pendingApprovalRows,
+        };
+    } catch (err) {
+        console.error("Failed to resolve revision decision lock info", err);
+        return {
+            locked: false,
+            count: 0,
+            items: [],
+        };
+    }
+}
+
 function openDecisionModal(action, item) {
     const {
         decisionModal,
