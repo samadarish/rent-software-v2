@@ -379,6 +379,14 @@ label {
   overflow: visible;
 }
 
+#dashboardGrid [data-notes-widget="dashboard"] {
+  overflow: hidden;
+}
+
+#dashboardGrid [data-notes-widget="dashboard"] .note-textarea {
+  resize: none;
+}
+
 /* ========== CUSTOM TOOLTIPS ========== */
 
 /* JS-based tooltip appended to body - not affected by parent overflow */
