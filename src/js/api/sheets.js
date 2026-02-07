@@ -388,6 +388,7 @@ async function loadGeneratedBillsBase(url) {
     const cached = entry?.value && typeof entry.value === "object" ? entry.value : null;
     if (cached && Array.isArray(cached.bills)) {
         if (shouldRevalidate(entry, false) && navigator.onLine && url) {
+            const refreshStartedAt = Date.now();
             callAppScript({
                 url,
                 action: "generatedbills",
@@ -395,6 +396,13 @@ async function loadGeneratedBillsBase(url) {
             })
                 .then(async (data) => {
                     if (data && Array.isArray(data.bills)) {
+                        // Prevent older async revalidation responses from clobbering newer local updates
+                        // (e.g. a payment just recorded locally and synced).
+                        const latest = await getLocalEntry(LOCAL_KEYS.generatedBills);
+                        const latestUpdatedAt = Number(latest?.updated_at || latest?.updatedAt || 0);
+                        if (latestUpdatedAt && latestUpdatedAt > refreshStartedAt) {
+                            return;
+                        }
                         await setLocalData(LOCAL_KEYS.generatedBills, data);
                     }
                 })
