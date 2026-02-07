@@ -60,6 +60,9 @@ async function readLocalCache(cacheKey, ttlMs, allowStale) {
  * Opens the Apps Script URL configuration modal when the user needs to set it up.
  */
 function showConfigModal() {
+    const gate = document.getElementById("loginGateOverlay");
+    if (gate && !gate.classList.contains("hidden")) return;
+    if (getAppScriptUrl()) return;
     openAppScriptModal({ mode: "input" });
 }
 

@@ -45,6 +45,79 @@
     </div>
   </div>
 
+  <div id="loginGateOverlay" class="fixed inset-0 z-[10000] bg-slate-900 flex items-center justify-center p-4">
+    <div class="absolute top-0 right-0 flex items-stretch gap-0 border-l border-slate-600 bg-slate-900/90">
+      <button type="button" data-window-control="minimize"
+        class="inline-flex h-10 w-12 items-center justify-center hover:bg-slate-700 transition" title="Minimize">
+        <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M4 12h16" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button type="button" data-window-control="maximize"
+        class="inline-flex h-10 w-12 items-center justify-center hover:bg-slate-700 transition" title="Maximize">
+        <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <rect x="5" y="5" width="14" height="14" rx="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button type="button" data-window-control="close"
+        class="inline-flex h-10 w-12 items-center justify-center hover:bg-rose-600 transition" title="Close">
+        <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M6 6l12 12M6 18L18 6" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-4 md:p-5 border border-slate-200">
+      <div class="flex items-start gap-3">
+        <span
+          class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 text-sm font-semibold">
+          Key
+        </span>
+        <div class="flex-1">
+          <h3 id="loginGateTitle" class="text-sm font-semibold text-slate-900">Connect to App Script</h3>
+          <p id="loginGateSubtitle" class="text-[11px] text-slate-500 mt-0.5">Paste your Apps Script Web App URL.</p>
+        </div>
+      </div>
+
+      <div id="loginGateError"
+        class="hidden mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
+      </div>
+
+      <div id="loginGateUrlStep" class="mt-4 space-y-3">
+        <div class="space-y-1">
+          <label class="text-[11px] font-semibold text-slate-700">Apps Script Web App URL</label>
+          <input type="text" id="loginGateUrlInput"
+            class="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-200"
+            placeholder="https://script.google.com/macros/s/.../exec" />
+        </div>
+        <div class="flex justify-end">
+          <button id="loginGateUrlContinueBtn"
+            class="px-3 py-1.5 text-[11px] rounded-lg bg-slate-900 text-white hover:bg-slate-800 font-semibold">
+            Continue
+          </button>
+        </div>
+      </div>
+
+      <div id="loginGateKeyStep" class="hidden mt-4 space-y-3">
+        <div class="space-y-1">
+          <label class="text-[11px] font-semibold text-slate-700">Password / Key</label>
+          <input type="password" id="loginGateKeyInput"
+            class="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-200"
+            placeholder="Enter key from Key sheet" />
+        </div>
+        <div class="flex justify-end gap-2">
+          <button id="loginGateBackBtn"
+            class="px-3 py-1.5 text-[11px] rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 font-semibold">
+            Back
+          </button>
+          <button id="loginGateUnlockBtn"
+            class="px-3 py-1.5 text-[11px] rounded-lg bg-slate-900 text-white hover:bg-slate-800 font-semibold">
+            Unlock app
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="appShell" class="min-h-screen flex flex-col">
     <!-- HEADER -->
     <header class="bg-slate-900 text-white pl-3 md:pl-6 pr-0 md:pr-0 grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">
@@ -86,6 +159,7 @@
         <!-- Custom Window Controls -->
         <div class="flex items-stretch gap-0 border-l border-slate-600">
           <button id="windowMinimizeBtn"
+            data-window-control="minimize"
             class="flex-none inline-flex items-center justify-center h-full aspect-square rounded-none hover:bg-slate-700 transition"
             title="Minimize">
             <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -93,6 +167,7 @@
             </svg>
           </button>
           <button id="windowMaximizeBtn"
+            data-window-control="maximize"
             class="flex-none inline-flex items-center justify-center h-full aspect-square rounded-none hover:bg-slate-700 transition"
             title="Maximize">
             <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -100,6 +175,7 @@
             </svg>
           </button>
           <button id="windowCloseBtn"
+            data-window-control="close"
             class="flex-none inline-flex items-center justify-center h-full aspect-square rounded-none hover:bg-rose-600 transition"
             title="Close">
             <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -222,6 +298,10 @@
           <button id="clearDraftsBtn"
             class="w-full mt-2 text-[11px] px-3 py-1.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50">Clear
             all drafts</button>
+          <button id="navLockAppBtn"
+            class="w-full mt-2 text-[11px] px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100">
+            Lock app
+          </button>
         </aside>
 
         <!-- MIDDLE VIEW: DASHBOARD PLACEHOLDER -->
@@ -2423,6 +2503,26 @@
 
     <!-- APPSCRIPT URL MODAL -->
     <div id="appscriptModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40 fade-overlay">
+      <div class="absolute top-0 right-0 flex items-stretch gap-0 border-l border-slate-600 bg-slate-900/90">
+        <button type="button" data-window-control="minimize"
+          class="inline-flex h-10 w-12 items-center justify-center hover:bg-slate-700 transition" title="Minimize">
+          <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M4 12h16" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button type="button" data-window-control="maximize"
+          class="inline-flex h-10 w-12 items-center justify-center hover:bg-slate-700 transition" title="Maximize">
+          <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <rect x="5" y="5" width="14" height="14" rx="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button type="button" data-window-control="close"
+          class="inline-flex h-10 w-12 items-center justify-center hover:bg-rose-600 transition" title="Close">
+          <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M6 6l12 12M6 18L18 6" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
       <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-4 md:p-5 modal-panel border border-slate-200">
         <div class="flex items-start gap-3">
           <div class="h-10 w-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-sm font-semibold">

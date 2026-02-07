@@ -29,6 +29,7 @@ const DOCS_SHEET = 'Docs';
 const INDEX_SHEET = 'Index';
 const TENANCY_RENT_REVISIONS_SHEET = 'TenancyRentRevisions';
 const RENT_REVISION_REMINDERS_SHEET = 'RentRevisionReminders';
+const KEY_SHEET = 'Key';
 
 /********* HEADERS *********/
 const TENANTS_HEADERS = [
@@ -215,6 +216,13 @@ const DOC_HEADERS = [
   'uploaded_at',
   'doc_type',
   'doc_details',
+];
+
+const KEY_HEADERS = [
+  'key',
+  'is_active',
+  'label',
+  'created_at',
 ];
 
 const BASE_DRIVE_FOLDER = 'Tenant_App_Data (Do not Delete ❌)';
@@ -720,6 +728,25 @@ function handleSaveNotes_(payload) {
     sheet.getRange(2, 1, rows.length, NOTES_HEADERS.length).setValues(rows);
   }
   return jsonResponse({ ok: true, notes: normalized });
+}
+
+/********* APP LOGIN KEY *********/
+function validateAppLoginKey_(rawKey) {
+  const candidate = (rawKey || '').toString().trim();
+  if (!candidate) return { ok: false, valid: false, error: 'Key missing' };
+
+  const rows = readTable_(KEY_SHEET, KEY_HEADERS);
+  const matched = rows.some((row) => {
+    const keyValue = (row.key || '').toString().trim();
+    if (!keyValue) return false;
+    const activeRaw = row.is_active;
+    const isActive = activeRaw === '' || activeRaw === null || activeRaw === undefined
+      ? true
+      : normalizeBoolean_(activeRaw);
+    return isActive && keyValue === candidate;
+  });
+
+  return { ok: true, valid: matched };
 }
 
 /********* TENANTS + TENANCIES *********/
@@ -2361,6 +2388,10 @@ function doGet(e) {
       return jsonResponse({ ok: true, notes });
     }
 
+    if (action === 'validatekey') {
+      return jsonResponse(validateAppLoginKey_(e.parameter && e.parameter.key));
+    }
+
     if (action === 'allsheets') {
       return jsonResponse({ ok: true, allSheets: readAllSheetsSnapshot_() });
     }
@@ -2459,6 +2490,10 @@ function doPost(e) {
     if (!e.postData || !e.postData.contents) return jsonResponse({ ok: false, error: 'No postData.contents' });
     const body = JSON.parse(e.postData.contents);
     const action = body.action;
+    if (action === 'validateKey' || action === 'validatekey') {
+      const payload = body.payload || {};
+      return jsonResponse(validateAppLoginKey_(payload.key || payload.password || payload.value || ''));
+    }
     if (action === 'saveTenant') return handleSaveTenant_(body.payload);
     if (action === 'updateTenant') return handleUpdateTenant_(body.payload);
     if (action === 'vacateTenancy') return handleVacateTenancy_(body.payload || {});

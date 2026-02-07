@@ -9,53 +9,58 @@
  * Initialize custom window control buttons
  */
 export function initWindowControls() {
-    const minimizeBtn = document.getElementById("windowMinimizeBtn");
-    const maximizeBtn = document.getElementById("windowMaximizeBtn");
-    const closeBtn = document.getElementById("windowCloseBtn");
+    const controlSelector = "[data-window-control]";
+    const getControls = (action) =>
+        Array.from(document.querySelectorAll(`${controlSelector}[data-window-control="${action}"]`));
+    const bindControls = (action, handler) => {
+        getControls(action).forEach((btn) => {
+            if (!btn || btn.dataset.windowControlBound === "1") return;
+            btn.dataset.windowControlBound = "1";
+            btn.addEventListener("click", async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                await handler();
+            });
+        });
+    };
 
     if (!window.__TAURI__) {
         // Hide controls in browser mode
-        [minimizeBtn, maximizeBtn, closeBtn].forEach(btn => {
+        Array.from(document.querySelectorAll(controlSelector)).forEach((btn) => {
             if (btn) btn.style.display = "none";
         });
         return;
     }
 
-    // Minimize button
-    if (minimizeBtn) {
-        minimizeBtn.addEventListener("click", async () => {
-            try {
-                const { getCurrentWindow } = window.__TAURI__.window;
-                await getCurrentWindow().minimize();
-            } catch (err) {
-                console.error("Failed to minimize window:", err);
-            }
-        });
-    }
+    // Minimize buttons
+    bindControls("minimize", async () => {
+        try {
+            const { getCurrentWindow } = window.__TAURI__.window;
+            await getCurrentWindow().minimize();
+        } catch (err) {
+            console.error("Failed to minimize window:", err);
+        }
+    });
 
-    // Maximize/restore button
-    if (maximizeBtn) {
-        maximizeBtn.addEventListener("click", async () => {
-            try {
-                const { getCurrentWindow } = window.__TAURI__.window;
-                await getCurrentWindow().toggleMaximize();
-            } catch (err) {
-                console.error("Failed to toggle maximize:", err);
-            }
-        });
-    }
+    // Maximize/restore buttons
+    bindControls("maximize", async () => {
+        try {
+            const { getCurrentWindow } = window.__TAURI__.window;
+            await getCurrentWindow().toggleMaximize();
+        } catch (err) {
+            console.error("Failed to toggle maximize:", err);
+        }
+    });
 
-    // Close button
-    if (closeBtn) {
-        closeBtn.addEventListener("click", async () => {
-            try {
-                const { getCurrentWindow } = window.__TAURI__.window;
-                await getCurrentWindow().close();
-            } catch (err) {
-                console.error("Failed to close window:", err);
-            }
-        });
-    }
+    // Close buttons
+    bindControls("close", async () => {
+        try {
+            const { getCurrentWindow } = window.__TAURI__.window;
+            await getCurrentWindow().close();
+        } catch (err) {
+            console.error("Failed to close window:", err);
+        }
+    });
 
     // Enable dragging on the header
     const header = document.querySelector("header");

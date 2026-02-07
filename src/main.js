@@ -26,6 +26,7 @@ import { attachEventHandlers } from "./js/events.js";
 import { initToastHistoryUi, showToast, updateConnectionIndicator } from "./js/utils/ui.js";
 import { initDraftUi } from "./js/features/shared/drafts.js";
 import { initNotesFeature } from "./js/features/shared/notes.js";
+import { ensureLoginGate } from "./js/features/auth/loginGate.js";
 import { initValidationMasterToggle } from "./js/features/shared/validationMode.js";
 import { initWindowControls } from "./js/utils/windowControls.js";
 import { initBillIdSearch, initSidebarBillIdSearch } from "./js/features/dashboard/billSearch.js";
@@ -46,6 +47,9 @@ import { currentFlow } from "./js/state.js";
  * Runs when the DOM is fully loaded
  */
 document.addEventListener("DOMContentLoaded", async () => {
+  const loginResult = await ensureLoginGate();
+  if (loginResult?.ok === false) return;
+
   // Set initial view immediately to prevent agreement flash on first load
   switchFlow("dashboard");
 

@@ -65,6 +65,18 @@ textarea {
   box-shadow: var(--note-shadow-focus, inset 0 6px 18px rgba(15, 23, 42, 0.3));
 }
 
+#loginGateOverlay {
+  transform: translateY(0);
+  opacity: 1;
+  transition: transform 700ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 450ms ease;
+}
+
+#loginGateOverlay.is-opening {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Make the main grid a little tighter on spacing */
 main {
   font-size: 0.8rem;

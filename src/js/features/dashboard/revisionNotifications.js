@@ -410,6 +410,12 @@ function getLatestRevisionEntry(list, currentMonthKey) {
     return filtered.length ? filtered[filtered.length - 1] : null;
 }
 
+function getLatestRevisionBeforeMonth(list, monthKey) {
+    if (!Array.isArray(list) || !list.length || !monthKey) return null;
+    const filtered = list.filter((entry) => entry.monthKey < monthKey);
+    return filtered.length ? filtered[filtered.length - 1] : null;
+}
+
 function getRevisionEntryForMonth(list, monthKey) {
     if (!Array.isArray(list) || !list.length || !monthKey) return null;
     return list.find((entry) => entry.monthKey === monthKey) || null;
@@ -565,9 +571,12 @@ function buildItems(tenancies, tenants, units, revisions, reminders) {
             currentMonthKey <= sendUntilMonth;
         const messageType = isRevisionMonth ? "effective-month" : "regular";
 
-        const latestRevisionEntry = getLatestRevisionEntry(revisionsForTenancy, currentMonthKey);
+        const rentBeforeRevisionEntry = getLatestRevisionBeforeMonth(
+            revisionsForTenancy,
+            nextRevisionMonth
+        );
         const currentRent =
-            latestRevisionEntry?.rentAmount ??
+            rentBeforeRevisionEntry?.rentAmount ??
             parseNumber(
                 tenant?.currentRent ??
                     tenant?.rentAmount ??
@@ -581,6 +590,7 @@ function buildItems(tenancies, tenants, units, revisions, reminders) {
         if (revisedRent === null && currentRent !== null && configuredIncrease !== null) {
             revisedRent = currentRent + configuredIncrease;
         }
+        const hasSavedRevision = !!nextRevisionEntry;
         const increaseAmount =
             currentRent !== null && revisedRent !== null ? revisedRent - currentRent : configuredIncrease;
 
@@ -617,6 +627,7 @@ function buildItems(tenancies, tenants, units, revisions, reminders) {
             alreadySentThisMonth,
             sendCount: reminder?.send_count || 0,
             lastMessageType: reminder?.last_message_type || "",
+            hasSavedRevision,
             currentRent,
             revisedRent,
             increaseAmount,
@@ -734,7 +745,7 @@ function renderModal(items) {
         const intervalLabel = escapeHtml(formatIntervalLabel(item.interval));
         const noticeLabel = escapeHtml(`${item.noticeMonths || 0} mo`);
         const rentBefore = escapeHtml(formatMoney(item.currentRent));
-        const revisedRent = escapeHtml(formatMoney(item.revisedRent));
+        const revisedRent = escapeHtml(item.hasSavedRevision ? formatMoney(item.revisedRent) : "-");
         const noteLabel = escapeHtml(item.revisionNote || "-");
         const statusMeta = getStatusMeta(item);
         const manualLabel = item.alreadySentThisMonth

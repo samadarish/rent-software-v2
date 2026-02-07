@@ -9,7 +9,9 @@ import { hideModal, showModal, showToast, updateConnectionIndicator } from "../u
 import { startInitialSync } from "./syncManager.js";
 
 const APPS_SCRIPT_PATH_REGEX = /^\/macros\/s\/[A-Za-z0-9_-]+\/(exec|dev)(\/)?$/;
+const APP_SCRIPT_URL_SESSION_KEY = `${STORAGE_KEYS.APP_SCRIPT_URL}.session`;
 const FULL_SYNC_STALE_MS = 2 * 60 * 60 * 1000;
+const URL_RECHECK_DELAY_MS = 140;
 let modalProgressBound = false;
 let downloadLocationModalBound = false;
 let downloadLocationResolver = null;
@@ -20,7 +22,20 @@ let downloadLocationPromise = null;
  * @returns {string} The stored URL or empty string if not configured
  */
 export function getAppScriptUrl() {
-    return (localStorage.getItem(STORAGE_KEYS.APP_SCRIPT_URL) || "").trim();
+    const localValue = (localStorage.getItem(STORAGE_KEYS.APP_SCRIPT_URL) || "").trim();
+    const sessionValue = (sessionStorage.getItem(APP_SCRIPT_URL_SESSION_KEY) || "").trim();
+    const candidate = localValue || sessionValue;
+    if (!candidate) return "";
+    const parsed = parseAppScriptUrl(candidate);
+    if (!parsed) return "";
+    const normalized = `${parsed.origin}${parsed.pathname}`;
+    if (localValue !== normalized) {
+        localStorage.setItem(STORAGE_KEYS.APP_SCRIPT_URL, normalized);
+    }
+    if (sessionValue !== normalized) {
+        sessionStorage.setItem(APP_SCRIPT_URL_SESSION_KEY, normalized);
+    }
+    return normalized;
 }
 
 function getLastFullSyncAt() {
@@ -153,6 +168,7 @@ export function saveAppScriptUrl() {
     const normalizedUrl = `${parsed.origin}${parsed.pathname}`;
 
     localStorage.setItem(STORAGE_KEYS.APP_SCRIPT_URL, normalizedUrl);
+    sessionStorage.setItem(APP_SCRIPT_URL_SESSION_KEY, normalizedUrl);
 
     updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Internet online");
     document.dispatchEvent(
@@ -168,11 +184,17 @@ export function saveAppScriptUrl() {
  */
 export async function ensureAppScriptConfigured({ autoSync = false } = {}) {
     bindModalProgress();
-    const url = getAppScriptUrl();
+    let url = getAppScriptUrl();
     const input = document.getElementById("appscript_url");
     if (input && url) input.value = url;
 
     if (!url) {
+        await new Promise((resolve) => window.setTimeout(resolve, URL_RECHECK_DELAY_MS));
+        url = getAppScriptUrl();
+        if (url) {
+            if (input) input.value = url;
+            return { ok: true };
+        }
         openAppScriptModal({ mode: "input" });
         updateConnectionIndicator(navigator.onLine ? "online" : "offline", "Set Apps Script URL");
         return { ok: false, reason: "missing-url" };

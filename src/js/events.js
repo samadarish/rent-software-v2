@@ -31,6 +31,7 @@ import { buildUnitLabel, numberToIndianWords } from "./utils/formatters.js";
 import { clearAllDrafts, promptAndSaveDraft } from "./features/shared/drafts.js";
 import { handleNoGrnToggle } from "./features/tenants/formState.js";
 import { cloneSelectOptions, hideModal, showToast } from "./utils/ui.js";
+import { lockAppNow } from "./features/auth/loginGate.js";
 
 let unitConfigCache = [];
 let landlordConfigCache = [];
@@ -498,6 +499,13 @@ export function attachEventHandlers() {
     const clearDraftsBtn = document.getElementById("clearDraftsBtn");
     if (clearDraftsBtn) {
         clearDraftsBtn.addEventListener("click", clearAllDrafts);
+    }
+
+    const navLockAppBtn = document.getElementById("navLockAppBtn");
+    if (navLockAppBtn) {
+        navLockAppBtn.addEventListener("click", () => {
+            lockAppNow({ reason: "manual" });
+        });
     }
 
     // Export DOCX
