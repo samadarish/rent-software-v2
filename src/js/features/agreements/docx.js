@@ -4,9 +4,10 @@
  * Handles exporting agreements as DOCX files using a template.
  */
 
-import { collectFormDataForTemplate } from "../tenants/form.js";
+import { collectFormDataForTemplate, collectFullPayloadForDb } from "../tenants/form.js";
 import { ensureDownloadLocationConfigured } from "../../api/config.js";
 import { hideModal, showModal, showToast } from "../../utils/ui.js";
+import { validateTenantFormBeforeSave } from "../tenants/validation.js";
 
 let lastDocxDownloadUrl = "";
 let lastDocxFileName = "";
@@ -180,17 +181,16 @@ function applyMarkdownBoldToDocxXml(xml) {
  * Exports the agreement form data as a DOCX file
  * Uses the tenant_template.docx file and fills it with form data
  */
-export function exportDocxFromTemplate() {
+export async function exportDocxFromTemplate() {
     wireDocxExportModal();
 
-    const data = collectFormDataForTemplate();
-
-    // Validate key fields before exporting
-    if (!data.agreement_date || !data.Tenant_Full_Name) {
-        if (!confirm("Some key fields look empty. Export DOCX anyway?")) {
-            return;
-        }
+    const payload = collectFullPayloadForDb();
+    const validationResult = await validateTenantFormBeforeSave(payload);
+    if (!validationResult?.ok) {
+        return;
     }
+
+    const data = collectFormDataForTemplate();
 
     const templatePath = "tenant_template.docx";
 

@@ -3477,6 +3477,7 @@ export async function saveTenantToDb() {
     // Import the form module to collect data
     const { collectFullPayloadForDb } = await import("../features/tenants/form.js");
     const payload = collectFullPayloadForDb();
+    const { validateTenantFormBeforeSave } = await import("../features/tenants/validation.js");
     const action = "saveTenant";
 
     try {
@@ -3492,6 +3493,10 @@ export async function saveTenantToDb() {
         }
         if (!nextPayload.landlordId && nextPayload.templateData?.Landlord_name) {
             nextPayload.landlordId = createLocalId("landlord");
+        }
+        const validationResult = await validateTenantFormBeforeSave(nextPayload);
+        if (!validationResult?.ok) {
+            return { ok: false, validationFailed: true, errors: validationResult?.errors || [] };
         }
 
         const localUpdate = async () => {
